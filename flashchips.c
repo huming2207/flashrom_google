@@ -5691,6 +5691,7 @@ struct flashchip flashchips[] = {
 		},
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
+		.wp		= &wp_w25,
 	},
 
 	{

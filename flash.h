@@ -221,6 +221,8 @@ struct flashchip {
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_memory;
 	chipaddr virtual_registers;
+
+	struct wp *wp;
 };
 
 #define TEST_UNTESTED	0
@@ -592,6 +594,7 @@ int print(int type, const char *fmt, ...);
 
 /* cli_classic.c */
 int cli_classic(int argc, char *argv[]);
+int cli_mfg(int argc, char *argv[]);
 
 /* layout.c */
 int show_id(uint8_t *bios, int size, int force);
@@ -708,5 +711,14 @@ extern fdtype sp_fd;
 int serialport_shutdown(void);
 int serialport_write(unsigned char *buf, unsigned int writecnt);
 int serialport_read(unsigned char *buf, unsigned int readcnt);
+
+/* writeprotect.c */
+struct wp {
+	int (*list_ranges)(struct flashchip *flash);
+	int (*set_range)(struct flashchip *flash,
+			 unsigned int start, unsigned int len);
+	int (*enable)(struct flashchip *flash);
+};
+extern struct wp wp_w25;
 
 #endif				/* !__FLASH_H__ */

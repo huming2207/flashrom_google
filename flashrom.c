@@ -1314,7 +1314,10 @@ void check_chip_supported(struct flashchip *flash)
 
 int main(int argc, char *argv[])
 {
-	return cli_classic(argc, argv);
+	/* FIXME: this should eventually be a build option controlled
+	   via a USE flag */
+//	return cli_classic(argc, argv);
+	return cli_mfg(argc, argv);
 }
 
 /* This function signature is horrible. We need to design a better interface,
