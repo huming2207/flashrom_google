@@ -22,7 +22,6 @@
  * Contains the generic SPI framework
  */
 
-#include <string.h>
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
@@ -41,7 +40,8 @@ const struct spi_programmer spi_programmer[] = {
 		.write_256 = NULL,
 	},
 
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
+#if defined(__i386__) || defined(__x86_64__)
 	{ /* SPI_CONTROLLER_ICH7 */
 		.command = ich_spi_send_command,
 		.multicommand = ich_spi_send_multicommand,
@@ -84,8 +84,9 @@ const struct spi_programmer spi_programmer[] = {
 		.write_256 = wbsio_spi_write_1,
 	},
 #endif
+#endif
 
-#if FT2232_SPI_SUPPORT == 1
+#if CONFIG_FT2232_SPI == 1
 	{ /* SPI_CONTROLLER_FT2232 */
 		.command = ft2232_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
@@ -94,16 +95,16 @@ const struct spi_programmer spi_programmer[] = {
 	},
 #endif
 
-#if DUMMY_SUPPORT == 1
+#if CONFIG_DUMMY == 1
 	{ /* SPI_CONTROLLER_DUMMY */
 		.command = dummy_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
-		.read = NULL,
+		.read = dummy_spi_read,
 		.write_256 = NULL,
 	},
 #endif
 
-#if BUSPIRATE_SPI_SUPPORT == 1
+#if CONFIG_BUSPIRATE_SPI == 1
 	{ /* SPI_CONTROLLER_BUSPIRATE */
 		.command = buspirate_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
@@ -112,7 +113,7 @@ const struct spi_programmer spi_programmer[] = {
 	},
 #endif
 
-#if DEDIPROG_SUPPORT == 1
+#if CONFIG_DEDIPROG == 1
 	{ /* SPI_CONTROLLER_DEDIPROG */
 		.command = dediprog_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
@@ -131,7 +132,8 @@ int spi_send_command(unsigned int writecnt, unsigned int readcnt,
 {
 	if (!spi_programmer[spi_controller].command) {
 		msg_perr("%s called, but SPI is unsupported on this "
-			"hardware. Please report a bug.\n", __func__);
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
@@ -143,7 +145,8 @@ int spi_send_multicommand(struct spi_command *cmds)
 {
 	if (!spi_programmer[spi_controller].multicommand) {
 		msg_perr("%s called, but SPI is unsupported on this "
-			"hardware. Please report a bug.\n", __func__);
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
@@ -182,8 +185,9 @@ int default_spi_send_multicommand(struct spi_command *cmds)
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
 	if (!spi_programmer[spi_controller].read) {
-		msg_perr("%s called, but SPI read is unsupported on this"
-			" hardware. Please report a bug.\n", __func__);
+		msg_perr("%s called, but SPI read is unsupported on this "
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
@@ -197,16 +201,31 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 int spi_chip_write_256(struct flashchip *flash, uint8_t *buf)
 {
 	if (!spi_programmer[spi_controller].write_256) {
-		msg_perr("%s called, but SPI page write is unsupported "
-			" on this hardware. Please report a bug.\n", __func__);
+		msg_perr("%s called, but SPI page write is unsupported on this "
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
 	return spi_programmer[spi_controller].write_256(flash, buf);
 }
 
+/*
+ * Get the lowest allowed address for read accesses. This often happens to
+ * be the lowest allowed address for all commands which take an address.
+ * This is a programmer limitation.
+ */
 uint32_t spi_get_valid_read_addr(void)
 {
-	/* Need to return BBAR for ICH chipsets. */
-	return 0;
+	switch (spi_controller) {
+#if CONFIG_INTERNAL == 1
+#if defined(__i386__) || defined(__x86_64__)
+	case SPI_CONTROLLER_ICH7:
+		/* Return BBAR for ICH chipsets. */
+		return ichspi_bbar;
+#endif
+#endif
+	default:
+		return 0;
+	}
 }

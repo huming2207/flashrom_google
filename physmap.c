@@ -20,13 +20,19 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <unistd.h>
+#include <stdio.h>
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include "flash.h"
+
+/* Do we need any file access or ioctl for physmap or MSR? */
+#if !defined(__DJGPP__)
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#endif
 
 #ifdef __DJGPP__
 #include <dpmi.h>
@@ -241,6 +247,8 @@ void *physmap_try_ro(const char *descr, unsigned long phys_addr, size_t len)
 	return physmap_common(descr, phys_addr, len, PHYSMAP_MAYFAIL, PHYSMAP_RO);
 }
 
+#if defined(__i386__) || defined(__x86_64__)
+
 #ifdef __linux__
 /*
  * Reading and writing to MSRs, however requires instructions rdmsr/wrmsr,
@@ -308,8 +316,8 @@ int wrmsr(int addr, msr_t msr)
 int setup_cpu_msr(int cpu)
 {
 	char msrfilename[64];
-	memset(msrfilename, 0, 64);
-	sprintf(msrfilename, "/dev/cpu/%d/msr", cpu);
+	memset(msrfilename, 0, sizeof(msrfilename));
+	snprintf(msrfilename, sizeof(msrfilename), "/dev/cpu/%d/msr", cpu);
 
 	if (fd_msr != -1) {
 		msg_pinfo("MSR was already initialized\n");
@@ -391,8 +399,8 @@ int wrmsr(int addr, msr_t msr)
 int setup_cpu_msr(int cpu)
 {
 	char msrfilename[64];
-	memset(msrfilename, 0, 64);
-	sprintf(msrfilename, "/dev/cpu%d", cpu);
+	memset(msrfilename, 0, sizeof(msrfilename));
+	snprintf(msrfilename, sizeof(msrfilename), "/dev/cpu%d", cpu);
 
 	if (fd_msr != -1) {
 		msg_pinfo("MSR was already initialized\n");
@@ -462,4 +470,6 @@ void cleanup_cpu_msr(void)
 #endif
 #endif
 #endif
-
+#else
+/* Does MSR exist on non-x86 architectures? */
+#endif

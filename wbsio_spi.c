@@ -18,7 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <string.h>
+#if defined(__i386__) || defined(__x86_64__)
+
 #include "flash.h"
 #include "chipdrivers.h"
 #include "spi.h"
@@ -58,7 +59,7 @@ done:
 	return flashport;
 }
 
-int wbsio_check_for_spi(const char *name)
+int wbsio_check_for_spi(void)
 {
 	if (0 == (wbsio_spibase = wbsio_get_spibase(WBSIO_PORT1)))
 		if (0 == (wbsio_spibase = wbsio_get_spibase(WBSIO_PORT2)))
@@ -199,3 +200,5 @@ int wbsio_spi_write_1(struct flashchip *flash, uint8_t *buf)
 
 	return spi_chip_write_1(flash, buf);
 }
+
+#endif

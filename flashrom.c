@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -37,9 +38,9 @@ const char *flashrom_version = FLASHROM_VERSION;
 char *chip_to_probe = NULL;
 int verbose = 0;
 
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
 enum programmer programmer = PROGRAMMER_INTERNAL;
-#elif DUMMY_SUPPORT == 1
+#elif CONFIG_DUMMY == 1
 enum programmer programmer = PROGRAMMER_DUMMY;
 #else
 /* If neither internal nor dummy are selected, we must pick a sensible default.
@@ -47,39 +48,42 @@ enum programmer programmer = PROGRAMMER_DUMMY;
  * if more than one of them is selected. If only one is selected, it is clear
  * that the user wants that one to become the default.
  */
-#if NIC3COM_SUPPORT+GFXNVIDIA_SUPPORT+DRKAISER_SUPPORT+SATASII_SUPPORT+ATAHPT_SUPPORT+FT2232_SPI_SUPPORT+SERPROG_SUPPORT+BUSPIRATE_SPI_SUPPORT+DEDIPROG_SUPPORT+NICREALTEK_SUPPORT > 1
-#error Please enable either CONFIG_DUMMY or CONFIG_INTERNAL or disable support for all external programmers except one.
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG > 1
+#error Please enable either CONFIG_DUMMY or CONFIG_INTERNAL or disable support for all programmers except one.
 #endif
 enum programmer programmer =
-#if NIC3COM_SUPPORT == 1
+#if CONFIG_NIC3COM == 1
 	PROGRAMMER_NIC3COM
 #endif
-#if NICREALTEK_SUPPORT == 1
+#if CONFIG_NICREALTEK == 1
 	PROGRAMMER_NICREALTEK
 	PROGRAMMER_NICREALTEK2
 #endif
-#if GFXNVIDIA_SUPPORT == 1
+#if CONFIG_NICNATSEMI == 1
+	PROGRAMMER_NICNATSEMI
+#endif
+#if CONFIG_GFXNVIDIA == 1
 	PROGRAMMER_GFXNVIDIA
 #endif
-#if DRKAISER_SUPPORT == 1
+#if CONFIG_DRKAISER == 1
 	PROGRAMMER_DRKAISER
 #endif
-#if SATASII_SUPPORT == 1
+#if CONFIG_SATASII == 1
 	PROGRAMMER_SATASII
 #endif
-#if ATAHPT_SUPPORT == 1
+#if CONFIG_ATAHPT == 1
 	PROGRAMMER_ATAHPT
 #endif
-#if FT2232_SPI_SUPPORT == 1
-	PROGRAMMER_FT2232SPI
+#if CONFIG_FT2232_SPI == 1
+	PROGRAMMER_FT2232_SPI
 #endif
-#if SERPROG_SUPPORT == 1
+#if CONFIG_SERPROG == 1
 	PROGRAMMER_SERPROG
 #endif
-#if BUSPIRATE_SPI_SUPPORT == 1
-	PROGRAMMER_BUSPIRATESPI
+#if CONFIG_BUSPIRATE_SPI == 1
+	PROGRAMMER_BUSPIRATE_SPI
 #endif
-#if DEDIPROG_SUPPORT == 1
+#if CONFIG_DEDIPROG == 1
 	PROGRAMMER_DEDIPROG
 #endif
 ;
@@ -106,7 +110,7 @@ struct decode_sizes max_rom_decode = {
 };
 
 const struct programmer_entry programmer_table[] = {
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
 	{
 		.name			= "internal",
 		.init			= internal_init,
@@ -125,7 +129,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if DUMMY_SUPPORT == 1
+#if CONFIG_DUMMY == 1
 	{
 		.name			= "dummy",
 		.init			= dummy_init,
@@ -144,7 +148,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if NIC3COM_SUPPORT == 1
+#if CONFIG_NIC3COM == 1
 	{
 		.name			= "nic3com",
 		.init			= nic3com_init,
@@ -163,7 +167,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if NICREALTEK_SUPPORT == 1
+#if CONFIG_NICREALTEK == 1
 	{
 		.name                   = "nicrealtek",
 		.init                   = nicrealtek_init,
@@ -198,8 +202,26 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
+#if CONFIG_NICNATSEMI == 1
+	{
+		.name                   = "nicnatsemi",
+		.init                   = nicnatsemi_init,
+		.shutdown               = nicnatsemi_shutdown,
+		.map_flash_region       = fallback_map,
+		.unmap_flash_region     = fallback_unmap,
+		.chip_readb             = nicnatsemi_chip_readb,
+		.chip_readw             = fallback_chip_readw,
+		.chip_readl             = fallback_chip_readl,
+		.chip_readn             = fallback_chip_readn,
+		.chip_writeb            = nicnatsemi_chip_writeb,
+		.chip_writew            = fallback_chip_writew,
+		.chip_writel            = fallback_chip_writel,
+		.chip_writen            = fallback_chip_writen,
+		.delay                  = internal_delay,
+	},
+#endif
 
-#if GFXNVIDIA_SUPPORT == 1
+#if CONFIG_GFXNVIDIA == 1
 	{
 		.name			= "gfxnvidia",
 		.init			= gfxnvidia_init,
@@ -218,7 +240,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if DRKAISER_SUPPORT == 1
+#if CONFIG_DRKAISER == 1
 	{
 		.name			= "drkaiser",
 		.init			= drkaiser_init,
@@ -237,7 +259,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if SATASII_SUPPORT == 1
+#if CONFIG_SATASII == 1
 	{
 		.name			= "satasii",
 		.init			= satasii_init,
@@ -256,7 +278,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if ATAHPT_SUPPORT == 1
+#if CONFIG_ATAHPT == 1
 	{
 		.name			= "atahpt",
 		.init			= atahpt_init,
@@ -275,7 +297,8 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
+#if defined(__i386__) || defined(__x86_64__)
 	{
 		.name			= "it87spi",
 		.init			= it87spi_init,
@@ -293,10 +316,11 @@ const struct programmer_entry programmer_table[] = {
 		.delay			= internal_delay,
 	},
 #endif
+#endif
 
-#if FT2232_SPI_SUPPORT == 1
+#if CONFIG_FT2232_SPI == 1
 	{
-		.name			= "ft2232spi",
+		.name			= "ft2232_spi",
 		.init			= ft2232_spi_init,
 		.shutdown		= noop_shutdown, /* Missing shutdown */
 		.map_flash_region	= fallback_map,
@@ -313,7 +337,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if SERPROG_SUPPORT == 1
+#if CONFIG_SERPROG == 1
 	{
 		.name			= "serprog",
 		.init			= serprog_init,
@@ -332,9 +356,9 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if BUSPIRATE_SPI_SUPPORT == 1
+#if CONFIG_BUSPIRATE_SPI == 1
 	{
-		.name			= "buspiratespi",
+		.name			= "buspirate_spi",
 		.init			= buspirate_spi_init,
 		.shutdown		= buspirate_spi_shutdown,
 		.map_flash_region	= fallback_map,
@@ -351,7 +375,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-#if DEDIPROG_SUPPORT == 1
+#if CONFIG_DEDIPROG == 1
 	{
 		.name			= "dediprog",
 		.init			= dediprog_init,
@@ -391,7 +415,7 @@ struct shutdown_func_data {
 int register_shutdown(void (*function) (void *data), void *data)
 {
 	if (shutdown_fn_count >= SHUTDOWN_MAXFN) {
-		msg_perr("Tried to register more than %n shutdown functions.\n",
+		msg_perr("Tried to register more than %i shutdown functions.\n",
 			 SHUTDOWN_MAXFN);
 		return 1;
 	}
@@ -1208,16 +1232,21 @@ void print_sysinfo(void)
 #endif
 #endif
 #ifdef __clang__
-	msg_ginfo(" LLVM %i/clang %i", __llvm__, __clang__);
+	msg_ginfo(" LLVM %i/clang %i, ", __llvm__, __clang__);
 #elif defined(__GNUC__)
 	msg_ginfo(" GCC");
 #ifdef __VERSION__
-	msg_ginfo(" %s", __VERSION__);
+	msg_ginfo(" %s,", __VERSION__);
 #else
-	msg_ginfo(" unknown version");
+	msg_ginfo(" unknown version,");
 #endif
 #else
-	msg_ginfo(" unknown compiler");
+	msg_ginfo(" unknown compiler,");
+#endif
+#if defined (__FLASHROM_LITTLE_ENDIAN__)
+	msg_ginfo(" little endian");
+#else
+	msg_ginfo(" big endian");
 #endif
 	msg_ginfo("\n");
 }
@@ -1251,7 +1280,7 @@ int selfcheck(void)
 		msg_gerr("SPI programmer table miscompilation!\n");
 		ret = 1;
 	}
-#if BITBANG_SPI_SUPPORT == 1
+#if CONFIG_BITBANG_SPI == 1
 	if (bitbang_spi_master_count - 1 != BITBANG_SPI_INVALID) {
 		msg_gerr("Bitbanging SPI master table miscompilation!\n");
 		ret = 1;
@@ -1405,7 +1434,7 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 		}
 
 		numbytes = fread(buf, 1, size, image);
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
 		show_id(buf, size, force);
 #endif
 		fclose(image);

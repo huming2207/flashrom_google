@@ -144,12 +144,14 @@
 #define AT_45DB642		/* No ID available */
 #define AT_45DB642D		0x2800
 #define AT_49BV512		0x03
+#define AT_49F020		0x0B
 #define AT_49F002N		0x07	/* for AT49F002(N)  */
 #define AT_49F002NT		0x08	/* for AT49F002(N)T */
 
 #define CATALYST_ID		0x31	/* Catalyst */
 
 #define EMST_ID			0x8C	/* EMST / EFST Elite Flash Storage */
+#define EMST_F25L008A		0x2014
 #define EMST_F49B002UA		0x00
 
 /*
@@ -240,7 +242,8 @@
 #define HY_29LV800B		0x5B
 #define HY_29F040A		0xA4
 #define HY_29F400B		0xAB	/* Same as HY_29F400AB */
-#define HY_29F002		0xB0
+#define HY_29F002B		0x34
+#define HY_29F002T		0xB0
 #define HY_29LV400T		0xB9
 #define HY_29LV400B		0xBA
 #define HY_29F080		0xD5
@@ -387,7 +390,7 @@
 #define SST_25VF512A_REMS	0x48	/* REMS or RES opcode */
 #define SST_25VF010_REMS	0x49	/* REMS or RES opcode */
 #define SST_25VF020_REMS	0x43	/* REMS or RES opcode */
-#define SST_25VF040_REMS	0x44	/* REMS or RES opcode */
+#define SST_25VF040_REMS	0x44	/* REMS or RES opcode, same as SST25LF040A */
 #define SST_25VF040B		0x258D
 #define SST_25VF040B_REMS	0x8D	/* REMS or RES opcode */
 #define SST_25VF080_REMS	0x80	/* REMS or RES opcode */
@@ -509,6 +512,7 @@
 #define W_25Q80			0x4014
 #define W_25Q16			0x4015
 #define W_25Q32			0x4016
+#define W_25Q64			0x4017
 #define W_29C011		0xC1
 #define W_29C020C		0x45	/* Same as W29C020 and ASD AE29F2008 */
 #define W_29C040P		0x46	/* Same as W29C040 */

@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <unistd.h>
 #include <sys/time.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -34,6 +35,30 @@ __attribute__ ((noinline)) void myusec_delay(int usecs)
 		/* Make sure the compiler doesn't optimize the loop away. */
 		asm volatile ("" : : "rm" (i) );
 	}
+}
+
+unsigned long measure_os_delay_resolution(void)
+{
+	unsigned long timeusec;
+	struct timeval start, end;
+	unsigned long counter = 0;
+	
+	gettimeofday(&start, 0);
+	timeusec = 0;
+	
+	while (!timeusec && (++counter < 1000000000)) {
+		gettimeofday(&end, 0);
+		timeusec = 1000000 * (end.tv_sec - start.tv_sec) +
+			   (end.tv_usec - start.tv_usec);
+		/* Protect against time going forward too much. */
+		if ((end.tv_sec > start.tv_sec) &&
+		    ((end.tv_sec - start.tv_sec) >= LONG_MAX / 1000000 - 1))
+			timeusec = 0;
+		/* Protect against time going backwards during leap seconds. */
+		if ((end.tv_sec < start.tv_sec) || (timeusec > LONG_MAX))
+			timeusec = 0;
+	}
+	return timeusec;
 }
 
 unsigned long measure_delay(int usecs)
@@ -60,10 +85,16 @@ unsigned long measure_delay(int usecs)
 void myusec_calibrate_delay(void)
 {
 	unsigned long count = 1000;
-	unsigned long timeusec;
+	unsigned long timeusec, resolution;
 	int i, tries = 0;
 
-	printf("Calibrating delay loop... ");
+	msg_pinfo("Calibrating delay loop... ");
+	resolution = measure_os_delay_resolution();
+	if (resolution) {
+		msg_pdbg("OS timer resolution is %lu usecs, ", resolution);
+	} else {
+		msg_pinfo("OS timer resolution is unusable. ");
+	}
 
 recalibrate:
 	count = 1000;
@@ -93,9 +124,27 @@ recalibrate:
 		 * a scheduler delay or something similar.
 		 */
 		for (i = 0; i < 4; i++) {
-			if (measure_delay(100) < 90) {
-				msg_pdbg("delay more than 10%% too short, "
-					 "recalculating... ");
+			if (resolution && (resolution < 10)) {
+				timeusec = measure_delay(100);
+			} else if (resolution && 
+				   (resolution < ULONG_MAX / 200)) {
+				timeusec = measure_delay(resolution * 10) *
+					   100 / (resolution * 10);
+			} else {
+				/* This workaround should be active for broken
+				 * OS and maybe libpayload. The criterion
+				 * here is horrible or non-measurable OS timer
+				 * resolution which will result in
+				 * measure_delay(100)=0 whereas a longer delay
+				 * (1000 ms) may be sufficient
+				 * to get a nonzero time measurement.
+				 */
+				timeusec = measure_delay(1000000) / 10000;
+			}
+			if (timeusec < 90) {
+				msg_pdbg("delay more than 10%% too short (got "
+					 "%lu%% of expected delay), "
+					 "recalculating... ", timeusec);
 				goto recalibrate;
 			}
 		}
@@ -112,8 +161,10 @@ recalibrate:
 	msg_pdbg("1000 myus = %ld us, ", timeusec);
 	timeusec = measure_delay(10000);
 	msg_pdbg("10000 myus = %ld us, ", timeusec);
+	timeusec = measure_delay(resolution * 4);
+	msg_pdbg("%ld myus = %ld us, ", resolution * 4, timeusec);
 
-	printf("OK.\n");
+	msg_pinfo("OK.\n");
 }
 
 void internal_delay(int usecs)

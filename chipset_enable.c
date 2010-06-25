@@ -30,11 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <unistd.h>
 #include "flash.h"
 
-extern int ichspi_lock;
+#if defined(__i386__) || defined(__x86_64__)
+
+#define NOT_DONE_YET 1
 
 static int enable_flash_ali_m1533(struct pci_dev *dev, const char *name)
 {
@@ -285,6 +286,7 @@ static int enable_flash_ich_4e(struct pci_dev *dev, const char *name)
 	 * FWH_DEC_EN1, but they are called FB_SEL1, FB_SEL2, FB_DEC_EN1 and
 	 * FB_DEC_EN2.
 	 */
+	buses_supported = CHIP_BUSTYPE_FWH;
 	return enable_flash_ich(dev, name, 0x4e);
 }
 
@@ -398,6 +400,7 @@ static int enable_flash_poulsbo(struct pci_dev *dev, const char *name)
        if (new != old)
                pci_write_byte(dev, 0xd9, new);
 
+	buses_supported = CHIP_BUSTYPE_FWH;
        return 0;
 }
 
@@ -513,8 +516,9 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 			msg_pdbg("0x%02x: 0x%08x (SPID%d+4)\n", offs + 4,
 				     mmio_readl(spibar + offs + 4), i);
 		}
+		ichspi_bbar = mmio_readl(spibar + 0x50);
 		msg_pdbg("0x50: 0x%08x (BBAR)\n",
-			     mmio_readl(spibar + 0x50));
+			     ichspi_bbar);
 		msg_pdbg("0x54: 0x%04x     (PREOP)\n",
 			     mmio_readw(spibar + 0x54));
 		msg_pdbg("0x56: 0x%04x     (OPTYPE)\n",
@@ -585,8 +589,9 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 			     mmio_readl(spibar + 0x98));
 		msg_pdbg("0x9C: 0x%08x (OPMENU+4)\n",
 			     mmio_readl(spibar + 0x9C));
+		ichspi_bbar = mmio_readl(spibar + 0xA0);
 		msg_pdbg("0xA0: 0x%08x (BBAR)\n",
-			     mmio_readl(spibar + 0xA0));
+			     ichspi_bbar);
 		msg_pdbg("0xB0: 0x%08x (FDOC)\n",
 			     mmio_readl(spibar + 0xB0));
 		if (tmp2 & (1 << 15)) {
@@ -637,6 +642,32 @@ static int enable_flash_ich9(struct pci_dev *dev, const char *name)
 static int enable_flash_ich10(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name, 10);
+}
+
+static void via_do_byte_merge(void * arg)
+{
+	struct pci_dev * dev = arg;
+	uint8_t val;
+
+	msg_pdbg("Re-enabling byte merging\n");
+	val = pci_read_byte(dev, 0x71);
+	val |= 0x40;
+	pci_write_byte(dev, 0x71, val);
+}
+
+static int via_no_byte_merge(struct pci_dev *dev, const char *name)
+{
+	uint8_t val;
+
+	val = pci_read_byte(dev, 0x71);
+	if (val & 0x40)
+	{
+		msg_pdbg("Disabling byte merging\n");
+		val &= ~0x40;
+		pci_write_byte(dev, 0x71, val);
+		register_shutdown(via_do_byte_merge, dev);
+	}
+	return NOT_DONE_YET;	/* need to find south bridge, too */
 }
 
 static int enable_flash_vt823x(struct pci_dev *dev, const char *name)
@@ -1285,8 +1316,11 @@ static int get_flashbase_sc520(struct pci_dev *dev, const char *name)
 	return 0;
 }
 
+#endif
+
 /* Please keep this list alphabetically sorted by vendor/device. */
 const struct penable chipset_enables[] = {
+#if defined(__i386__) || defined(__x86_64__)
 	{0x10B9, 0x1533, OK, "ALi", "M1533",		enable_flash_ali_m1533},
 	{0x1022, 0x7440, OK, "AMD", "AMD-768",		enable_flash_amd8111},
 	{0x1022, 0x7468, OK, "AMD", "AMD8111",		enable_flash_amd8111},
@@ -1347,6 +1381,7 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0050, OK, "NVIDIA", "CK804",		enable_flash_ck804}, /* LPC */
 	{0x10de, 0x0051, OK, "NVIDIA", "CK804",		enable_flash_ck804}, /* Pro */
 	{0x10de, 0x0060, OK, "NVIDIA", "NForce2",       enable_flash_nvidia_nforce2},
+	{0x10de, 0x00e0, OK, "NVIDIA", "NForce3",       enable_flash_nvidia_nforce2},
 	/* Slave, should not be here, to fix known bug for A01. */
 	{0x10de, 0x00d3, OK, "NVIDIA", "CK804",		enable_flash_ck804},
 	{0x10de, 0x0260, NT, "NVIDIA", "MCP51",		enable_flash_ck804},
@@ -1413,6 +1448,14 @@ const struct penable chipset_enables[] = {
 	{0x1039, 0x0746, NT, "SiS", "746",		enable_flash_sis540},
 	{0x1039, 0x0748, NT, "SiS", "748",		enable_flash_sis540},
 	{0x1039, 0x0755, NT, "SiS", "755",		enable_flash_sis540},
+	/* VIA northbridges */
+	{0x1106, 0x0585, NT, "VIA", "VT82C585VPX",	via_no_byte_merge},
+	{0x1106, 0x0595, NT, "VIA", "VT82C595",		via_no_byte_merge},
+	{0x1106, 0x0597, NT, "VIA", "VT82C597",		via_no_byte_merge},
+	{0x1106, 0x0691, NT, "VIA", "VT82C69x",		via_no_byte_merge}, /* 691, 693a, 694t, 694x checked */
+	{0x1106, 0x0601, NT, "VIA", "VT8601/VT8601A",	via_no_byte_merge},
+	{0x1106, 0x8601, NT, "VIA", "VT8601T",		via_no_byte_merge},
+	/* VIA southbridges */
 	{0x1106, 0x8324, OK, "VIA", "CX700",		enable_flash_vt823x},
 	{0x1106, 0x8231, NT, "VIA", "VT8231",		enable_flash_vt823x},
 	{0x1106, 0x3074, NT, "VIA", "VT8233",		enable_flash_vt823x},
@@ -1425,7 +1468,7 @@ const struct penable chipset_enables[] = {
 	{0x1106, 0x0596, OK, "VIA", "VT82C596",		enable_flash_amd8111},
 	{0x1106, 0x0586, OK, "VIA", "VT82C586A/B",	enable_flash_amd8111},
 	{0x1106, 0x0686, NT, "VIA", "VT82C686A/B",	enable_flash_amd8111},
-
+#endif
 	{},
 };
 
@@ -1439,11 +1482,16 @@ int chipset_flash_enable(void)
 	for (i = 0; chipset_enables[i].vendor_name != NULL; i++) {
 		dev = pci_dev_find(chipset_enables[i].vendor_id,
 				   chipset_enables[i].device_id);
-		if (dev)
-			break;
-	}
-
-	if (dev) {
+		if (!dev)
+			continue;
+		if (ret != -2) {
+			msg_pinfo("WARNING: unexpected second chipset match: "
+			       "\"%s %s\"\nignoring, please report lspci and "
+			       "board URL to flashrom@flashrom.org!\n",
+				chipset_enables[i].vendor_name,
+					chipset_enables[i].device_name);
+			continue;
+		}
 		msg_pinfo("Found chipset \"%s %s\", enabling flash write... ",
 		       chipset_enables[i].vendor_name,
 		       chipset_enables[i].device_name);
@@ -1453,11 +1501,15 @@ int chipset_flash_enable(void)
 
 		ret = chipset_enables[i].doit(dev,
 					      chipset_enables[i].device_name);
-		if (ret)
+		if (ret == NOT_DONE_YET) {
+			ret = -2;
+			msg_pinfo("OK - searching further chips.\n");
+		} else if (ret < 0)
 			msg_pinfo("FAILED!\n");
-		else
+		else if(ret == 0)
 			msg_pinfo("OK.\n");
 	}
+
 	msg_pinfo("This chipset supports the following protocols: %s.\n",
 	       flashbuses_to_text(buses_supported));
 

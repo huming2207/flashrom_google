@@ -67,24 +67,28 @@ static int spi_rems(unsigned char *readarr)
 	return 0;
 }
 
-static int spi_res(unsigned char *readarr)
+static int spi_res(unsigned char *readarr, int bytes)
 {
 	unsigned char cmd[JEDEC_RES_OUTSIZE] = { JEDEC_RES, 0, 0, 0 };
 	uint32_t readaddr;
 	int ret;
+	int i;
 
-	ret = spi_send_command(sizeof(cmd), JEDEC_RES_INSIZE, cmd, readarr);
+	ret = spi_send_command(sizeof(cmd), bytes, cmd, readarr);
 	if (ret == SPI_INVALID_ADDRESS) {
 		/* Find the lowest even address allowed for reads. */
 		readaddr = (spi_get_valid_read_addr() + 1) & ~1;
 		cmd[1] = (readaddr >> 16) & 0xff,
 		cmd[2] = (readaddr >> 8) & 0xff,
 		cmd[3] = (readaddr >> 0) & 0xff,
-		ret = spi_send_command(sizeof(cmd), JEDEC_RES_INSIZE, cmd, readarr);
+		ret = spi_send_command(sizeof(cmd), bytes, cmd, readarr);
 	}
 	if (ret)
 		return ret;
-	msg_cspew("RES returned %02x. ", readarr[0]);
+	msg_cspew("RES returned");
+	for (i = 0; i < bytes; i++)
+		msg_cspew(" 0x%02x", readarr[i]);
+	msg_cspew(". ");
 	return 0;
 }
 
@@ -122,7 +126,9 @@ static int probe_spi_rdid_generic(struct flashchip *flash, int bytes)
 	if (!oddparity(readarr[0]))
 		msg_cdbg("RDID byte 0 parity violation. ");
 
-	/* Check if this is a continuation vendor ID */
+	/* Check if this is a continuation vendor ID.
+	 * FIXME: Handle continuation device IDs.
+	 */
 	if (readarr[0] == 0x7f) {
 		if (!oddparity(readarr[1]))
 			msg_cdbg("RDID byte 1 parity violation. ");
@@ -166,33 +172,23 @@ int probe_spi_rdid(struct flashchip *flash)
 	return probe_spi_rdid_generic(flash, 3);
 }
 
-/* support 4 bytes flash ID */
 int probe_spi_rdid4(struct flashchip *flash)
 {
-	/* only some SPI chipsets support 4 bytes commands */
+	/* Some SPI controllers do not support commands with writecnt=1 and
+	 * readcnt=4.
+	 */
 	switch (spi_controller) {
-#if INTERNAL_SUPPORT == 1
-	case SPI_CONTROLLER_ICH7:
-	case SPI_CONTROLLER_ICH9:
-	case SPI_CONTROLLER_VIA:
-	case SPI_CONTROLLER_SB600:
+#if CONFIG_INTERNAL == 1
+#if defined(__i386__) || defined(__x86_64__)
+	case SPI_CONTROLLER_IT87XX:
 	case SPI_CONTROLLER_WBSIO:
+		msg_cinfo("4 byte RDID not supported on this SPI controller\n");
+		return 0;
+		break;
 #endif
-#if FT2232_SPI_SUPPORT == 1
-	case SPI_CONTROLLER_FT2232:
 #endif
-#if DUMMY_SUPPORT == 1
-	case SPI_CONTROLLER_DUMMY:
-#endif
-#if BUSPIRATE_SPI_SUPPORT == 1
-	case SPI_CONTROLLER_BUSPIRATE:
-#endif
-#if DEDIPROG_SUPPORT == 1
-	case SPI_CONTROLLER_DEDIPROG:
-#endif
-		return probe_spi_rdid_generic(flash, 4);
 	default:
-		msg_cinfo("4b ID not supported on this SPI controller\n");
+		return probe_spi_rdid_generic(flash, 4);
 	}
 
 	return 0;
@@ -233,12 +229,14 @@ int probe_spi_rems(struct flashchip *flash)
 	return 0;
 }
 
-int probe_spi_res(struct flashchip *flash)
+int probe_spi_res1(struct flashchip *flash)
 {
 	unsigned char readarr[3];
 	uint32_t id2;
 	const unsigned char allff[] = {0xff, 0xff, 0xff};
 	const unsigned char all00[] = {0x00, 0x00, 0x00};
+
+	/* We only want one-byte RES if RDID and REMS are unusable. */
 
 	/* Check if RDID is usable and does not return 0xff 0xff 0xff or
 	 * 0x00 0x00 0x00. In that case, RES is pointless.
@@ -257,13 +255,37 @@ int probe_spi_res(struct flashchip *flash)
 		return 0;
 	}
 
-	if (spi_res(readarr))
+	if (spi_res(readarr, 1))
 		return 0;
 
-	/* FIXME: Handle the case where RES gives a 2-byte response. */
 	id2 = readarr[0];
+
 	msg_cdbg("%s: id 0x%x\n", __func__, id2);
+
 	if (id2 != flash->model_id)
+		return 0;
+
+	/* Print the status register to tell the
+	 * user about possible write protection.
+	 */
+	spi_prettyprint_status_register(flash);
+	return 1;
+}
+
+int probe_spi_res2(struct flashchip *flash)
+{
+	unsigned char readarr[2];
+	uint32_t id1, id2;
+
+	if (spi_res(readarr, 2))
+		return 0;
+
+	id1 = readarr[0];
+	id2 = readarr[1];
+
+	msg_cdbg("%s: id1 0x%x, id2 0x%x\n", __func__, id1, id2);
+
+	if (id1 != flash->manufacture_id || id2 != flash->model_id)
 		return 0;
 
 	/* Print the status register to tell the
@@ -624,29 +646,6 @@ int spi_block_erase_d7(struct flashchip *flash, unsigned int addr, unsigned int 
 	return 0;
 }
 
-int spi_chip_erase_d8(struct flashchip *flash)
-{
-	int i, rc = 0;
-	int total_size = flash->total_size * 1024;
-	int erase_size = 64 * 1024;
-
-	spi_disable_blockprotect();
-
-	msg_cinfo("Erasing chip: \n");
-
-	for (i = 0; i < total_size / erase_size; i++) {
-		rc = spi_block_erase_d8(flash, i * erase_size, erase_size);
-		if (rc) {
-			msg_cerr("Error erasing block at 0x%x\n", i);
-			break;
-		}
-	}
-
-	msg_cinfo("\n");
-
-	return rc;
-}
-
 /* Sector size is usually 4k, though Macronix eliteflash has 64k */
 int spi_block_erase_20(struct flashchip *flash, unsigned int addr, unsigned int blocklen)
 {
@@ -990,38 +989,91 @@ int spi_chip_write_1(struct flashchip *flash, uint8_t *buf)
 
 int spi_aai_write(struct flashchip *flash, uint8_t *buf)
 {
-	uint32_t pos = 2, size = flash->total_size * 1024;
-	unsigned char w[6] = {0xad, 0, 0, 0, buf[0], buf[1]};
+	uint32_t addr = 0;
+	uint32_t len = flash->total_size * 1024;
+	uint32_t pos = addr;
 	int result;
+	unsigned char cmd[JEDEC_AAI_WORD_PROGRAM_CONT_OUTSIZE] = {
+		JEDEC_AAI_WORD_PROGRAM,
+	};
+	struct spi_command cmds[] = {
+	{
+		.writecnt	= JEDEC_WREN_OUTSIZE,
+		.writearr	= (const unsigned char[]){ JEDEC_WREN },
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= JEDEC_AAI_WORD_PROGRAM_OUTSIZE,
+		.writearr	= (const unsigned char[]){
+					JEDEC_AAI_WORD_PROGRAM,
+					(pos >> 16) & 0xff,
+					(pos >> 8) & 0xff,
+					(pos & 0xff),
+					buf[0],
+					buf[1]
+				},
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= 0,
+		.writearr	= NULL,
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}};
 
 	switch (spi_controller) {
-#if INTERNAL_SUPPORT == 1
+#if CONFIG_INTERNAL == 1
+#if defined(__i386__) || defined(__x86_64__)
+	case SPI_CONTROLLER_IT87XX:
 	case SPI_CONTROLLER_WBSIO:
-		msg_cerr("%s: impossible with Winbond SPI masters,"
+		msg_cerr("%s: impossible with this SPI controller,"
 				" degrading to byte program\n", __func__);
 		return spi_chip_write_1(flash, buf);
+#endif
 #endif
 	default:
 		break;
 	}
+
+	/* The data sheet requires a start address with the low bit cleared. */
+	if (addr % 2) {
+		msg_cerr("%s: start address not even! Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
+		return SPI_GENERIC_ERROR;
+	}
+	/* The data sheet requires total AAI write length to be even. */
+	if (len % 2) {
+		msg_cerr("%s: total write length not even! Please report a "
+			 "bug at flashrom@flashrom.org\n", __func__);
+		return SPI_GENERIC_ERROR;
+	}
+
 	if (erase_flash(flash)) {
 		msg_cerr("ERASE FAILED!\n");
 		return -1;
 	}
-	/* FIXME: This will fail on ICH/VIA SPI. */
-	result = spi_write_enable();
-	if (result)
+
+	result = spi_send_multicommand(cmds);
+	if (result) {
+		msg_cerr("%s failed during start command execution\n",
+			 __func__);
 		return result;
-	spi_send_command(6, 0, w, NULL);
-	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(5); /* SST25VF040B Tbp is max 10us */
-	while (pos < size) {
-		w[1] = buf[pos++];
-		w[2] = buf[pos++];
-		spi_send_command(3, 0, w, NULL);
-		while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
-			programmer_delay(5); /* SST25VF040B Tbp is max 10us */
 	}
+	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
+		programmer_delay(10);
+
+	/* We already wrote 2 bytes in the multicommand step. */
+	pos += 2;
+
+	while (pos < addr + len) {
+		cmd[1] = buf[pos++];
+		cmd[2] = buf[pos++];
+		spi_send_command(JEDEC_AAI_WORD_PROGRAM_CONT_OUTSIZE, 0, cmd, NULL);
+		while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
+			programmer_delay(10);
+	}
+
+	/* Use WRDI to exit AAI mode. */
 	spi_write_disable();
 	return 0;
 }

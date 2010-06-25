@@ -21,7 +21,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <string.h>
+#if defined(__i386__) || defined(__x86_64__)
+
 #include "flash.h"
 #include "chipdrivers.h"
 #include "spi.h"
@@ -166,3 +167,5 @@ int sb600_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 
 	return 0;
 }
+
+#endif
