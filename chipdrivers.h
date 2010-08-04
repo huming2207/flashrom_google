@@ -49,7 +49,6 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len);
 uint8_t spi_read_status_register(void);
 int spi_write_status_enable();
 int spi_write_status_register(struct flashchip *flash, int status);
-int spi_disable_blockprotect(struct flashchip *flash);
 int spi_prettyprint_status_register_at25df(struct flashchip *flash);
 int spi_prettyprint_status_register_at25df_sec(struct flashchip *flash);
 int spi_prettyprint_status_register_at25f(struct flashchip *flash);

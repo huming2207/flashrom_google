@@ -250,7 +250,6 @@ int spi_send_command(unsigned int writecnt, unsigned int readcnt,
 int spi_send_multicommand(struct spi_command *cmds);
 uint32_t spi_get_valid_read_addr(void);
 
-
 /* writeprotect.c */
 struct wp {
 	int (*list_ranges)(struct flashchip *flash);
