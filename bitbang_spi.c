@@ -24,48 +24,57 @@
 #include <ctype.h>
 #include "flash.h"
 #include "chipdrivers.h"
+#include "programmer.h"
 #include "spi.h"
 
-/* Length of half a clock period in usecs */
-int bitbang_spi_half_period = 0;
+/* Length of half a clock period in usecs. */
+static int bitbang_spi_half_period;
 
-enum bitbang_spi_master bitbang_spi_master = BITBANG_SPI_INVALID;
+static const struct bitbang_spi_master *bitbang_spi_master = NULL;
 
-const struct bitbang_spi_master_entry bitbang_spi_master_table[] = {
-	{}, /* This entry corresponds to BITBANG_SPI_INVALID. */
-};
-
-const int bitbang_spi_master_count = ARRAY_SIZE(bitbang_spi_master_table);
-
-void bitbang_spi_set_cs(int val)
+/* Note that CS# is active low, so val=0 means the chip is active. */
+static void bitbang_spi_set_cs(int val)
 {
-	bitbang_spi_master_table[bitbang_spi_master].set_cs(val);
+	bitbang_spi_master->set_cs(val);
 }
 
-void bitbang_spi_set_sck(int val)
+static void bitbang_spi_set_sck(int val)
 {
-	bitbang_spi_master_table[bitbang_spi_master].set_sck(val);
+	bitbang_spi_master->set_sck(val);
 }
 
-void bitbang_spi_set_mosi(int val)
+static void bitbang_spi_set_mosi(int val)
 {
-	bitbang_spi_master_table[bitbang_spi_master].set_mosi(val);
+	bitbang_spi_master->set_mosi(val);
 }
 
-int bitbang_spi_get_miso(void)
+static int bitbang_spi_get_miso(void)
 {
-	return bitbang_spi_master_table[bitbang_spi_master].get_miso();
+	return bitbang_spi_master->get_miso();
 }
 
-int bitbang_spi_init(void)
+int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod)
 {
+	/* BITBANG_SPI_INVALID is 0, so if someone forgot to initialize ->type,
+	 * we catch it here. Same goes for missing initialization of bitbanging
+	 * functions.
+	 */
+	if (!master || master->type == BITBANG_SPI_INVALID || !master->set_cs ||
+	    !master->set_sck || !master->set_mosi || !master->get_miso) {
+		msg_perr("Incomplete bitbanging SPI master setting! Please "
+			 "report a bug at flashrom@flashrom.org\n");
+		return 1;
+	}
+	bitbang_spi_master = master;
+	bitbang_spi_half_period = halfperiod;
+
 	bitbang_spi_set_cs(1);
 	bitbang_spi_set_sck(0);
-	buses_supported = CHIP_BUSTYPE_SPI;
+	bitbang_spi_set_mosi(0);
 	return 0;
 }
 
-uint8_t bitbang_spi_readwrite_byte(uint8_t val)
+static uint8_t bitbang_spi_readwrite_byte(uint8_t val)
 {
 	uint8_t ret = 0;
 	int i;
@@ -85,50 +94,17 @@ uint8_t bitbang_spi_readwrite_byte(uint8_t val)
 int bitbang_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr)
 {
-	static unsigned char *bufout = NULL;
-	static unsigned char *bufin = NULL;
-	static int oldbufsize = 0;
-	int bufsize;
 	int i;
 
-	/* Arbitrary size limitation here. We're only constrained by memory. */
-	if (writecnt > 65536 || readcnt > 65536)
-		return SPI_INVALID_LENGTH;
-
-	bufsize = max(writecnt + readcnt, 260);
-	/* Never shrink. realloc() calls are expensive. */
-	if (bufsize > oldbufsize) {
-		bufout = realloc(bufout, bufsize);
-		if (!bufout) {
-			msg_perr("Out of memory!\n");
-			if (bufin)
-				free(bufin);
-			exit(1);
-		}
-		bufin = realloc(bufout, bufsize);
-		if (!bufin) {
-			msg_perr("Out of memory!\n");
-			if (bufout)
-				free(bufout);
-			exit(1);
-		}
-		oldbufsize = bufsize;
-	}
-		
-	memcpy(bufout, writearr, writecnt);
-	/* Shift out 0x00 while reading data. */
-	memset(bufout + writecnt, 0x00, readcnt);
-	/* Make sure any non-read data is 0xff. */
-	memset(bufin + writecnt, 0xff, readcnt);
-
 	bitbang_spi_set_cs(0);
-	for (i = 0; i < readcnt + writecnt; i++) {
-		bufin[i] = bitbang_spi_readwrite_byte(bufout[i]);
-	}
+	for (i = 0; i < writecnt; i++)
+		bitbang_spi_readwrite_byte(writearr[i]);
+	for (i = 0; i < readcnt; i++)
+		readarr[i] = bitbang_spi_readwrite_byte(0);
+
 	programmer_delay(bitbang_spi_half_period);
 	bitbang_spi_set_cs(1);
 	programmer_delay(bitbang_spi_half_period);
-	memcpy(readarr, bufin + writecnt, readcnt);
 
 	return 0;
 }
@@ -139,10 +115,7 @@ int bitbang_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 	return spi_read_chunked(flash, buf, start, len, 64 * 1024);
 }
 
-int bitbang_spi_write_256(struct flashchip *flash, uint8_t *buf)
+int bitbang_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
-	int total_size = 1024 * flash->total_size;
-
-	msg_pdbg("total_size is %d\n", total_size);
-	return spi_write_chunked(flash, buf, 0, total_size, 256);
+	return spi_write_chunked(flash, buf, start, len, 256);
 }

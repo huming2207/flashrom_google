@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "flash.h"
+#include "programmer.h"
 
 #if NEED_PCI == 1
 struct pci_dev *pci_dev_find_filter(struct pci_filter filter)
@@ -121,36 +122,45 @@ int internal_init(void)
 	int force_laptop = 0;
 	char *arg;
 
-	arg = extract_param(&programmer_param, "boardenable=", ",:");
+	arg = extract_programmer_param("boardenable");
 	if (arg && !strcmp(arg,"force")) {
 		force_boardenable = 1;
 	} else if (arg && !strlen(arg)) {
 		msg_perr("Missing argument for boardenable.\n");
+		free(arg);
+		return 1;
 	} else if (arg) {
 		msg_perr("Unknown argument for boardenable: %s\n", arg);
-		exit(1);
+		free(arg);
+		return 1;
 	}
 	free(arg);
 
-	arg = extract_param(&programmer_param, "boardmismatch=", ",:");
+	arg = extract_programmer_param("boardmismatch");
 	if (arg && !strcmp(arg,"force")) {
 		force_boardmismatch = 1;
 	} else if (arg && !strlen(arg)) {
 		msg_perr("Missing argument for boardmismatch.\n");
+		free(arg);
+		return 1;
 	} else if (arg) {
 		msg_perr("Unknown argument for boardmismatch: %s\n", arg);
-		exit(1);
+		free(arg);
+		return 1;
 	}
 	free(arg);
 
-	arg = extract_param(&programmer_param, "laptop=", ",:");
+	arg = extract_programmer_param("laptop");
 	if (arg && !strcmp(arg,"force_I_want_a_brick")) {
 		force_laptop = 1;
 	} else if (arg && !strlen(arg)) {
 		msg_perr("Missing argument for laptop.\n");
+		free(arg);
+		return 1;
 	} else if (arg) {
 		msg_perr("Unknown argument for laptop: %s\n", arg);
-		exit(1);
+		free(arg);
+		return 1;
 	}
 	free(arg);
 
@@ -220,8 +230,10 @@ int internal_init(void)
 	}
 
 #if defined(__i386__) || defined(__x86_64__)
-	/* Probe for IT87* LPC->SPI translation unconditionally. */
-	it87xx_probe_spi_flash(NULL);
+	/* Probe unconditionally for IT87* LPC->SPI translation and for
+	 * IT87* Parallel write enable.
+	 */
+	init_superio_ite();
 #endif
 
 	board_flash_enable(lb_vendor, lb_part);

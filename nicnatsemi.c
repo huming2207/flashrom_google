@@ -22,13 +22,14 @@
 
 #include <stdlib.h>
 #include "flash.h"
+#include "programmer.h"
 
 #define PCI_VENDOR_ID_NATSEMI	0x100b
 
 #define BOOT_ROM_ADDR		0x50
 #define BOOT_ROM_DATA		0x54
 
-struct pcidev_status nics_natsemi[] = {
+const struct pcidev_status nics_natsemi[] = {
 	{0x100b, 0x0020, NT, "National Semiconductor", "DP83815/DP83816"},
 	{0x100b, 0x0022, NT, "National Semiconductor", "DP83820"},
 	{},
@@ -39,16 +40,23 @@ int nicnatsemi_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_NATSEMI, PCI_BASE_ADDRESS_0,
-				   nics_natsemi, programmer_param);
+				   nics_natsemi);
 
 	buses_supported = CHIP_BUSTYPE_PARALLEL;
+
+	/* The datasheet shows address lines MA0-MA16 in one place and MA0-MA15
+	 * in another. My NIC has MA16 connected to A16 on the boot ROM socket
+	 * so I'm assuming it is accessible. If not then next line wants to be
+	 * max_rom_decode.parallel = 65536; and the mask in the read/write
+	 * functions below wants to be 0x0000FFFF.
+	 */
+	max_rom_decode.parallel = 131072;
 
 	return 0;
 }
 
 int nicnatsemi_shutdown(void)
 {
-	free(programmer_param);
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;
@@ -56,7 +64,7 @@ int nicnatsemi_shutdown(void)
 
 void nicnatsemi_chip_writeb(uint8_t val, chipaddr addr)
 {
-	OUTL((uint32_t)addr & 0x0000FFFF, io_base_addr + BOOT_ROM_ADDR);
+	OUTL((uint32_t)addr & 0x0001FFFF, io_base_addr + BOOT_ROM_ADDR);
 	/*
 	 * The datasheet requires 32 bit accesses to this register, but it seems
 	 * that requirement might only apply if the register is memory mapped.
@@ -70,7 +78,7 @@ void nicnatsemi_chip_writeb(uint8_t val, chipaddr addr)
 
 uint8_t nicnatsemi_chip_readb(const chipaddr addr)
 {
-	OUTL(((uint32_t)addr & 0x0000FFFF), io_base_addr + BOOT_ROM_ADDR);
+	OUTL(((uint32_t)addr & 0x0001FFFF), io_base_addr + BOOT_ROM_ADDR);
 	/*
 	 * The datasheet requires 32 bit accesses to this register, but it seems
 	 * that requirement might only apply if the register is memory mapped.

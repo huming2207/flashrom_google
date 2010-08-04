@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "flash.h"
+#include "programmer.h"
 
 #define BIOS_ROM_ADDR		0x90
 #define BIOS_ROM_DATA		0x94
@@ -45,7 +46,7 @@ int atahpt_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_HPT, PCI_BASE_ADDRESS_4,
-				   ata_hpt, programmer_param);
+				   ata_hpt);
 
 	/* Enable flash access. */
 	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
@@ -66,7 +67,6 @@ int atahpt_shutdown(void)
 	reg32 &= ~(1 << 24);
 	pci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
 
-	free(programmer_param);
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;

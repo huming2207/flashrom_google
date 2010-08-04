@@ -43,17 +43,30 @@ int spi_block_erase_60(struct flashchip *flash, unsigned int addr, unsigned int 
 int spi_block_erase_c7(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
 int spi_chip_write_1(struct flashchip *flash, uint8_t *buf);
 int spi_chip_write_256(struct flashchip *flash, uint8_t *buf);
+int spi_chip_write_1_new(struct flashchip *flash, uint8_t *buf, int start, int len);
+int spi_chip_write_256_new(struct flashchip *flash, uint8_t *buf, int start, int len);
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len);
 uint8_t spi_read_status_register(void);
 int spi_write_status_enable();
-int spi_write_status_register(int status);
-int spi_disable_blockprotect(void);
+int spi_write_status_register(struct flashchip *flash, int status);
+int spi_disable_blockprotect(struct flashchip *flash);
+int spi_prettyprint_status_register_at25df(struct flashchip *flash);
+int spi_prettyprint_status_register_at25df_sec(struct flashchip *flash);
+int spi_prettyprint_status_register_at25f(struct flashchip *flash);
+int spi_prettyprint_status_register_at25fs010(struct flashchip *flash);
+int spi_prettyprint_status_register_at25fs040(struct flashchip *flash);
+int spi_disable_blockprotect(struct flashchip *flash);
+int spi_disable_blockprotect_at25df(struct flashchip *flash);
+int spi_disable_blockprotect_at25df_sec(struct flashchip *flash);
+int spi_disable_blockprotect_at25f(struct flashchip *flash);
+int spi_disable_blockprotect_at25fs010(struct flashchip *flash);
+int spi_disable_blockprotect_at25fs040(struct flashchip *flash);
 int spi_byte_program(int addr, uint8_t databyte);
 int spi_nbyte_program(int addr, uint8_t *bytes, int len);
 int spi_nbyte_read(int addr, uint8_t *bytes, int len);
 int spi_read_chunked(struct flashchip *flash, uint8_t *buf, int start, int len, int chunksize);
 int spi_write_chunked(struct flashchip *flash, uint8_t *buf, int start, int len, int chunksize);
-int spi_aai_write(struct flashchip *flash, uint8_t *buf);
+int spi_aai_write(struct flashchip *flash, uint8_t *buf, int start, int len);
 
 /* 82802ab.c */
 uint8_t wait_82802ab(chipaddr bios);
@@ -87,7 +100,6 @@ int erase_m29f400bt(struct flashchip *flash);
 int block_erase_m29f400bt(struct flashchip *flash, unsigned int start, unsigned int len);
 int block_erase_chip_m29f400bt(struct flashchip *flash, unsigned int start, unsigned int len);
 int write_m29f400bt(struct flashchip *flash, uint8_t *buf);
-int write_coreboot_m29f400bt(struct flashchip *flash, uint8_t *buf);
 void protect_m29f400bt(chipaddr bios);
 void write_page_m29f400bt(chipaddr bios, uint8_t *src,
 			  chipaddr dst, int page_size);

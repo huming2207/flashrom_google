@@ -24,13 +24,14 @@
 #include <ctype.h>
 #include "flash.h"
 #include "chipdrivers.h"
+#include "programmer.h"
 #include "spi.h"
 
 /* Change this to #define if you want to test without a serial implementation */
 #undef FAKE_COMMUNICATION
 
 #ifndef FAKE_COMMUNICATION
-int buspirate_serialport_setup(char *dev)
+static int buspirate_serialport_setup(char *dev)
 {
 	/* 115200bps, 8 databits, no parity, 1 stopbit */
 	sp_fd = sp_openserport(dev, 115200);
@@ -44,7 +45,7 @@ int buspirate_serialport_setup(char *dev)
 #define sp_flush_incoming(...) 0
 #endif
 
-int buspirate_sendrecv(unsigned char *buf, unsigned int writecnt, unsigned int readcnt)
+static int buspirate_sendrecv(unsigned char *buf, unsigned int writecnt, unsigned int readcnt)
 {
 	int i, ret = 0;
 
@@ -101,24 +102,14 @@ int buspirate_spi_init(void)
 	char *speed = NULL;
 	int spispeed = 0x7;
 
-	if (programmer_param && !strlen(programmer_param)) {
-		free(programmer_param);
-		programmer_param = NULL;
-	}
-	if (programmer_param) {
-		dev = extract_param(&programmer_param, "dev=", ",:");
-		speed = extract_param(&programmer_param, "spispeed=", ",:");
-		if (strlen(programmer_param))
-			msg_perr("Unhandled programmer parameters: %s\n",
-				programmer_param);
-		free(programmer_param);
-		programmer_param = NULL;
-	}
-	if (!dev) {
+	dev = extract_programmer_param("dev");
+	if (!dev || !strlen(dev)) {
 		msg_perr("No serial device given. Use flashrom -p "
 			"buspirate_spi:dev=/dev/ttyUSB0\n");
 		return 1;
 	}
+
+	speed = extract_programmer_param("spispeed");
 	if (speed) {
 		for (i = 0; spispeeds[i].name; i++)
 			if (!strncasecmp(spispeeds[i].name, speed,
@@ -129,12 +120,15 @@ int buspirate_spi_init(void)
 		if (!spispeeds[i].name)
 			msg_perr("Invalid SPI speed, using default.\n");
 	}
+	free(speed);
+
 	/* This works because speeds numbering starts at 0 and is contiguous. */
 	msg_pdbg("SPI speed is %sHz\n", spispeeds[spispeed].name);
 
 	ret = buspirate_serialport_setup(dev);
 	if (ret)
 		return ret;
+	free(dev);
 
 	/* This is the brute force version, but it should work. */
 	for (i = 0; i < 19; i++) {
@@ -266,8 +260,8 @@ int buspirate_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	if (writecnt > 16 || readcnt > 16 || (readcnt + writecnt) > 16)
 		return SPI_INVALID_LENGTH;
 
-	/* +2 is pretty arbitrary. */
-	buf = realloc(buf, writecnt + readcnt + 2);
+	/* 3 bytes extra for CS#, len, CS#. */
+	buf = realloc(buf, writecnt + readcnt + 3);
 	if (!buf) {
 		msg_perr("Out of memory!\n");
 		exit(1); // -1
@@ -275,38 +269,40 @@ int buspirate_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 
 	/* Assert CS# */
 	buf[i++] = 0x02;
-	ret = buspirate_sendrecv(buf, 1, 1);
-	if (ret)
+
+	buf[i++] = 0x10 | (writecnt + readcnt - 1);
+	memcpy(buf + i, writearr, writecnt);
+	i += writecnt;
+	memset(buf + i, 0, readcnt);
+
+	i += readcnt;
+	/* De-assert CS# */
+	buf[i++] = 0x03;
+
+	ret = buspirate_sendrecv(buf, i, i);
+
+	if (ret) {
+		msg_perr("Bus Pirate communication error!\n");
 		return SPI_GENERIC_ERROR;
+	}
+
 	if (buf[0] != 0x01) {
 		msg_perr("Protocol error while lowering CS#!\n");
 		return SPI_GENERIC_ERROR;
 	}
 
-	i = 0;
-	buf[i++] = 0x10 | (writecnt + readcnt - 1);
-	memcpy(buf + i, writearr, writecnt);
-	i += writecnt;
-	memset(buf + i, 0, readcnt);
-	ret = buspirate_sendrecv(buf, i + readcnt, i + readcnt);
-	if (ret)
-		return SPI_GENERIC_ERROR;
-	if (buf[0] != 0x01) {
+	if (buf[1] != 0x01) {
 		msg_perr("Protocol error while reading/writing SPI!\n");
 		return SPI_GENERIC_ERROR;
 	}
-	memcpy(readarr, buf + i, readcnt);
 
-	i = 0;
-	/* De-assert CS# */
-	buf[i++] = 0x03;
-	ret = buspirate_sendrecv(buf, 1, 1);
-	if (ret)
-		return SPI_GENERIC_ERROR;
-	if (buf[0] != 0x01) {
+	if (buf[i - 1] != 0x01) {
 		msg_perr("Protocol error while raising CS#!\n");
 		return SPI_GENERIC_ERROR;
 	}
+
+	/* Skip CS#, length, writearr. */
+	memcpy(readarr, buf + 2 + writecnt, readcnt);
 
 	return ret;
 }
@@ -316,18 +312,7 @@ int buspirate_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len
 	return spi_read_chunked(flash, buf, start, len, 12);
 }
 
-int buspirate_spi_write_256(struct flashchip *flash, uint8_t *buf)
+int buspirate_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
-	int total_size = 1024 * flash->total_size;
-
-	spi_disable_blockprotect();
-	/* Erase first. */
-	msg_pinfo("Erasing flash before programming... ");
-	if (erase_flash(flash)) {
-		msg_perr("ERASE FAILED!\n");
-		return -1;
-	}
-	msg_pinfo("done.\n");
-
-	return spi_write_chunked(flash, buf, 0, total_size, 12);
+	return spi_write_chunked(flash, buf, start, len, 12);
 }

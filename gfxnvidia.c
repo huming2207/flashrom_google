@@ -22,12 +22,18 @@
 #include <string.h>
 #include <sys/types.h>
 #include "flash.h"
+#include "programmer.h"
 
 #define PCI_VENDOR_ID_NVIDIA	0x10de
 
+/* Mask to restrict flash accesses to a 128kB memory window.
+ * FIXME: Is this size a one-fits-all or card dependent?
+ */
+#define GFXNVIDIA_MEMMAP_MASK		((1 << 17) - 1)
+
 uint8_t *nvidia_bar;
 
-struct pcidev_status gfx_nvidia[] = {
+const struct pcidev_status gfx_nvidia[] = {
 	{0x10de, 0x0010, NT, "NVIDIA", "Mutara V08 [NV2]" },
 	{0x10de, 0x0018, NT, "NVIDIA", "RIVA 128" },
 	{0x10de, 0x0020, NT, "NVIDIA", "RIVA TNT" },
@@ -62,7 +68,8 @@ int gfxnvidia_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_NVIDIA, PCI_BASE_ADDRESS_0,
-				   gfx_nvidia, programmer_param);
+				   gfx_nvidia);
+
 	io_base_addr += 0x300000;
 	msg_pinfo("Detected NVIDIA I/O base address: 0x%x.\n", io_base_addr);
 
@@ -74,6 +81,9 @@ int gfxnvidia_init(void)
 	nvidia_bar = physmap("NVIDIA", io_base_addr, 16 * 1024 * 1024);
 
 	buses_supported = CHIP_BUSTYPE_PARALLEL;
+
+	/* Write/erase doesn't work. */
+	programmer_may_write = 0;
 
 	return 0;
 }
@@ -87,7 +97,6 @@ int gfxnvidia_shutdown(void)
 	reg32 |= (1 << 0);
 	pci_write_long(pcidev_dev, 0x50, reg32);
 
-	free(programmer_param);
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;
@@ -95,10 +104,10 @@ int gfxnvidia_shutdown(void)
 
 void gfxnvidia_chip_writeb(uint8_t val, chipaddr addr)
 {
-	mmio_writeb(val, nvidia_bar + addr);
+	pci_mmio_writeb(val, nvidia_bar + (addr & GFXNVIDIA_MEMMAP_MASK));
 }
 
 uint8_t gfxnvidia_chip_readb(const chipaddr addr)
 {
-	return mmio_readb(nvidia_bar + addr);
+	return pci_mmio_readb(nvidia_bar + (addr & GFXNVIDIA_MEMMAP_MASK));
 }

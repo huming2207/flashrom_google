@@ -233,7 +233,7 @@ static int w25_set_range(struct flashchip *flash,
 
 	memcpy(&tmp, &status, sizeof(status));
 	spi_write_status_enable();
-	spi_write_status_register(tmp);
+	spi_write_status_register(flash, tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
 
@@ -253,7 +253,7 @@ static int w25_enable_writeprotect(struct flashchip *flash)
 	status.srp0 = 1;
 	memcpy(&tmp, &status, sizeof(status));
 	spi_write_status_enable();
-	spi_write_status_register(tmp);
+	spi_write_status_register(flash, tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
 

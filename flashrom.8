@@ -177,15 +177,18 @@ Specify the programmer device. Currently supported are:
 .sp
 .BR "* atahpt" " (for flash ROMs on Highpoint ATA/RAID controllers)"
 .sp
-.BR "* it87spi" " (for flash ROMs behind an ITE IT87xx Super I/O LPC/SPI\
+.BR "* it87spi" " (for flash ROMs behind an ITE IT87xx Super I/O LPC/SPI \
 translation unit)"
 .sp
-.BR "* ft2232_spi" " (for SPI flash ROMs attached to a FT2232H/FT4232H based\
-USB SPI programmer)"
+.BR "* ft2232_spi" " (for SPI flash ROMs attached to a FT2232H/FT4232H/JTAGkey \
+based USB SPI programmer)"
 .sp
-.BR "* serprog" " (for flash ROMs attached to Urja's AVR programmer)"
+.BR "* serprog" " (for flash ROMs attached to a programmer speaking serprog)"
 .sp
 .BR "* buspirate_spi" " (for SPI flash ROMs attached to a Bus Pirate)"
+.sp
+.BR "* rayer_spi" " (for SPI flash ROMs attached to a RayeR parport \
+based programmer)"
 .sp
 Some programmers have optional or mandatory parameters which are described
 in detail in the
@@ -296,22 +299,23 @@ dumb idea.
 .BR "dummy " programmer
 An optional parameter specifies the bus types it
 should support. For that you have to use the
-.B "flashrom \-p dummy:type"
+.B "flashrom \-p dummy:bus=[type[+type[+type]]]"
 syntax where
 .B type
-can be any comma-separated combination of
-.BR parallel ", " lpc ", " fwh ", " spi ", or " all
-(in any order).
+can be any of
+.BR parallel ", " lpc ", " fwh ", " spi
+in any order. If you specify bus without type, all buses will be disabled.
+If you do not specify bus, all buses will be enabled.
 .sp
 Example:
-.B "flashrom \-p dummy:lpc,fwh"
+.B "flashrom \-p dummy:bus=lpc+fwh"
 .TP
-.BR "nic3com" , " nicrealtek" , " nicsmc1211" , " gfxnvidia" , " satasii\
+.BR "nic3com" , " nicrealtek" , " nicsmc1211" , " gfxnvidia" , " satasii \
 " and " atahpt " programmers
 These programmers have an option to specify the PCI address of the card
 your want to use, which must be specified if more than one card supported
 by the selected programmer is installed in your system. The syntax is
-.BR "flashrom \-p xxxx:bb:dd.f" ,
+.BR "flashrom \-p xxxx:pci=bb:dd.f" ,
 where
 .B xxxx
 is the name of the programmer
@@ -323,7 +327,7 @@ is the PCI device number, and
 is the PCI function number of the desired device.
 .sp
 Example:
-.B "flashrom \-p nic3com:05:04.0"
+.B "flashrom \-p nic3com:pci=05:04.0"
 .TP
 .BR "it87spi " programmer
 An optional
@@ -342,12 +346,12 @@ is an I/O port number which must be a multiple of 8.
 An optional parameter specifies the controller
 type and interface/port it should support. For that you have to use the
 .sp
-.B "  flashrom \-p ft2232_spi:model,port=interface"
+.B "  flashrom \-p ft2232_spi:type=model,port=interface"
 .sp
 syntax where
 .B model
 can be any of
-.BR 2232H ", or " 4232H
+.BR 2232H ", "JTAGkey ", or " 4232H
 and
 .B interface
 can be any of
@@ -363,11 +367,11 @@ device/baud combination or an IP/port combination for communication with the
 programmer. In the device/baud combination, the device has to start with a
 slash. For serial, you have to use the
 .sp
-.B "  flashrom \-p serprog:/dev/device:baud"
+.B "  flashrom \-p serprog:dev=/dev/device:baud"
 .sp
 syntax and for IP, you have to use
 .sp
-.B "  flashrom \-p serprog:ip:port"
+.B "  flashrom \-p serprog:ip=ipaddr:port"
 .sp
 instead. More information about serprog is available in
 .B serprog-protocol.txt
@@ -388,9 +392,61 @@ where
 can be any of
 .BR 30k ", " 125k ", " 250k ", " 1M ", " 2M ", " 2.6M ", " 4M ", " 8M
 (in Hz). The default is the maximum frequency of 8 MHz.
+.TP
+.BR "rayer_spi " programmer
+No parameters defined yet. More information about the hardware is available at
+http://rayer.ic.cz/elektro/spipgm.htm
 .SH EXIT STATUS
 flashrom exits with 0 on success, 1 on most failures but with 2 if /dev/mem
 (/dev/xsvc on Solaris) can not be opened and with 3 if a call to mmap() fails.
+.SH REQUIREMENTS
+flashrom needs different access permissions for different programmers.
+.sp
+.B internal
+needs raw memory access, PCI configuration space access, raw I/O port
+access (x86) and MSR access (x86).
+.sp
+.B it87spi
+needs raw I/O port access (x86).
+.sp
+.BR nic3com ", " nicrealtek ", " nicsmc1211 " and " nicnatsemi "
+need PCI configuration space read access and raw I/O port access.
+.sp
+.B atahpt
+needs PCI configuration space access and raw I/O port access.
+.sp
+.BR gfxnvidia " and " drkaiser
+need PCI configuration space access and raw memory access.
+.sp
+.B rayer_spi
+needs raw I/O port access.
+.sp
+.B satasii
+needs PCI configuration space read access and raw memory access.
+.sp
+.B serprog
+needs TCP access to the network or userspace access to a serial port.
+.sp
+.B buspirate_spi
+needs userspace access to a serial port.
+.sp
+.BR dediprog " and " ft2232_spi
+need access to the USB device via libusb.
+.sp
+.B dummy
+needs no access permissions at all.
+.sp
+.BR internal ", " it87spi ", " nic3com ", " nicrealtek ", " nicsmc1211 ", "
+.BR nicnatsemi ", " "gfxnvidia" ", " drkaiser ", " satasii " and " atahpt
+have to be run as superuser/root, and need additional raw access permission.
+.sp
+.BR serprog ", " buspirate_spi ", " dediprog " and " ft2232_spi
+can be run as normal user on most operating systems if appropriate device
+permissions are set.
+.sp
+On OpenBSD, you can obtain raw access permission by setting
+securelevel=-1 in /etc/rc.securelevel and rebooting, or rebooting into single
+user mode.
 .SH BUGS
 Please report any bugs at
 .sp

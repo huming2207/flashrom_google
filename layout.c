@@ -23,12 +23,13 @@
 #include <string.h>
 #include <ctype.h>
 #include "flash.h"
+#include "programmer.h"
 
 #if CONFIG_INTERNAL == 1
 char *mainboard_vendor = NULL;
 char *mainboard_part = NULL;
 #endif
-int romimages = 0;
+static int romimages = 0;
 
 #define MAX_ROMLAYOUT	16
 
@@ -39,7 +40,7 @@ typedef struct {
 	char name[256];
 } romlayout_t;
 
-romlayout_t rom_entries[MAX_ROMLAYOUT];
+static romlayout_t rom_entries[MAX_ROMLAYOUT];
 
 #if CONFIG_INTERNAL == 1 /* FIXME: Move the whole block to cbtable.c? */
 static char *def_name = "DEFAULT";

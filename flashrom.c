@@ -33,8 +33,9 @@
 #endif
 #include "flash.h"
 #include "flashchips.h"
+#include "programmer.h"
 
-const char *flashrom_version = FLASHROM_VERSION;
+const char * const flashrom_version = FLASHROM_VERSION;
 char *chip_to_probe = NULL;
 int verbose = 0;
 
@@ -48,7 +49,7 @@ enum programmer programmer = PROGRAMMER_DUMMY;
  * if more than one of them is selected. If only one is selected, it is clear
  * that the user wants that one to become the default.
  */
-#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG > 1
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG+CONFIG_RAYER_SPI > 1
 #error Please enable either CONFIG_DUMMY or CONFIG_INTERNAL or disable support for all programmers except one.
 #endif
 enum programmer programmer =
@@ -86,28 +87,28 @@ enum programmer programmer =
 #if CONFIG_DEDIPROG == 1
 	PROGRAMMER_DEDIPROG
 #endif
+#if CONFIG_RAYER_SPI == 1
+	PROGRAMMER_RAYER_SPI
+#endif
 ;
 #endif
 
-char *programmer_param = NULL;
+static char *programmer_param = NULL;
 
-/**
- * flashrom defaults to Parallel/LPC/FWH flash devices. If a known host
- * controller is found, the init routine sets the buses_supported bitfield to
- * contain the supported buses for that controller.
- */
-enum chipbustype buses_supported = CHIP_BUSTYPE_NONSPI;
+/* Supported buses for the current programmer. */
+enum chipbustype buses_supported;
 
 /**
  * Programmers supporting multiple buses can have differing size limits on
  * each bus. Store the limits for each bus in a common struct.
  */
-struct decode_sizes max_rom_decode = {
-	.parallel	= 0xffffffff,
-	.lpc		= 0xffffffff,
-	.fwh		= 0xffffffff,
-	.spi		= 0xffffffff
-};
+struct decode_sizes max_rom_decode;
+
+/* If nonzero, used as the start address of bottom-aligned flash. */
+unsigned long flashbase;
+
+/* Is writing allowed with this programmer? */
+int programmer_may_write;
 
 const struct programmer_entry programmer_table[] = {
 #if CONFIG_INTERNAL == 1
@@ -394,6 +395,25 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
+#if CONFIG_RAYER_SPI == 1
+	{
+		.name			= "rayer_spi",
+		.init			= rayer_spi_init,
+		.shutdown		= noop_shutdown,
+		.map_flash_region	= fallback_map,
+		.unmap_flash_region	= fallback_unmap,
+		.chip_readb		= noop_chip_readb,
+		.chip_readw		= fallback_chip_readw,
+		.chip_readl		= fallback_chip_readl,
+		.chip_readn		= fallback_chip_readn,
+		.chip_writeb		= noop_chip_writeb,
+		.chip_writew		= fallback_chip_writew,
+		.chip_writel		= fallback_chip_writel,
+		.chip_writen		= fallback_chip_writen,
+		.delay			= internal_delay,
+	},
+#endif
+
 	{}, /* This entry corresponds to PROGRAMMER_INVALID. */
 };
 
@@ -402,7 +422,11 @@ static int shutdown_fn_count = 0;
 struct shutdown_func_data {
 	void (*func) (void *data);
 	void *data;
-} shutdown_fn[SHUTDOWN_MAXFN];
+} static shutdown_fn[SHUTDOWN_MAXFN];
+/* Initialize to 0 to make sure nobody registers a shutdown function before
+ * programmer init.
+ */
+static int may_register_shutdown = 0;
 
 /* Register a function to be executed on programmer shutdown.
  * The advantage over atexit() is that you can supply a void pointer which will
@@ -419,6 +443,11 @@ int register_shutdown(void (*function) (void *data), void *data)
 			 SHUTDOWN_MAXFN);
 		return 1;
 	}
+	if (!may_register_shutdown) {
+		msg_perr("Tried to register a shutdown function before "
+			 "programmer init.\n");
+		return 1;
+	}
 	shutdown_fn[shutdown_fn_count].func = function;
 	shutdown_fn[shutdown_fn_count].data = data;
 	shutdown_fn_count++;
@@ -426,17 +455,48 @@ int register_shutdown(void (*function) (void *data), void *data)
 	return 0;
 }
 
-int programmer_init(void)
+int programmer_init(char *param)
 {
-	return programmer_table[programmer].init();
+	int ret;
+	/* Initialize all programmer specific data. */
+	/* Default to unlimited decode sizes. */
+	max_rom_decode = (const struct decode_sizes) {
+		.parallel	= 0xffffffff,
+		.lpc		= 0xffffffff,
+		.fwh		= 0xffffffff,
+		.spi		= 0xffffffff
+	};
+	/* Default to Parallel/LPC/FWH flash devices. If a known host controller
+	 * is found, the init routine sets the buses_supported bitfield.
+	 */
+	buses_supported = CHIP_BUSTYPE_NONSPI;
+	/* Default to top aligned flash at 4 GB. */
+	flashbase = 0;
+	/* Registering shutdown functions is now allowed. */
+	may_register_shutdown = 1;
+	/* Default to allowing writes. Broken programmers set this to 0. */
+	programmer_may_write = 1;
+
+	programmer_param = param;
+	msg_pdbg("Initializing %s programmer\n",
+		 programmer_table[programmer].name);
+	ret = programmer_table[programmer].init();
+	if (programmer_param && strlen(programmer_param)) {
+		msg_perr("Unhandled programmer parameters: %s\n",
+			 programmer_param);
+		/* Do not error out here, the init itself was successful. */
+	}
+	return ret;
 }
 
 int programmer_shutdown(void)
 {
-	int i;
-
-	for (i = shutdown_fn_count - 1; i >= 0; i--)
+	/* Registering shutdown functions is no longer allowed. */
+	may_register_shutdown = 0;
+	while (shutdown_fn_count > 0) {
+		int i = --shutdown_fn_count;
 		shutdown_fn[i].func(shutdown_fn[i].data);
+	}
 	return programmer_table[programmer].shutdown();
 }
 
@@ -512,8 +572,6 @@ int read_memmapped(struct flashchip *flash, uint8_t *buf, int start, int len)
 	return 0;
 }
 
-unsigned long flashbase = 0;
-
 int min(int a, int b)
 {
 	return (a < b) ? a : b;
@@ -536,22 +594,24 @@ int bitcount(unsigned long a)
 char *strcat_realloc(char *dest, const char *src)
 {
 	dest = realloc(dest, strlen(dest) + strlen(src) + 1);
-	if (!dest)
+	if (!dest) {
+		msg_gerr("Out of memory!\n");
 		return NULL;
+	}
 	strcat(dest, src);
 	return dest;
 }
 
 /* This is a somewhat hacked function similar in some ways to strtok().
- * It will look for needle in haystack, return a copy of needle and remove
- * everything from the first occurrence of needle to the next delimiter
- * from haystack.
+ * It will look for needle with a subsequent '=' in haystack, return a copy of
+ * needle and remove everything from the first occurrence of needle to the next
+ * delimiter from haystack.
  */
 char *extract_param(char **haystack, char *needle, char *delim)
 {
-	char *param_pos, *rest, *tmp;
-	char *dev = NULL;
-	int devlen;
+	char *param_pos, *opt_pos, *rest;
+	char *opt = NULL;
+	int optlen;
 	int needlelen;
 
 	needlelen = strlen(needle);
@@ -567,43 +627,46 @@ char *extract_param(char **haystack, char *needle, char *delim)
 	do {
 		if (!param_pos)
 			return NULL;
-		/* Beginning of the string? */
-		if (param_pos == *haystack)
-			break;
-		/* After a delimiter? */
-		if (strchr(delim, *(param_pos - 1)))
-			break;
+		/* Needle followed by '='? */
+		if (param_pos[needlelen] == '=') {
+			
+			/* Beginning of the string? */
+			if (param_pos == *haystack)
+				break;
+			/* After a delimiter? */
+			if (strchr(delim, *(param_pos - 1)))
+				break;
+		}
 		/* Continue searching. */
 		param_pos++;
 		param_pos = strstr(param_pos, needle);
 	} while (1);
-		
+	
 	if (param_pos) {
-		param_pos += strlen(needle);
-		devlen = strcspn(param_pos, delim);
-		if (devlen) {
-			dev = malloc(devlen + 1);
-			if (!dev) {
-				msg_gerr("Out of memory!\n");
-				exit(1);
-			}
-			strncpy(dev, param_pos, devlen);
-			dev[devlen] = '\0';
-		}
-		rest = param_pos + devlen;
-		rest += strspn(rest, delim);
-		param_pos -= strlen(needle);
-		memmove(param_pos, rest, strlen(rest) + 1);
-		tmp = realloc(*haystack, strlen(*haystack) + 1);
-		if (!tmp) {
+		/* Get the string after needle and '='. */
+		opt_pos = param_pos + needlelen + 1;
+		optlen = strcspn(opt_pos, delim);
+		/* Return an empty string if the parameter was empty. */
+		opt = malloc(optlen + 1);
+		if (!opt) {
 			msg_gerr("Out of memory!\n");
 			exit(1);
 		}
-		*haystack = tmp;
+		strncpy(opt, opt_pos, optlen);
+		opt[optlen] = '\0';
+		rest = opt_pos + optlen;
+		/* Skip all delimiters after the current parameter. */
+		rest += strspn(rest, delim);
+		memmove(param_pos, rest, strlen(rest) + 1);
+		/* We could shrink haystack, but the effort is not worth it. */
 	}
-	
 
-	return dev;
+	return opt;
+}
+
+char *extract_programmer_param(char *param_name)
+{
+	return extract_param(&programmer_param, param_name, ",");
 }
 
 /* start is an offset to the base address of the flash chip */
@@ -673,7 +736,12 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, int start, int len, c
 		starthere = max(start, i * page_size);
 		/* Length of bytes in the range in this page. */
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
-		flash->read(flash, readbuf, starthere, lenhere);
+		ret = flash->read(flash, readbuf, starthere, lenhere);
+		if (ret) {
+			msg_gerr("Verification impossible because read failed "
+				 "at 0x%x (len 0x%x)\n", starthere, lenhere);
+			break;
+		}
 		for (j = 0; j < lenhere; j++) {
 			if (cmpbuf[starthere - start + j] != readbuf[j]) {
 				/* Only print the first failure. */
@@ -1024,42 +1092,64 @@ int verify_flash(struct flashchip *flash, uint8_t *buf)
 	return ret;
 }
 
-int read_flash(struct flashchip *flash, char *filename)
+int write_buf_to_file(unsigned char *buf, unsigned long size, char *filename)
 {
 	unsigned long numbytes;
 	FILE *image;
-	unsigned long size = flash->total_size * 1024;
-	unsigned char *buf = calloc(size, sizeof(char));
 
 	if (!filename) {
-		msg_gerr("Error: No filename specified.\n");
+		msg_gerr("No filename specified.\n");
 		return 1;
 	}
 	if ((image = fopen(filename, "wb")) == NULL) {
 		perror(filename);
-		exit(1);
-	}
-	msg_cinfo("Reading flash... ");
-	if (!flash->read) {
-		msg_cinfo("FAILED!\n");
-		msg_cerr("ERROR: flashrom has no read function for this flash chip.\n");
 		return 1;
-	} else
-		flash->read(flash, buf, 0, size);
+	}
 
 	numbytes = fwrite(buf, 1, size, image);
 	fclose(image);
-	free(buf);
-	msg_cinfo("%s.\n", numbytes == size ? "done" : "FAILED");
-	if (numbytes != size)
+	if (numbytes != size) {
+		msg_gerr("File %s could not be written completely.\n",
+			 filename);
 		return 1;
+	}
 	return 0;
+}
+
+int read_flash_to_file(struct flashchip *flash, char *filename)
+{
+	unsigned long size = flash->total_size * 1024;
+	unsigned char *buf = calloc(size, sizeof(char));
+	int ret = 0;
+
+	msg_cinfo("Reading flash... ");
+	if (!buf) {
+		msg_gerr("Memory allocation failed!\n");
+		msg_cinfo("FAILED.\n");
+		return 1;
+	}
+	if (!flash->read) {
+		msg_cerr("No read function available for this flash chip.\n");
+		ret = 1;
+		goto out_free;
+	}
+	if (flash->read(flash, buf, 0, size)) {
+		msg_cerr("Read operation failed!\n");
+		ret = 1;
+		goto out_free;
+	}
+
+	ret = write_buf_to_file(buf, flash->total_size * 1024, filename);
+out_free:
+	free(buf);
+	msg_cinfo("%s.\n", ret ? "FAILED" : "done");
+	return ret;
 }
 
 /* This function shares a lot of its structure with erase_flash().
  * Even if an error is found, the function will keep going and check the rest.
  */
-int selfcheck_eraseblocks(struct flashchip *flash)
+static int selfcheck_eraseblocks(struct flashchip *flash)
 {
 	int i, j, k;
 	int ret = 0;
@@ -1124,14 +1214,37 @@ int selfcheck_eraseblocks(struct flashchip *flash)
 	return ret;
 }
 
+static int walk_eraseregions(struct flashchip *flash, int erasefunction,
+			     int (*do_something) (struct flashchip *flash,
+						  unsigned int addr,
+						  unsigned int len))
+{
+	int i, j;
+	unsigned int start = 0;
+	unsigned int len;
+	struct block_eraser eraser = flash->block_erasers[erasefunction];
+	for (i = 0; i < NUM_ERASEREGIONS; i++) {
+		/* count==0 for all automatically initialized array
+		 * members so the loop below won't be executed for them.
+		 */
+		len = eraser.eraseblocks[i].size;
+		for (j = 0; j < eraser.eraseblocks[i].count; j++) {
+			msg_cdbg("0x%06x-0x%06x, ", start,
+				     start + len - 1);
+			if (do_something(flash, start, len))
+				return 1;
+			start += len;
+		}
+	}
+	return 0;
+}
+
 int erase_flash(struct flashchip *flash)
 {
-	int i, j, k, ret = 0, found = 0;
-	unsigned int start, len;
+	int k, ret = 0, found = 0;
 
 	msg_cinfo("Erasing flash chip... ");
 	for (k = 0; k < NUM_ERASEFUNCTIONS; k++) {
-		unsigned int done = 0;
 		struct block_eraser eraser = flash->block_erasers[k];
 
 		msg_cdbg("Looking at blockwise erase function %i... ", k);
@@ -1154,24 +1267,7 @@ int erase_flash(struct flashchip *flash)
 		}
 		found = 1;
 		msg_cdbg("trying... ");
-		for (i = 0; i < NUM_ERASEREGIONS; i++) {
-			/* count==0 for all automatically initialized array
-			 * members so the loop below won't be executed for them.
-			 */
-			for (j = 0; j < eraser.eraseblocks[i].count; j++) {
-				start = done + eraser.eraseblocks[i].size * j;
-				len = eraser.eraseblocks[i].size;
-				msg_cdbg("0x%06x-0x%06x, ", start,
-					     start + len - 1);
-				ret = eraser.block_erase(flash, start, len);
-				if (ret)
-					break;
-			}
-			if (ret)
-				break;
-			done += eraser.eraseblocks[i].count *
-				eraser.eraseblocks[i].size;
-		}
+		ret = walk_eraseregions(flash, k, eraser.block_erase);
 		msg_cdbg("\n");
 		/* If everything is OK, don't try another erase function. */
 		if (!ret)
@@ -1232,7 +1328,12 @@ void print_sysinfo(void)
 #endif
 #endif
 #ifdef __clang__
-	msg_ginfo(" LLVM %i/clang %i, ", __llvm__, __clang__);
+	msg_ginfo(" LLVM Clang");
+#ifdef __clang_version__
+	msg_ginfo(" %s,", __clang_version__);
+#else
+	msg_ginfo(" unknown version (before r102686),");
+#endif
 #elif defined(__GNUC__)
 	msg_ginfo(" GCC");
 #ifdef __VERSION__
@@ -1280,12 +1381,6 @@ int selfcheck(void)
 		msg_gerr("SPI programmer table miscompilation!\n");
 		ret = 1;
 	}
-#if CONFIG_BITBANG_SPI == 1
-	if (bitbang_spi_master_count - 1 != BITBANG_SPI_INVALID) {
-		msg_gerr("Bitbanging SPI master table miscompilation!\n");
-		ret = 1;
-	}
-#endif
 	for (flash = flashchips; flash && flash->name; flash++)
 		if (selfcheck_eraseblocks(flash))
 			ret = 1;
@@ -1363,6 +1458,21 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 	size = flash->total_size * 1024;
 	buf = (uint8_t *) calloc(size, sizeof(char));
 
+	if (!programmer_may_write && (write_it || erase_it)) {
+		msg_perr("Write/erase is not working yet on your programmer in "
+			 "its current configuration.\n");
+		/* --force is the wrong approach, but it's the best we can do
+		 * until the generic programmer parameter parser is merged.
+		 */
+		if (!force) {
+			msg_perr("Aborting.\n");
+			programmer_shutdown();
+			return 1;
+		} else {
+			msg_cerr("Continuing anyway.\n");
+		}
+	}
+
 	if (erase_it) {
 		if (flash->tested & TEST_BAD_ERASE) {
 			msg_cerr("Erase is not working on this chip. ");
@@ -1386,7 +1496,7 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 		if (flash->unlock)
 			flash->unlock(flash);
 
-		if (read_flash(flash, filename)) {
+		if (read_flash_to_file(flash, filename)) {
 			programmer_shutdown();
 			return 1;
 		}

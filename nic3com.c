@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include "flash.h"
+#include "programmer.h"
 
 #define BIOS_ROM_ADDR		0x04
 #define BIOS_ROM_DATA		0x08
@@ -31,10 +32,10 @@
 
 #define PCI_VENDOR_ID_3COM	0x10b7
 
-uint32_t internal_conf;
-uint16_t id;
+static uint32_t internal_conf;
+static uint16_t id;
 
-struct pcidev_status nics_3com[] = {
+const struct pcidev_status nics_3com[] = {
 	/* 3C90xB */
 	{0x10b7, 0x9055, OK, "3COM", "3C90xB: PCI 10/100 Mbps; shared 10BASE-T/100BASE-TX"},
 	{0x10b7, 0x9001, NT, "3COM", "3C90xB: PCI 10/100 Mbps; shared 10BASE-T/100BASE-T4" },
@@ -59,7 +60,8 @@ int nic3com_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_3COM, PCI_BASE_ADDRESS_0,
-				   nics_3com, programmer_param);
+				   nics_3com);
+
 	id = pcidev_dev->device_id;
 
 	/* 3COM 3C90xB cards need a special fixup. */
@@ -96,7 +98,6 @@ int nic3com_shutdown(void)
 		OUTL(internal_conf, io_base_addr + INTERNAL_CONFIG);
 	}
 
-	free(programmer_param);
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;

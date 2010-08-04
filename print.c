@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include "flash.h"
 #include "flashchips.h"
+#include "programmer.h"
 
 /*
  * Return a string corresponding to the bustype parameter.
@@ -73,29 +74,36 @@ static int digits(int n)
 	return i;
 }
 
-void print_supported_chips(void)
+static void print_supported_chips(void)
 {
 	int okcol = 0, pos = 0, i, chipcount = 0;
+	int maxchiplen = 0, maxvendorlen = 0;
 	struct flashchip *f;
 
 	for (f = flashchips; f->name != NULL; f++) {
-		if (GENERIC_DEVICE_ID == f->model_id)
+		/* Ignore "unknown XXXX SPI chip" entries. */
+		if (!strncmp(f->name, "unknown", 7))
 			continue;
-		okcol = max(okcol, strlen(f->vendor) + 1 + strlen(f->name));
-	}
-	okcol = (okcol + 7) & ~7;
-
-	for (f = flashchips; f->name != NULL; f++)
 		chipcount++;
+		maxvendorlen = max(maxvendorlen, strlen(f->vendor));
+		maxchiplen = max(maxchiplen, strlen(f->name));
+	}
+	maxvendorlen++;
+	maxchiplen++;
+	okcol = maxvendorlen + maxchiplen;
 
 	printf("\nSupported flash chips (total: %d):\n\n", chipcount);
-	POS_PRINT("Vendor:   Device:");
-	while (pos < okcol) {
-		printf("\t");
-		pos += 8 - (pos % 8);
-	}
+	printf("Vendor");
+	for (i = strlen("Vendor"); i < maxvendorlen; i++)
+		printf(" ");
+	printf("Device");
+	for (i = strlen("Device"); i < maxchiplen; i++)
+		printf(" ");
 
-	printf("Tested OK:\tKnown BAD:  Size/KB:  Type:\n\n");
+	printf("Tested   Known    Size/KB:  Type:\n");
+	for (i = 0; i < okcol; i++)
+		printf(" ");
+	printf("OK       Broken\n\n");
 	printf("(P = PROBE, R = READ, E = ERASE, W = WRITE)\n\n");
 
 	for (f = flashchips; f->name != NULL; f++) {
@@ -104,15 +112,13 @@ void print_supported_chips(void)
 			continue;
 
 		printf("%s", f->vendor);
-		for (i = 0; i < 10 - strlen(f->vendor); i++)
+		for (i = strlen(f->vendor); i < maxvendorlen; i++)
 			printf(" ");
 		printf("%s", f->name);
+		for (i = strlen(f->name); i < maxchiplen; i++)
+			printf(" ");
 
-		pos = 10 + strlen(f->name);
-		while (pos < okcol) {
-			printf("\t");
-			pos += 8 - (pos % 8);
-		}
+		pos = maxvendorlen + maxchiplen;
 		if ((f->tested & TEST_OK_MASK)) {
 			if ((f->tested & TEST_OK_PROBE))
 				POS_PRINT("P ");
@@ -124,21 +130,25 @@ void print_supported_chips(void)
 				POS_PRINT("W ");
 		}
 		while (pos < okcol + 9) {
-			printf("\t");
-			pos += 8 - (pos % 8);
+			printf(" ");
+			pos++;
 		}
 		if ((f->tested & TEST_BAD_MASK)) {
 			if ((f->tested & TEST_BAD_PROBE))
-				printf("P ");
+				POS_PRINT("P ");
 			if ((f->tested & TEST_BAD_READ))
-				printf("R ");
+				POS_PRINT("R ");
 			if ((f->tested & TEST_BAD_ERASE))
-				printf("E ");
+				POS_PRINT("E ");
 			if ((f->tested & TEST_BAD_WRITE))
-				printf("W ");
+				POS_PRINT("W ");
 		}
 
-		printf("\t    %d", f->total_size);
+		while (pos < okcol + 18) {
+			printf(" ");
+			pos++;
+		}
+		printf("%d", f->total_size);
 		for (i = 0; i < 10 - digits(f->total_size); i++)
 			printf(" ");
 		printf("%s\n", flashbuses_to_text(f->bustype));
@@ -146,7 +156,7 @@ void print_supported_chips(void)
 }
 
 #if CONFIG_INTERNAL == 1
-void print_supported_chipsets(void)
+static void print_supported_chipsets(void)
 {
 	int i, j, chipsetcount = 0;
 	const struct penable *c = chipset_enables;
@@ -169,11 +179,11 @@ void print_supported_chipsets(void)
 	}
 }
 
-void print_supported_boards_helper(const struct board_info *boards,
+static void print_supported_boards_helper(const struct board_info *boards,
 				   const char *devicetype)
 {
 	int i, j, boardcount_good = 0, boardcount_bad = 0;
-	struct board_pciid_enable *b = board_pciid_enables;
+	const struct board_pciid_enable *b = board_pciid_enables;
 
 	for (i = 0; boards[i].vendor != NULL; i++) {
 		if (boards[i].working)
@@ -219,7 +229,7 @@ void print_supported(void)
 		print_supported_boards_helper(boards_known, "boards");
 		print_supported_boards_helper(laptops_known, "laptops");
 #endif
-#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT >= 1
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT >= 1
 		printf("\nSupported PCI devices flashrom can use "
 		       "as programmer:\n\n");
 #endif
@@ -229,6 +239,9 @@ void print_supported(void)
 #if CONFIG_NICREALTEK == 1
 		print_supported_pcidevs(nics_realtek);
 		print_supported_pcidevs(nics_realteksmc1211);
+#endif
+#if CONFIG_NICNATSEMI == 1
+		print_supported_pcidevs(nics_natsemi);
 #endif
 #if CONFIG_GFXNVIDIA == 1
 		print_supported_pcidevs(gfx_nvidia);
@@ -242,6 +255,15 @@ void print_supported(void)
 #if CONFIG_ATAHPT == 1
 		print_supported_pcidevs(ata_hpt);
 #endif
+
+#if CONFIG_FT2232_SPI+CONFIG_DEDIPROG >= 1
+                printf("\nSupported USB devices flashrom can use "
+                       "as programmer:\n\n");
+#endif
+
+#if CONFIG_FT2232_SPI == 1
+		print_supported_usbdevs(devs_ft2232spi);
+#endif 
 }
 
 #if CONFIG_INTERNAL == 1
@@ -258,9 +280,11 @@ const struct board_info boards_known[] = {
 	B("A-Trend",	"ATC-6220",		1, "http://www.motherboard.cz/mb/atrend/atc6220.htm", NULL),
 	B("Abit",	"AX8",			1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?DEFTITLE=Y&fMTYPE=Socket%20939&pMODEL_NAME=AX8", NULL),
 	B("Abit",	"Fatal1ty F-I90HD",	1, "http://www.abit.com.tw/page/de/motherboard/motherboard_detail.php?pMODEL_NAME=Fatal1ty+F-I90HD&fMTYPE=LGA775", NULL),
+	B("Abit",	"IC7",			1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?pMODEL_NAME=IC7&fMTYPE=Socket%20478", NULL),
 	B("Abit",	"IP35",			1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?fMTYPE=LGA775&pMODEL_NAME=IP35", NULL),
 	B("Abit",	"IP35 Pro",		1, "http://www.abit.com.tw/page/de/motherboard/motherboard_detail.php?fMTYPE=LGA775&pMODEL_NAME=IP35%20Pro", NULL),
 	B("Abit",	"IS-10",		0, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?pMODEL_NAME=IS-10&fMTYPE=Socket+478", NULL),
+	B("Abit",	"NF-M2 nView",		1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?fMTYPE=Socket%20AM2&pMODEL_NAME=NF-M2%20nView", NULL),
 	B("Abit",	"NF7-S",		1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?fMTYPE=Socket%20A&pMODEL_NAME=NF7-S", NULL),
 	B("Abit",	"VT6X4",		1, "http://www.abit.com.tw/page/en/motherboard/motherboard_detail.php?fMTYPE=Slot%201&pMODEL_NAME=VT6X4", NULL),
 	B("Acorp",	"6A815EPD",		1, "http://web.archive.org/web/20021206163652/www.acorp.com.tw/English/default.asp", NULL),
@@ -272,6 +296,7 @@ const struct board_info boards_known[] = {
 	B("Artec Group","DBE62",		1, "http://wiki.thincan.org/DBE62", NULL),
 	B("ASI",	"MB-5BLMP",		1, "http://www.hojerteknik.com/winnet.htm", "Used in the IGEL WinNET III thin client."),
 	B("ASRock",	"A770CrossFire",	1, "http://www.asrock.com/mb/overview.asp?Model=A770CrossFire&s=AM2\%2b", NULL),
+	B("ASRock",	"ALiveNF6G-DVI",	1, "http://www.asrock.com/mb/overview.asp?Model=ALiveNF6G-DVI", NULL),
 	B("ASRock",	"K7VT4A+",		0, "http://www.asrock.com/mb/overview.asp?Model=K7VT4A%%2b&s=", NULL),
 	B("ASRock",	"K8S8X",		1, "http://www.asrock.com/mb/overview.asp?Model=K8S8X", "The Super I/O isn't found on this board. See http://www.flashrom.org/pipermail/flashrom/2009-November/000937.html."),
 	B("ASRock",	"P4i65GV",		1, NULL, NULL),
@@ -288,6 +313,7 @@ const struct board_info boards_known[] = {
 	B("ASUS",	"A8N-E",		1, "http://www.asus.com/product.aspx?P_ID=DzbA8hgqchMBOVRz", NULL),
 	B("ASUS",	"A8N-SLI",		1, "http://www.asus.com/product.aspx?P_ID=J9FKa8z2xVId3pDK", NULL),
 	B("ASUS",	"A8N-SLI Premium",	1, "http://www.asus.com/product.aspx?P_ID=nbulqxniNmzf0mH1", NULL),
+	B("ASUS",	"A8N-VM CSM",		1, "http://www.asus.com/product.aspx?P_ID=JBqqlpj4cspbSa3s", NULL),
 	B("ASUS",	"A8NE-FM/S",		1, "http://www.hardwareschotte.de/hardware/preise/proid_1266090/preis_ASUS+A8NE-FM", NULL),
 	B("ASUS",	"A8V Deluxe",		1, "http://www.asus.com/product.aspx?P_ID=tvpdgPNCPaABZRVU", NULL),
 	B("ASUS",	"A8V-E Deluxe",		1, "http://www.asus.com/product.aspx?P_ID=hQBPIJWEZnnGAZEh", NULL),
@@ -301,7 +327,10 @@ const struct board_info boards_known[] = {
 	B("ASUS",	"M2NBP-VM CSM",		1, "http://www.asus.com/product.aspx?P_ID=MnOfzTGd2KkwG0rF", NULL),
 	B("ASUS",	"M2V",			1, "http://www.asus.com/product.aspx?P_ID=OqYlEDFfF6ZqZGvp", NULL),
 	B("ASUS",	"M2V-MX",		1, "http://www.asus.com/product.aspx?P_ID=7grf8Ci4yxnqzt3z", NULL),
+	B("ASUS",	"M3A76-CM",		1, NULL, NULL),
 	B("ASUS",	"M3A78-EM",		1, "http://www.asus.com/product.aspx?P_ID=KjpYqzmAd9vsTM2D", NULL),
+	B("ASUS",	"M4A79T Deluxe",	1, "http://www.asus.com/product.aspx?P_ID=lhJiLTN5huPfCVkW", NULL),
+	B("ASUS",	"M4A87TD/USB3",		1, "http://www.asus.com/product.aspx?P_ID=nlWYrI9wlNIYHAaa", NULL),
 	B("ASUS",	"MEW-AM",		0, "ftp://ftp.asus.com.tw/pub/ASUS/mb/sock370/810/mew-am/", NULL),
 	B("ASUS",	"MEW-VM",		0, "http://www.elhvb.com/mboards/OEM/HP/manual/ASUS%20MEW-VM.htm", NULL),
 	B("ASUS",	"P2B",			1, "ftp://ftp.asus.com.tw/pub/ASUS/mb/slot1/440bx/p2b/", NULL),
@@ -314,18 +343,24 @@ const struct board_info boards_known[] = {
 	B("ASUS",	"P4B266-LM",		1, "http://esupport.sony.com/US/perl/swu-list.pl?mdl=PCVRX650", NULL),
 	B("ASUS",	"P4C800-E Deluxe",	1, "http://www.asus.com/product.aspx?P_ID=cFuVCr9bXXCckmcK", NULL),
 	B("ASUS",	"P4P800-E Deluxe",	1, "http://www.asus.com/product.aspx?P_ID=INIJUvLlif7LHp3g", NULL),
+	B("ASUS",	"P4SD-LA",		1, "http://h10025.www1.hp.com/ewfrf/wc/document?docname=c00022505", NULL),
 	B("ASUS",	"P5A",			1, "ftp://ftp.asus.com.tw/pub/ASUS/mb/sock7/ali/p5a/", NULL),
 	B("ASUS",	"P5B",			1, "ftp://ftp.asus.com.tw/pub/ASUS/mb/socket775/P5B/", NULL),
 	B("ASUS",	"P5B-Deluxe",		1, "http://www.asus.com/product.aspx?P_ID=bswT66IBSb2rEWNa", NULL),
 	B("ASUS",	"P5BV-M",		0, "ftp://ftp.asus.com.tw/pub/ASUS/mb/socket775/P5B-VM/", NULL),
+	B("ASUS",	"P5GC-MX/1333",		1, "http://www.asus.com/product.aspx?P_ID=PYvbfOokwxUzJky3", NULL),
 	B("ASUS",	"P5KC",			1, "http://www.asus.com/product.aspx?P_ID=fFZ8oUIGmLpwNMjj", NULL),
 	B("ASUS",	"P5L-MX",		1, "http://www.asus.com/product.aspx?P_ID=X70d3NCzH2DE9vWH", NULL),
 	B("ASUS",	"P5ND2-SLI Deluxe",	1, "http://www.asus.com/product.aspx?P_ID=WY7XroDuUImVbgp5", NULL),
+	B("ASUS",	"P5PE-VM",		1, "http://www.asus.com/product.aspx?P_ID=k3h0ZFVu9Lo1dUvk", NULL),
+	B("ASUS",	"P6T SE",		1, "http://www.asus.com/product.aspx?P_ID=t4yhK6y9W9o7iQ9E", NULL),
 	B("ASUS",	"P6T Deluxe",		1, "http://www.asus.com/product.aspx?P_ID=vXixf82co6Q5v0BZ", NULL),
 	B("ASUS",	"P6T Deluxe V2",	1, "http://www.asus.com/product.aspx?P_ID=iRlP8RG9han6saZx", NULL),
 	B("BCOM",	"WinNET100",		1, "http://www.coreboot.org/BCOM_WINNET100", "Used in the IGEL-316 thin client."),
 	B("Biostar",	"M6TBA",		0, "ftp://ftp.biostar-usa.com/manuals/M6TBA/", NULL),
+	B("Biostar",	"M7NCD Pro",		1, "http://www.biostar.com.tw/app/en/mb/content.php?S_ID=260", NULL),
 	B("Biostar",	"P4M80-M4",		1, "http://www.biostar-usa.com/mbdetails.asp?model=p4m80-m4", NULL),
+	B("Biostar",	"TA780G M2+",		1, "http://www.biostar.com.tw/app/en/t-series/content.php?S_ID=344", NULL),
 	B("Boser",	"HS-6637",		0, "http://www.boser.com.tw/manual/HS-62376637v3.4.pdf", NULL),
 	B("Dell",	"PowerEdge 1850",	1, "http://support.dell.com/support/edocs/systems/pe1850/en/index.htm", NULL),
 	B("DFI",	"855GME-MGF",		0, "http://www.dfi.com.tw/portal/CM/cmproduct/XX_cmproddetail/XX_WbProdsWindow?action=e&downloadType=&windowstate=normal&mode=view&downloadFlag=false&itemId=433", NULL),
@@ -333,17 +368,25 @@ const struct board_info boards_known[] = {
 	B("Elitegroup",	"K7S5A",		1, "http://www.ecs.com.tw/ECSWebSite/Products/ProductsDetail.aspx?detailid=279&CategoryID=1&DetailName=Specification&MenuID=1&LanID=0", NULL),
 	B("Elitegroup",	"K7S6A",		1, "http://www.ecs.com.tw/ECSWebSite/Products/ProductsDetail.aspx?detailid=77&CategoryID=1&DetailName=Specification&MenuID=52&LanID=0", NULL),
 	B("Elitegroup",	"K7VTA3",		1, "http://www.ecs.com.tw/ECSWebSite/Products/ProductsDetail.aspx?detailid=264&CategoryID=1&DetailName=Specification&MenuID=52&LanID=0", NULL),
+	B("Elitegroup",	"P6IWP-Fe",		1, "http://www.ecs.com.tw/ECSWebSite_2007/Products/ProductsDetail.aspx?CategoryID=1&TypeID=3&DetailID=95&DetailName=Feature&MenuID=1&LanID=0", NULL),
 	B("Elitegroup",	"P6VAP-A+",		1, "http://www.ecs.com.tw/ECSWebSite/Products/ProductsDetail.aspx?detailid=117&CategoryID=1&DetailName=Specification&MenuID=1&LanID=0", NULL),
+	B("Elitegroup", "RS485M-M",		1, "http://www.ecs.com.tw/ECSWebSite_2007/Products/ProductsDetail.aspx?CategoryID=1&DetailID=654&DetailName=Feature&MenuID=1&LanID=0", NULL),
+	B("Emerson",	"ATCA-7360",		1, "http://www.emerson.com/sites/Network_Power/en-US/Products/Product_Detail/Product1/Pages/EmbCompATCA-7360.aspx", NULL),
 	B("EPoX",	"EP-8K5A2",		1, "http://www.epox.com/product.asp?ID=EP-8K5A2", NULL),
 	B("EPoX",	"EP-8RDA3+",		1, "http://www.epox.com/product.asp?ID=EP-8RDA3plus", NULL),
 	B("EPoX",	"EP-BX3",		1, "http://www.epox.com/product.asp?ID=EP-BX3", NULL),
 	B("FIC",	"VA-502",		0, "ftp://ftp.fic.com.tw/motherboard/manual/socket7/va-502/", NULL),
+	B("Foxconn",	"A6VMX",		1, "http://www.foxconnchannel.com/product/motherboards/detail_overview.aspx?id=en-us0000346", NULL),
+	B("Fujitsu-Siemens", "ESPRIMO P5915",	1, "http://uk.ts.fujitsu.com/rl/servicesupport/techsupport/professionalpc/ESPRIMO/P/EsprimoP5915-6.htm", "Mainboard model is D2312-A2."),
 	B("GIGABYTE",	"GA-2761GXDK",		1, "http://www.computerbase.de/news/hardware/mainboards/amd-systeme/2007/mai/gigabyte_dtx-mainboard/", NULL),
 	B("GIGABYTE",	"GA-6BXC",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1445", NULL),
 	B("GIGABYTE",	"GA-6BXDU",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1429", NULL),
 	B("GIGABYTE",	"GA-6ZMA",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1541", NULL),
+	B("GIGABYTE",	"GA-MA785GMT-UD2H",	1, "http://www.gigabyte.de/Products/Motherboard/Products_Overview.aspx?ProductID=4525", NULL),
+	B("GIGABYTE",	"GA-770TA-UD3",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=3272#ov", NULL),
 	B("GIGABYTE",	"GA-7VT600",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1666", NULL),
 	B("GIGABYTE",	"GA-7ZM",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1366", "Works fine if you remove jumper JP9 on the board and disable the flash protection BIOS option."),
+	B("GIGABYTE",	"GA-8IRML",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=1343", NULL),
 	B("GIGABYTE",	"GA-965P-DS4",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2288", NULL),
 	B("GIGABYTE",	"GA-EP35-DS3L",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2778", NULL),
 	B("GIGABYTE",	"GA-EX58-UD4P",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2986", NULL),
@@ -351,6 +394,7 @@ const struct board_info boards_known[] = {
 	B("GIGABYTE",	"GA-M57SLI-S4",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2287", NULL),
 	B("GIGABYTE",	"GA-M61P-S3",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2434", NULL),
 	B("GIGABYTE",	"GA-MA69VM-S2",		1, "http://www.gigabyte.com/products/product-page.aspx?pid=2500", NULL),
+	B("GIGABYTE",	"GA-MA74GM-S2H (rev. 3.0)", 1, "http://www.gigabyte.com/products/product-page.aspx?pid=3152", NULL),
 	B("GIGABYTE",	"GA-MA770T-UD3P",	1, "http://www.gigabyte.com/products/product-page.aspx?pid=3096", NULL),
 	B("GIGABYTE",	"GA-MA78G-DS3H",	1, "http://www.gigabyte.com/products/product-page.aspx?pid=2800", NULL), /* TODO: Rev 1.x or 2.x? */
 	B("GIGABYTE",	"GA-MA78GM-S2H",	1, "http://www.gigabyte.com/products/product-page.aspx?pid=2758", NULL), /* TODO: Rev. 1.0, 1.1, or 2.x? */
@@ -358,6 +402,7 @@ const struct board_info boards_known[] = {
 	B("GIGABYTE",	"GA-MA790FX-DQ6",	1, "http://www.gigabyte.com/products/product-page.aspx?pid=2690", NULL),
 	B("GIGABYTE",	"GA-MA790GP-DS4H",	1, "http://www.gigabyte.com/products/product-page.aspx?pid=2887", NULL),
 	B("HP",		"DL145 G3",		1, "http://h20000.www2.hp.com/bizsupport/TechSupport/Document.jsp?objectID=c00816835&lang=en&cc=us&taskId=101&prodSeriesId=3219755&prodTypeId=15351", NULL),
+	B("HP",		"Puffer2-UL8E",		1, "http://h10025.www1.hp.com/ewfrf/wc/document?docname=c00300023", NULL),
 	B("HP",		"Vectra VL400 PC",	1, "http://h20000.www2.hp.com/bizsupport/TechSupport/Document.jsp?objectID=c00060658&lang=en&cc=us", NULL),
 	B("HP",		"Vectra VL420 SFF PC",	1, "http://h20000.www2.hp.com/bizsupport/TechSupport/Document.jsp?objectID=c00060661&lang=en&cc=us", NULL),
 	B("HP",		"xw9400",		1, "http://h20000.www2.hp.com/bizsupport/TechSupport/Home.jsp?lang=en&cc=us&prodSeriesId=3211286&prodTypeId=12454", "Boot block is write protected unless the solder points next to F2 are shorted." ),
@@ -377,18 +422,19 @@ const struct board_info boards_known[] = {
 	B("MSI",	"MS-6702E (K8T Neo2-F)",1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=588", NULL),
 	B("MSI",	"MS-6712 (KT4V)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=505", NULL),
 	B("MSI",	"MS-7005 (651M-L)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=559", NULL),
-	B("MSI",	"MS-7025 (K8N Neo2 Platinum)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=587", NULL),
+	B("MSI",	"MS-7025 (K8N Neo2 Platinum)", 1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=587", NULL),
 	B("MSI",	"MS-7046",		1, "http://www.heimir.de/ms7046/", NULL),
 	B("MSI",	"MS-7065",		1, "http://browse.geekbench.ca/geekbench2/view/53114", NULL),
 	B("MSI",	"MS-7135 (K8N Neo3)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=170", NULL),
 	B("MSI",	"MS-7168 (Orion)",	1, "http://support.packardbell.co.uk/uk/item/index.php?i=spec_orion&pi=platform_honeymoon_istart", NULL),
 	B("MSI",	"MS-7236 (945PL Neo3)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1173", NULL),
+	B("MSI",	"MS-7253 (K9VGM-V)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=260", NULL),
 	B("MSI",	"MS-7255 (P4M890M)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1082", NULL),
 	B("MSI",	"MS-7260, (K9N Neo)",	0, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=255", "Interestingly flashrom does not work when the vendor BIOS is booted, but it ''does'' work flawlessly when the machine is booted with coreboot."),
 	B("MSI",	"MS-7312 (K9MM-V)",	1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1104", NULL),
-	B("MSI",	"MS-7345 (P35 Neo2-FIR)",1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1261", NULL),
-	B("MSI",	"MS-7368 (K9AG Neo2-Digital)",1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1241", NULL),
-	B("MSI",	"MS-7376 (K9A2 Platinum)",1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1332", NULL),
+	B("MSI",	"MS-7345 (P35 Neo2-FIR)", 1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1261", NULL),
+	B("MSI",	"MS-7368 (K9AG Neo2-Digital)", 1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1241", NULL),
+	B("MSI",	"MS-7376 (K9A2 Platinum)", 1, "http://www.msi.com/index.php?func=proddesc&maincat_no=1&prod_no=1332", NULL),
 	B("NEC",	"PowerMate 2000",	1, "http://support.necam.com/mobilesolutions/hardware/Desktops/pm2000/celeron/", NULL),
 	B("Nokia",	"IP530",		1, NULL, NULL),
 	B("PC Engines",	"Alix.1c",		1, "http://pcengines.ch/alix1c.htm", NULL),
@@ -398,11 +444,14 @@ const struct board_info boards_known[] = {
 	B("PC Engines",	"Alix.3d3",		1, "http://pcengines.ch/alix3d3.htm", NULL),
 	B("PC Engines",	"WRAP.2E",		1, "http://pcengines.ch/wrap2e1.htm", NULL),
 	B("RCA",	"RM4100",		1, "http://www.settoplinux.org/index.php?title=RCA_RM4100", NULL),
+	B("Samsung",	"Polaris 32",		1, NULL, NULL),
 	B("Shuttle",	"AK31",			1, "http://www.motherboard.cz/mb/shuttle/AK31.htm", NULL),
 	B("Shuttle",	"AK38N",		1, "http://eu.shuttle.com/en/desktopdefault.aspx/tabid-36/558_read-9889/", NULL),
+	B("Shuttle",	"AV11V30",		1, NULL, NULL),
 	B("Shuttle",	"FD37",			1, "http://www.shuttle.eu/products/discontinued/barebones/sd37p2/", NULL),
 	B("Shuttle",	"FN25",			1, "http://www.shuttle.eu/products/discontinued/barebones/sn25p/?0=", NULL),
 	B("Soyo",	"SY-5VD",		0, "http://www.soyo.com/content/Downloads/163/&c=80&p=464&l=English", NULL),
+	B("Soyo",	"SY-6BA+ III",		1, "http://www.motherboard.cz/mb/soyo/SY-6BA+III.htm", NULL),
 	B("Soyo",	"SY-7VCA",		1, "http://www.tomshardware.com/reviews/12-socket-370-motherboards,196-15.html", NULL),
 	B("Sun",	"Blade x6250",		1, "http://www.sun.com/servers/blades/x6250/", NULL),
 	B("Sun",	"Fire x4150",		0, "http://www.sun.com/servers/x64/x4150/", NULL),
@@ -426,7 +475,9 @@ const struct board_info boards_known[] = {
 	B("Tyan",	"S2891",		1, "http://www.tyan.com/product_board_detail.aspx?pid=144", NULL),
 	B("Tyan",	"S2892",		1, "http://www.tyan.com/product_board_detail.aspx?pid=145", NULL),
 	B("Tyan",	"S2895",		1, "http://www.tyan.com/archive/products/html/thunderk8we.html", NULL),
+	B("Tyan",	"S2915 (Thunder n6650W)", 1, "http://tyan.com/product_board_detail.aspx?pid=163", NULL),
 	B("Tyan",	"S3095",		1, "http://www.tyan.com/product_board_detail.aspx?pid=181", NULL),
+	B("Tyan",	"S3992",		1, "http://tyan.com/product_board_detail.aspx?pid=235", NULL),
 	B("Tyan",	"S5180",		1, "http://www.tyan.com/product_board_detail.aspx?pid=456", NULL),
 	B("Tyan",	"S5191",		1, "http://www.tyan.com/product_board_detail.aspx?pid=343", NULL),
 	B("Tyan",	"S5197",		1, "http://www.tyan.com/product_board_detail.aspx?pid=349", NULL),
@@ -436,7 +487,7 @@ const struct board_info boards_known[] = {
 	B("Tyan",	"S5375",		1, "http://www.tyan.com/product_board_detail.aspx?pid=566", NULL),
 	B("Tyan",	"S5376G2NR/S5376WAG2NR",1, "http://www.tyan.com/product_board_detail.aspx?pid=605", NULL),
 	B("Tyan",	"S5377",		1, "http://www.tyan.com/product_SKU_spec.aspx?ProductType=MB&pid=642&SKU=600000017", NULL),
-	B("Tyan",	"S5382 (Tempest i5000PW)",1, "http://www.tyan.com/product_board_detail.aspx?pid=439", NULL),
+	B("Tyan",	"S5382 (Tempest i5000PW)", 1, "http://www.tyan.com/product_board_detail.aspx?pid=439", NULL),
 	B("Tyan",	"S5397",		1, "http://www.tyan.com/product_board_detail.aspx?pid=560", NULL),
 	B("VIA",	"EPIA M/MII/...",	1, "http://www.via.com.tw/en/products/embedded/ProductDetail.jsp?productLine=1&motherboard_id=202", NULL), /* EPIA-MII link for now */
 	B("VIA",	"EPIA SP",		1, "http://www.via.com.tw/en/products/embedded/ProductDetail.jsp?productLine=1&motherboard_id=261", NULL),
@@ -463,6 +514,7 @@ const struct board_info laptops_known[] = {
 	B("Acer",	"Aspire One",		0, NULL, "http://www.coreboot.org/pipermail/coreboot/2009-May/048041.html"),
 	B("ASUS",	"Eee PC 701 4G",	0, "http://www.asus.com/product.aspx?P_ID=h6SPd3tEzLEsrEiS", "It seems the chip (25X40VSIG) is behind some SPI flash translation layer (likely in the EC, the ENE KB3310)."),
 	B("Dell",	"Latitude CPi A366XT",	0, "http://www.coreboot.org/Dell_Latitude_CPi_A366XT", "The laptop immediately powers off if you try to hot-swap the chip. It's not yet tested if write/erase would work on this laptop."),
+	B("HP/Compaq",	"nx9005",		0, "http://h18000.www1.hp.com/products/quickspecs/11602_na/11602_na.HTML", "Shuts down when probing for a chip. http://www.flashrom.org/pipermail/flashrom/2010-May/003321.html"),
 	B("HP/Compaq",	"nx9010",		0, "http://h20000.www2.hp.com/bizsupport/TechSupport/Document.jsp?lang=en&cc=us&objectID=c00348514", "Hangs upon '''flashrom -V''' (needs hard power-cycle then)."),
 	B("IBM/Lenovo",	"Thinkpad T40p",	0, "http://www.thinkwiki.org/wiki/Category:T40p", NULL),
 	B("IBM/Lenovo",	"240",			0, "http://www.stanford.edu/~bresnan//tp240.html", "Seems to (partially) work at first, but one block/sector cannot be written which then leaves you with a bricked laptop. Maybe this can be investigated and fixed in software later."),

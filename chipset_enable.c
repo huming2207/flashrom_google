@@ -32,10 +32,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "flash.h"
-
-#if defined(__i386__) || defined(__x86_64__)
+#include "programmer.h"
 
 #define NOT_DONE_YET 1
+
+#if defined(__i386__) || defined(__x86_64__)
 
 static int enable_flash_ali_m1533(struct pci_dev *dev, const char *name)
 {
@@ -300,11 +301,8 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	int max_decode_fwh_decode = 0;
 	int contiguous = 1;
 
-	if (programmer_param)
-		idsel = strstr(programmer_param, "fwh_idsel=");
-
-	if (idsel) {
-		idsel += strlen("fwh_idsel=");
+	idsel = extract_programmer_param("fwh_idsel");
+	if (idsel && strlen(idsel)) {
 		fwh_conf = (uint32_t)strtoul(idsel, NULL, 0);
 
 		/* FIXME: Need to undo this on shutdown. */
@@ -312,7 +310,15 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 		pci_write_long(dev, 0xd0, fwh_conf);
 		pci_write_word(dev, 0xd4, fwh_conf);
 		/* FIXME: Decode settings are not changed. */
+	} else if (idsel) {
+		msg_perr("Error: idsel= specified, but no number given.\n");
+		free(idsel);
+		/* FIXME: Return failure here once internal_init() starts
+		 * to care about the return value of the chipset enable.
+		 */
+		exit(1);
 	}
+	free(idsel);
 
 	/* Ignore all legacy ranges below 1 MB.
 	 * We currently only support flashing the chip which responds to
@@ -412,30 +418,15 @@ static int enable_flash_poulsbo(struct pci_dev *dev, const char *name)
 
 static int enable_flash_vt8237s_spi(struct pci_dev *dev, const char *name)
 {
-	uint32_t mmio_base;
-
 	/* Do we really need no write enable? */
-	mmio_base = (pci_read_long(dev, 0xbc)) << 8;
-	msg_pdbg("MMIO base at = 0x%x\n", mmio_base);
-	spibar = physmap("VT8237S MMIO registers", mmio_base, 0x70);
-
-	msg_pdbg("0x6c: 0x%04x     (CLOCK/DEBUG)\n",
-		     mmio_readw(spibar + 0x6c));
-
-	/* Not sure if it speaks all these bus protocols. */
-	buses_supported = CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
-	spi_controller = SPI_CONTROLLER_VIA;
-	ich_init_opcodes();
-
-	return 0;
+	return via_init_spi(dev);
 }
 
 static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 				   int ich_generation)
 {
-	int ret, i;
-	uint8_t old, new, bbs, buc;
-	uint16_t spibar_offset, tmp2;
+	int ret;
+	uint8_t bbs, buc;
 	uint32_t tmp, gcs;
 	void *rcrb;
 	//TODO: These names are incorrect for EP80579. For that, the solution would look like the commented line
@@ -468,158 +459,22 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	 * on ICH7 when the southbridge is strapped to LPC
 	 */
 
-	if (ich_generation == 7 && bbs == ICH_STRAP_LPC) {
-		buses_supported = CHIP_BUSTYPE_FWH;
-		/* No further SPI initialization required */
-		return ret;
+	buses_supported = CHIP_BUSTYPE_FWH;
+	if (ich_generation == 7) {
+		if(bbs == ICH_STRAP_LPC) {
+			/* No further SPI initialization required */
+			return ret;
+		}
+		else
+			/* Disable LPC/FWH if strapped to PCI or SPI */
+			buses_supported = 0;
 	}
 
-	switch (ich_generation) {
-	case 7:
-		buses_supported = CHIP_BUSTYPE_SPI;
-		spi_controller = SPI_CONTROLLER_ICH7;
-		spibar_offset = 0x3020;
-		break;
-	case 8:
-		buses_supported = CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
-		spi_controller = SPI_CONTROLLER_ICH9;
-		spibar_offset = 0x3020;
-		break;
-	case 9:
-	case 10:
-	default:		/* Future version might behave the same */
-		buses_supported = CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
-		spi_controller = SPI_CONTROLLER_ICH9;
-		spibar_offset = 0x3800;
-		break;
-	}
-
-	/* SPIBAR is at RCRB+0x3020 for ICH[78] and RCRB+0x3800 for ICH9. */
-	msg_pdbg("SPIBAR = 0x%x + 0x%04x\n", tmp, spibar_offset);
-
-	/* Assign Virtual Address */
-	spibar = rcrb + spibar_offset;
-
-	switch (spi_controller) {
-	case SPI_CONTROLLER_ICH7:
-		msg_pdbg("0x00: 0x%04x     (SPIS)\n",
-			     mmio_readw(spibar + 0));
-		msg_pdbg("0x02: 0x%04x     (SPIC)\n",
-			     mmio_readw(spibar + 2));
-		msg_pdbg("0x04: 0x%08x (SPIA)\n",
-			     mmio_readl(spibar + 4));
-		for (i = 0; i < 8; i++) {
-			int offs;
-			offs = 8 + (i * 8);
-			msg_pdbg("0x%02x: 0x%08x (SPID%d)\n", offs,
-				     mmio_readl(spibar + offs), i);
-			msg_pdbg("0x%02x: 0x%08x (SPID%d+4)\n", offs + 4,
-				     mmio_readl(spibar + offs + 4), i);
-		}
-		ichspi_bbar = mmio_readl(spibar + 0x50);
-		msg_pdbg("0x50: 0x%08x (BBAR)\n",
-			     ichspi_bbar);
-		msg_pdbg("0x54: 0x%04x     (PREOP)\n",
-			     mmio_readw(spibar + 0x54));
-		msg_pdbg("0x56: 0x%04x     (OPTYPE)\n",
-			     mmio_readw(spibar + 0x56));
-		msg_pdbg("0x58: 0x%08x (OPMENU)\n",
-			     mmio_readl(spibar + 0x58));
-		msg_pdbg("0x5c: 0x%08x (OPMENU+4)\n",
-			     mmio_readl(spibar + 0x5c));
-		for (i = 0; i < 4; i++) {
-			int offs;
-			offs = 0x60 + (i * 4);
-			msg_pdbg("0x%02x: 0x%08x (PBR%d)\n", offs,
-				     mmio_readl(spibar + offs), i);
-		}
-		msg_pdbg("\n");
-		if (mmio_readw(spibar) & (1 << 15)) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
-			ichspi_lock = 1;
-		}
-		ich_init_opcodes();
-		break;
-	case SPI_CONTROLLER_ICH9:
-		tmp2 = mmio_readw(spibar + 4);
-		msg_pdbg("0x04: 0x%04x (HSFS)\n", tmp2);
-		msg_pdbg("FLOCKDN %i, ", (tmp2 >> 15 & 1));
-		msg_pdbg("FDV %i, ", (tmp2 >> 14) & 1);
-		msg_pdbg("FDOPSS %i, ", (tmp2 >> 13) & 1);
-		msg_pdbg("SCIP %i, ", (tmp2 >> 5) & 1);
-		msg_pdbg("BERASE %i, ", (tmp2 >> 3) & 3);
-		msg_pdbg("AEL %i, ", (tmp2 >> 2) & 1);
-		msg_pdbg("FCERR %i, ", (tmp2 >> 1) & 1);
-		msg_pdbg("FDONE %i\n", (tmp2 >> 0) & 1);
-
-		tmp = mmio_readl(spibar + 0x50);
-		msg_pdbg("0x50: 0x%08x (FRAP)\n", tmp);
-		msg_pdbg("BMWAG %i, ", (tmp >> 24) & 0xff);
-		msg_pdbg("BMRAG %i, ", (tmp >> 16) & 0xff);
-		msg_pdbg("BRWA %i, ", (tmp >> 8) & 0xff);
-		msg_pdbg("BRRA %i\n", (tmp >> 0) & 0xff);
-
-		msg_pdbg("0x54: 0x%08x (FREG0)\n",
-			     mmio_readl(spibar + 0x54));
-		msg_pdbg("0x58: 0x%08x (FREG1)\n",
-			     mmio_readl(spibar + 0x58));
-		msg_pdbg("0x5C: 0x%08x (FREG2)\n",
-			     mmio_readl(spibar + 0x5C));
-		msg_pdbg("0x60: 0x%08x (FREG3)\n",
-			     mmio_readl(spibar + 0x60));
-		msg_pdbg("0x64: 0x%08x (FREG4)\n",
-			     mmio_readl(spibar + 0x64));
-		msg_pdbg("0x74: 0x%08x (PR0)\n",
-			     mmio_readl(spibar + 0x74));
-		msg_pdbg("0x78: 0x%08x (PR1)\n",
-			     mmio_readl(spibar + 0x78));
-		msg_pdbg("0x7C: 0x%08x (PR2)\n",
-			     mmio_readl(spibar + 0x7C));
-		msg_pdbg("0x80: 0x%08x (PR3)\n",
-			     mmio_readl(spibar + 0x80));
-		msg_pdbg("0x84: 0x%08x (PR4)\n",
-			     mmio_readl(spibar + 0x84));
-		msg_pdbg("0x90: 0x%08x (SSFS, SSFC)\n",
-			     mmio_readl(spibar + 0x90));
-		msg_pdbg("0x94: 0x%04x     (PREOP)\n",
-			     mmio_readw(spibar + 0x94));
-		msg_pdbg("0x96: 0x%04x     (OPTYPE)\n",
-			     mmio_readw(spibar + 0x96));
-		msg_pdbg("0x98: 0x%08x (OPMENU)\n",
-			     mmio_readl(spibar + 0x98));
-		msg_pdbg("0x9C: 0x%08x (OPMENU+4)\n",
-			     mmio_readl(spibar + 0x9C));
-		ichspi_bbar = mmio_readl(spibar + 0xA0);
-		msg_pdbg("0xA0: 0x%08x (BBAR)\n",
-			     ichspi_bbar);
-		msg_pdbg("0xB0: 0x%08x (FDOC)\n",
-			     mmio_readl(spibar + 0xB0));
-		if (tmp2 & (1 << 15)) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
-			ichspi_lock = 1;
-		}
-		ich_init_opcodes();
-		break;
-	default:
-		/* Nothing */
-		break;
-	}
-
-	old = pci_read_byte(dev, 0xdc);
-	msg_pdbg("SPI Read Configuration: ");
-	new = (old >> 2) & 0x3;
-	switch (new) {
-	case 0:
-	case 1:
-	case 2:
-		msg_pdbg("prefetching %sabled, caching %sabled, ",
-			     (new & 0x2) ? "en" : "dis",
-			     (new & 0x1) ? "dis" : "en");
-		break;
-	default:
-		msg_pdbg("invalid prefetching/caching settings, ");
-		break;
-	}
+	/* this adds CHIP_BUSTYPE_SPI */
+	if (ich_init_spi(dev, tmp, rcrb, ich_generation) != 0) {
+	        if (!ret)
+		        ret = ERROR_NONFATAL;
+        }
 
 	return ret;
 }
@@ -839,10 +694,9 @@ static int enable_flash_amd8111(struct pci_dev *dev, const char *name)
 
 static int enable_flash_sb600(struct pci_dev *dev, const char *name)
 {
-	uint32_t tmp, prot;
+	uint32_t prot;
 	uint8_t reg;
-	struct pci_dev *smbus_dev;
-	int has_spi = 1;
+	int ret;
 
 	/* Clear ROM protect 0-3. */
 	for (reg = 0x50; reg < 0x60; reg += 4) {
@@ -866,80 +720,9 @@ static int enable_flash_sb600(struct pci_dev *dev, const char *name)
 				(prot & 0xfffffc00) + ((prot & 0x3ff) << 8));
 	}
 
-	/* Read SPI_BaseAddr */
-	tmp = pci_read_long(dev, 0xa0);
-	tmp &= 0xffffffe0;	/* remove bits 4-0 (reserved) */
-	msg_pdbg("SPI base address is at 0x%x\n", tmp);
-
-	/* If the BAR has address 0, it is unlikely SPI is used. */
-	if (!tmp)
-		has_spi = 0;
-
-	if (has_spi) {
-		/* Physical memory has to be mapped at page (4k) boundaries. */
-		sb600_spibar = physmap("SB600 SPI registers", tmp & 0xfffff000,
-				       0x1000);
-		/* The low bits of the SPI base address are used as offset into
-		 * the mapped page.
-		 */
-		sb600_spibar += tmp & 0xfff;
-
-		tmp = pci_read_long(dev, 0xa0);
-		msg_pdbg("AltSpiCSEnable=%i, SpiRomEnable=%i, "
-			     "AbortEnable=%i\n", tmp & 0x1, (tmp & 0x2) >> 1,
-			     (tmp & 0x4) >> 2);
-		tmp = (pci_read_byte(dev, 0xba) & 0x4) >> 2;
-		msg_pdbg("PrefetchEnSPIFromIMC=%i, ", tmp);
-
-		tmp = pci_read_byte(dev, 0xbb);
-		msg_pdbg("PrefetchEnSPIFromHost=%i, SpiOpEnInLpcMode=%i\n",
-			     tmp & 0x1, (tmp & 0x20) >> 5);
-		tmp = mmio_readl(sb600_spibar);
-		msg_pdbg("SpiArbEnable=%i, SpiAccessMacRomEn=%i, "
-			     "SpiHostAccessRomEn=%i, ArbWaitCount=%i, "
-			     "SpiBridgeDisable=%i, DropOneClkOnRd=%i\n",
-			     (tmp >> 19) & 0x1, (tmp >> 22) & 0x1,
-			     (tmp >> 23) & 0x1, (tmp >> 24) & 0x7,
-			     (tmp >> 27) & 0x1, (tmp >> 28) & 0x1);
-	}
-
-	/* Look for the SMBus device. */
-	smbus_dev = pci_dev_find(0x1002, 0x4385);
-
-	if (has_spi && !smbus_dev) {
-		msg_perr("ERROR: SMBus device not found. Not enabling SPI.\n");
-		has_spi = 0;
-	}
-	if (has_spi) {
-		/* Note about the bit tests below: If a bit is zero, the GPIO is SPI. */
-		/* GPIO11/SPI_DO and GPIO12/SPI_DI status */
-		reg = pci_read_byte(smbus_dev, 0xAB);
-		reg &= 0xC0;
-		msg_pdbg("GPIO11 used for %s\n", (reg & (1 << 6)) ? "GPIO" : "SPI_DO");
-		msg_pdbg("GPIO12 used for %s\n", (reg & (1 << 7)) ? "GPIO" : "SPI_DI");
-		if (reg != 0x00)
-			has_spi = 0;
-		/* GPIO31/SPI_HOLD and GPIO32/SPI_CS status */
-		reg = pci_read_byte(smbus_dev, 0x83);
-		reg &= 0xC0;
-		msg_pdbg("GPIO31 used for %s\n", (reg & (1 << 6)) ? "GPIO" : "SPI_HOLD");
-		msg_pdbg("GPIO32 used for %s\n", (reg & (1 << 7)) ? "GPIO" : "SPI_CS");
-		/* SPI_HOLD is not used on all boards, filter it out. */
-		if ((reg & 0x80) != 0x00)
-			has_spi = 0;
-		/* GPIO47/SPI_CLK status */
-		reg = pci_read_byte(smbus_dev, 0xA7);
-		reg &= 0x40;
-		msg_pdbg("GPIO47 used for %s\n", (reg & (1 << 6)) ? "GPIO" : "SPI_CLK");
-		if (reg != 0x00)
-			has_spi = 0;
-	}
-
 	buses_supported = CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH;
-	if (has_spi) {
-		buses_supported |= CHIP_BUSTYPE_SPI;
-		spi_controller = SPI_CONTROLLER_SB600;
-	}
+
+	ret = sb600_probe_spi(dev);
 
 	/* Read ROM strap override register. */
 	OUTB(0x8f, 0xcd6);
@@ -976,7 +759,7 @@ static int enable_flash_sb600(struct pci_dev *dev, const char *name)
 	OUTB(0x0e, 0xcd7);
 	*/
 
-	return 0;
+	return ret;
 }
 
 static int enable_flash_nvidia_nforce2(struct pci_dev *dev, const char *name)
@@ -1085,18 +868,16 @@ static int enable_flash_mcp55(struct pci_dev *dev, const char *name)
 	return 0;
 }
 
-/* This is a shot in the dark. Even if the code is totally bogus for some
- * chipsets, users will at least start to send in reports.
+/**
+ * The MCP6x/MCP7x code is based on cleanroom reverse engineering.
+ * It is assumed that LPC chips need the MCP55 code and SPI chips need the
+ * code provided in enable_flash_mcp6x_7x_common.
  */
-static int enable_flash_mcp6x_7x_common(struct pci_dev *dev, const char *name)
+static int enable_flash_mcp6x_7x(struct pci_dev *dev, const char *name)
 {
 	int ret = 0;
+	int want_spi = 0;
 	uint8_t val;
-	uint16_t status;
-	char *busname;
-	uint32_t mcp_spibaraddr;
-	void *mcp_spibar;
-	struct pci_dev *smbusdev;
 
 	msg_pinfo("This chipset is not really supported yet. Guesswork...\n");
 
@@ -1104,20 +885,31 @@ static int enable_flash_mcp6x_7x_common(struct pci_dev *dev, const char *name)
 	val = pci_read_byte(dev, 0x8a);
 	msg_pdbg("ISA/LPC bridge reg 0x8a contents: 0x%02x, bit 6 is %i, bit 5 "
 		 "is %i\n", val, (val >> 6) & 0x1, (val >> 5) & 0x1);
+
 	switch ((val >> 5) & 0x3) {
 	case 0x0:
+		ret = enable_flash_mcp55(dev, name);
 		buses_supported = CHIP_BUSTYPE_LPC;
+		msg_pdbg("Flash bus type is LPC\n");
 		break;
 	case 0x2:
-		buses_supported = CHIP_BUSTYPE_SPI;
+		want_spi = 1;
+		/* SPI is added in mcp6x_spi_init if it works.
+		 * Do we really want to disable LPC in this case?
+		 */
+		buses_supported = CHIP_BUSTYPE_NONE;
+		msg_pdbg("Flash bus type is SPI\n");
+		msg_perr("SPI on this chipset is WIP. Write is unsupported!\n");
+		programmer_may_write = 0;
 		break;
 	default:
-		buses_supported = CHIP_BUSTYPE_UNKNOWN;
+		/* Should not happen. */
+		buses_supported = CHIP_BUSTYPE_NONE;
+		msg_pdbg("Flash bus type is unknown (none)\n");
+		msg_pinfo("Something went wrong with bus type detection.\n");
+		goto out_msg;
 		break;
 	}
-	busname = flashbuses_to_text(buses_supported);
-	msg_pdbg("Guessed flash bus type is %s\n", busname);
-	free(busname);
 
 	/* Force enable SPI and disable LPC? Not a good idea. */
 #if 0
@@ -1126,62 +918,8 @@ static int enable_flash_mcp6x_7x_common(struct pci_dev *dev, const char *name)
 	pci_write_byte(dev, 0x8a, val);
 #endif
 
-	/* Look for the SMBus device (SMBus PCI class) */
-	smbusdev = pci_dev_find_vendorclass(0x10de, 0x0c05);
-	if (!smbusdev) {
-		if (buses_supported & CHIP_BUSTYPE_SPI) {
-			msg_perr("ERROR: SMBus device not found. Not enabling "
-				 "SPI.\n");
-			buses_supported &= ~CHIP_BUSTYPE_SPI;
-			ret = 1;
-		} else {
-			msg_pinfo("Odd. SMBus device not found.\n");
-		}
-		goto out_msg;
-	}
-	msg_pdbg("Found SMBus device %04x:%04x at %02x:%02x:%01x\n",
-		smbusdev->vendor_id, smbusdev->device_id,
-		smbusdev->bus, smbusdev->dev, smbusdev->func);
-
-	/* Locate the BAR where the SPI interface lives. */
-	mcp_spibaraddr = pci_read_long(smbusdev, 0x74);
-	msg_pdbg("SPI BAR is at 0x%08x, ", mcp_spibaraddr);
-	/* We hope this has native alignment. We know the SPI interface (well,
-	 * a set of GPIOs that is connected to SPI flash) is at offset 0x530,
-	 * so we expect a size of at least 0x800. Clear the lower bits.
-	 * It is entirely possible that the BAR is 64k big and the low bits are
-	 * reserved for an entirely different purpose.
-	 */
-	mcp_spibaraddr &= ~0x7ff;
-	msg_pdbg("after clearing low bits BAR is at 0x%08x\n", mcp_spibaraddr);
-
-	/* Accessing a NULL pointer BAR is evil. Don't do it. */
-	if (mcp_spibaraddr && (buses_supported == CHIP_BUSTYPE_SPI)) {
-		/* Map the BAR. Bytewise/wordwise access at 0x530 and 0x540. */
-		mcp_spibar = physmap("MCP67 SPI", mcp_spibaraddr, 0x544);
-
-/* Guessed. If this is correct, migrate to a separate MCP67 SPI driver. */
-#define MCP67_SPI_CS		(1 << 1)
-#define MCP67_SPI_SCK		(1 << 2)
-#define MCP67_SPI_MOSI		(1 << 3)
-#define MCP67_SPI_MISO		(1 << 4)
-#define MCP67_SPI_ENABLE	(1 << 0)
-#define MCP67_SPI_IDLE		(1 << 8)
-
-		status = mmio_readw(mcp_spibar + 0x530);
-		msg_pdbg("SPI control is 0x%04x, enable=%i, idle=%i\n",
-			 status, status & 0x1, (status >> 8) & 0x1);
-		/* FIXME: Remove the physunmap once the SPI driver exists. */
-		physunmap(mcp_spibar, 0x544);
-	} else if (!mcp_spibaraddr && (buses_supported & CHIP_BUSTYPE_SPI)) {
-		msg_pdbg("Strange. MCP SPI BAR is invalid.\n");
-		buses_supported &= ~CHIP_BUSTYPE_SPI;
+	if (mcp6x_spi_init(want_spi)) {
 		ret = 1;
-	} else if (mcp_spibaraddr && !(buses_supported & CHIP_BUSTYPE_SPI)) {
-		msg_pdbg("Strange. MCP SPI BAR is valid, but chipset apparently"
-			 " doesn't have SPI enabled.\n");
-	} else {
-		msg_pdbg("MCP SPI is not used.\n");
 	}
 out_msg:
 	msg_pinfo("Please send the output of \"flashrom -V\" to "
@@ -1189,68 +927,6 @@ out_msg:
 		  "chipset. Thanks.\n");
 
 	return ret;
-}
-
-/**
- * The MCP61/MCP67 code is guesswork based on cleanroom reverse engineering.
- * Due to that, it only reads info and doesn't change any settings.
- * It is assumed that LPC chips need the MCP55 code and SPI chips need the
- * code provided in enable_flash_mcp6x_7x_common. Until we know for sure, call
- * enable_flash_mcp55 from this function only if enable_flash_mcp6x_7x_common
- * indicates the flash chip is LPC. Warning: enable_flash_mcp55
- * might make SPI flash inaccessible. The same caveat applies to SPI init
- * for LPC flash.
- */
-static int enable_flash_mcp67(struct pci_dev *dev, const char *name)
-{
-	int result = 0;
-
-	result = enable_flash_mcp6x_7x_common(dev, name);
-	if (result)
-		return result;
-
-	/* Not sure if this is correct. No docs as usual. */
-	switch (buses_supported) {
-	case CHIP_BUSTYPE_LPC:
-		result = enable_flash_mcp55(dev, name);
-		break;
-	case CHIP_BUSTYPE_SPI:
-		msg_pinfo("SPI on this chipset is not supported yet.\n");
-		buses_supported = CHIP_BUSTYPE_NONE;
-		break;
-	default:
-		msg_pinfo("Something went wrong with bus type detection.\n");
-		buses_supported = CHIP_BUSTYPE_NONE;
-		break;
-	}
-
-	return result;
-}
-
-static int enable_flash_mcp7x(struct pci_dev *dev, const char *name)
-{
-	int result = 0;
-
-	result = enable_flash_mcp6x_7x_common(dev, name);
-	if (result)
-		return result;
-
-	/* Not sure if this is correct. No docs as usual. */
-	switch (buses_supported) {
-	case CHIP_BUSTYPE_LPC:
-		msg_pinfo("LPC on this chipset is not supported yet.\n");
-		break;
-	case CHIP_BUSTYPE_SPI:
-		msg_pinfo("SPI on this chipset is not supported yet.\n");
-		buses_supported = CHIP_BUSTYPE_NONE;
-		break;
-	default:
-		msg_pinfo("Something went wrong with bus type detection.\n");
-		buses_supported = CHIP_BUSTYPE_NONE;
-		break;
-	}
-
-	return result;
 }
 
 static int enable_flash_ht1000(struct pci_dev *dev, const char *name)
@@ -1404,22 +1080,22 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0365, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* LPC */
 	{0x10de, 0x0366, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* LPC */
 	{0x10de, 0x0367, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* Pro */
-	{0x10de, 0x03e0, NT, "NVIDIA", "MCP61",		enable_flash_mcp67},
-	{0x10de, 0x03e1, NT, "NVIDIA", "MCP61",		enable_flash_mcp67},
-	{0x10de, 0x03e2, NT, "NVIDIA", "MCP61",		enable_flash_mcp67},
-	{0x10de, 0x03e3, NT, "NVIDIA", "MCP61",		enable_flash_mcp67},
-	{0x10de, 0x0440, NT, "NVIDIA", "MCP65",		enable_flash_mcp7x},
-	{0x10de, 0x0441, NT, "NVIDIA", "MCP65",		enable_flash_mcp7x},
-	{0x10de, 0x0442, NT, "NVIDIA", "MCP65",		enable_flash_mcp7x},
-	{0x10de, 0x0443, NT, "NVIDIA", "MCP65",		enable_flash_mcp7x},
-	{0x10de, 0x0548, OK, "NVIDIA", "MCP67",		enable_flash_mcp67},
-	{0x10de, 0x075c, NT, "NVIDIA", "MCP78S",	enable_flash_mcp7x},
-	{0x10de, 0x075d, NT, "NVIDIA", "MCP78S",	enable_flash_mcp7x},
-	{0x10de, 0x07d7, NT, "NVIDIA", "MCP73",		enable_flash_mcp7x},
-	{0x10de, 0x0aac, NT, "NVIDIA", "MCP79",		enable_flash_mcp7x},
-	{0x10de, 0x0aad, NT, "NVIDIA", "MCP79",		enable_flash_mcp7x},
-	{0x10de, 0x0aae, NT, "NVIDIA", "MCP79",		enable_flash_mcp7x},
-	{0x10de, 0x0aaf, NT, "NVIDIA", "MCP79",		enable_flash_mcp7x},
+	{0x10de, 0x03e0, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x03e1, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x03e2, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x03e3, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0440, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0441, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0442, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0443, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0548, OK, "NVIDIA", "MCP67",		enable_flash_mcp6x_7x},
+	{0x10de, 0x075c, NT, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
+	{0x10de, 0x075d, NT, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
+	{0x10de, 0x07d7, NT, "NVIDIA", "MCP73",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0aac, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0aad, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0aae, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0aaf, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
 	{0x1039, 0x0496, NT, "SiS", "85C496+497",	enable_flash_sis85c496},
 	{0x1039, 0x0406, NT, "SiS", "501/5101/5501",	enable_flash_sis501},
 	{0x1039, 0x5511, NT, "SiS", "5511",		enable_flash_sis5511},
@@ -1440,6 +1116,7 @@ const struct penable chipset_enables[] = {
 	{0x1039, 0x0650, NT, "SiS", "650",		enable_flash_sis540},
 	{0x1039, 0x0651, NT, "SiS", "651",		enable_flash_sis540},
 	{0x1039, 0x0655, NT, "SiS", "655",		enable_flash_sis540},
+	{0x1039, 0x0661, OK, "SiS", "661",		enable_flash_sis540},
 	{0x1039, 0x0730, NT, "SiS", "730",		enable_flash_sis540},
 	{0x1039, 0x0733, NT, "SiS", "733",		enable_flash_sis540},
 	{0x1039, 0x0735, OK, "SiS", "735",		enable_flash_sis540},
@@ -1508,6 +1185,8 @@ int chipset_flash_enable(void)
 			msg_pinfo("FAILED!\n");
 		else if(ret == 0)
 			msg_pinfo("OK.\n");
+		else if(ret == ERROR_NONFATAL)
+			msg_pinfo("PROBLEMS, continuing anyway\n");
 	}
 
 	msg_pinfo("This chipset supports the following protocols: %s.\n",

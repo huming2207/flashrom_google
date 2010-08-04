@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include "flash.h"
+#include "programmer.h"
 
 #define PCI_VENDOR_ID_REALTEK	0x10ec
 #define PCI_VENDOR_ID_SMC1211	0x1113
@@ -29,12 +30,12 @@
 #define BIOS_ROM_ADDR		0xD4
 #define BIOS_ROM_DATA		0xD7
 
-struct pcidev_status nics_realtek[] = {
+const struct pcidev_status nics_realtek[] = {
 	{0x10ec, 0x8139, OK, "Realtek", "RTL8139/8139C/8139C+"},
 	{},
 };
 
-struct pcidev_status nics_realteksmc1211[] = {
+const struct pcidev_status nics_realteksmc1211[] = {
 	{0x1113, 0x1211, OK, "SMC2", "1211TX"}, /* RTL8139 clone */
 	{},
 };
@@ -44,7 +45,7 @@ int nicrealtek_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_REALTEK, PCI_BASE_ADDRESS_0,
-				   nics_realtek, programmer_param);
+				   nics_realtek);
 
 	buses_supported = CHIP_BUSTYPE_PARALLEL;
 
@@ -56,7 +57,7 @@ int nicsmc1211_init(void)
 	get_io_perms();
 
 	io_base_addr = pcidev_init(PCI_VENDOR_ID_SMC1211, PCI_BASE_ADDRESS_0,
-				   nics_realteksmc1211, programmer_param);
+				   nics_realteksmc1211);
 
 	buses_supported = CHIP_BUSTYPE_PARALLEL;
 
@@ -66,7 +67,6 @@ int nicsmc1211_init(void)
 int nicrealtek_shutdown(void)
 {
 	/* FIXME: We forgot to disable software access again. */
-	free(programmer_param);
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;

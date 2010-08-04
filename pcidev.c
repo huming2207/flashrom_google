@@ -22,14 +22,14 @@
 #include <string.h>
 #include <sys/types.h>
 #include "flash.h"
+#include "programmer.h"
 
 uint32_t io_base_addr;
 struct pci_access *pacc;
-struct pci_filter filter;
 struct pci_dev *pcidev_dev = NULL;
 
 uint32_t pcidev_validate(struct pci_dev *dev, uint32_t bar,
-			 struct pcidev_status *devs)
+			 const struct pcidev_status *devs)
 {
 	int i;
 	/* FIXME: 64 bit memory BARs need a 64 bit addr. */
@@ -79,9 +79,11 @@ uint32_t pcidev_validate(struct pci_dev *dev, uint32_t bar,
 }
 
 uint32_t pcidev_init(uint16_t vendor_id, uint32_t bar,
-		     struct pcidev_status *devs, char *pcidev_bdf)
+		     const struct pcidev_status *devs)
 {
 	struct pci_dev *dev;
+	struct pci_filter filter;
+	char *pcidev_bdf;
 	char *msg = NULL;
 	int found = 0;
 	uint32_t addr = 0, curaddr = 0;
@@ -93,12 +95,14 @@ uint32_t pcidev_init(uint16_t vendor_id, uint32_t bar,
 
 	/* Filter by vendor and also bb:dd.f (if supplied by the user). */
 	filter.vendor = vendor_id;
+	pcidev_bdf = extract_programmer_param("pci");
 	if (pcidev_bdf != NULL) {
 		if ((msg = pci_filter_parse_slot(&filter, pcidev_bdf))) {
 			msg_perr("Error: %s\n", msg);
 			exit(1);
 		}
 	}
+	free(pcidev_bdf);
 
 	for (dev = pacc->devices; dev; dev = dev->next) {
 		if (pci_filter_match(&filter, dev)) {
@@ -125,7 +129,7 @@ uint32_t pcidev_init(uint16_t vendor_id, uint32_t bar,
 	return curaddr;
 }
 
-void print_supported_pcidevs(struct pcidev_status *devs)
+void print_supported_pcidevs(const struct pcidev_status *devs)
 {
 	int i;
 

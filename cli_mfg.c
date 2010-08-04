@@ -31,6 +31,7 @@
 #include <errno.h>
 #include "flash.h"
 #include "flashchips.h"
+#include "programmer.h"
 
 void cli_mfg_usage(const char *name)
 {
@@ -190,6 +191,7 @@ int cli_mfg(int argc, char *argv[])
 	char *filename = NULL;
 
 	char *tempstr = NULL;
+	char *pparam = NULL;
 
 	print_version();
 	print_banner();
@@ -311,10 +313,10 @@ int cli_mfg(int argc, char *argv[])
 				if (strncmp(optarg, name, namelen) == 0) {
 					switch (optarg[namelen]) {
 					case ':':
-						programmer_param = strdup(optarg + namelen + 1);
-						if (!strlen(programmer_param)) {
-							free(programmer_param);
-							programmer_param = NULL;
+						pparam = strdup(optarg + namelen + 1);
+						if (!strlen(pparam)) {
+							free(pparam);
+							pparam = NULL;
 						}
 						break;
 					case '\0':
@@ -418,7 +420,7 @@ int cli_mfg(int argc, char *argv[])
 
 	msg_pdbg("Initializing %s programmer\n",
 		 programmer_table[programmer].name);
-	if (programmer_init()) {
+	if (programmer_init(pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
 		exit(1);
 	}
@@ -453,7 +455,7 @@ int cli_mfg(int argc, char *argv[])
 				exit(1);
 			}
 			printf("Please note that forced reads most likely contain garbage.\n");
-			return read_flash(flashes[0], filename);
+			return read_flash_to_file(flashes[0], filename);
 		}
 		// FIXME: flash writes stay enabled!
 		programmer_shutdown();

@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include "flash.h"
 #include "chipdrivers.h"
+#include "programmer.h"
 #include "spi.h"
 
 #define ITE_SUPERIO_PORT1	0x2e
@@ -36,7 +37,7 @@
 
 uint16_t it8716f_flashport = 0;
 /* use fast 33MHz SPI (<>0) or slow 16MHz (0) */
-int fast_spi = 1;
+static int fast_spi = 1;
 
 /* Helper functions for most recent ITE IT87xx Super I/O chips */
 #define CHIP_ID_BYTE1_REG	0x20
@@ -96,88 +97,109 @@ struct superio probe_superio_ite(void)
 	return ret;
 }
 
-static uint16_t find_ite_spi_flash_port(uint16_t port, uint16_t id)
+static uint16_t it87spi_probe(uint16_t port)
 {
 	uint8_t tmp = 0;
 	char *portpos = NULL;
 	uint16_t flashport = 0;
 
-	switch (id) {
-	case 0x8716:
-	case 0x8718:
-	case 0x8720:
-		enter_conf_mode_ite(port);
-		/* NOLDN, reg 0x24, mask out lowest bit (suspend) */
-		tmp = sio_read(port, 0x24) & 0xFE;
-		/* If IT87SPI was not explicitly selected, we want to check
-		 * quickly if LPC->SPI translation is active.
-		 */
-		if ((programmer == PROGRAMMER_INTERNAL) && !(tmp & (0x0E))) {
-			msg_pdbg("No IT87* serial flash segment enabled.\n");
-			exit_conf_mode_ite(port);
-			break;
-		}
-		msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
-		       0xFFFE0000, 0xFFFFFFFF, (tmp & 1 << 1) ? "en" : "dis");
-		msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
-		       0x000E0000, 0x000FFFFF, (tmp & 1 << 1) ? "en" : "dis");
-		msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
-		       0xFFEE0000, 0xFFEFFFFF, (tmp & 1 << 2) ? "en" : "dis");
-		msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
-		       0xFFF80000, 0xFFFEFFFF, (tmp & 1 << 3) ? "en" : "dis");
-		msg_pdbg("LPC write to serial flash %sabled\n",
-		       (tmp & 1 << 4) ? "en" : "dis");
-		/* The LPC->SPI force write enable below only makes sense for
-		 * non-programmer mode.
-		 */
-		/* If any serial flash segment is enabled, enable writing. */
-		if ((tmp & 0xe) && (!(tmp & 1 << 4))) {
-			msg_pdbg("Enabling LPC write to serial flash\n");
-			tmp |= 1 << 4;
-			sio_write(port, 0x24, tmp);
-		}
-		msg_pdbg("Serial flash pin %i\n", (tmp & 1 << 5) ? 87 : 29);
-		/* LDN 0x7, reg 0x64/0x65 */
-		sio_write(port, 0x07, 0x7);
-		flashport = sio_read(port, 0x64) << 8;
-		flashport |= sio_read(port, 0x65);
-		msg_pdbg("Serial flash port 0x%04x\n", flashport);
-		if (programmer_param && !strlen(programmer_param)) {
-			free(programmer_param);
-			programmer_param = NULL;
-		}
-		if (programmer_param) {
-			portpos = extract_param(&programmer_param,
-						"it87spiport=", ",:");
-			if (portpos) {
-				flashport = strtol(portpos, (char **)NULL, 0);
-				msg_pinfo("Forcing serial flash port 0x%04x\n",
-					  flashport);
-				sio_write(port, 0x64, (flashport >> 8));
-				sio_write(port, 0x65, (flashport & 0xff));
-				free(portpos);
-			}
-		}
+	enter_conf_mode_ite(port);
+	/* NOLDN, reg 0x24, mask out lowest bit (suspend) */
+	tmp = sio_read(port, 0x24) & 0xFE;
+	/* If IT87SPI was not explicitly selected, we want to check
+	 * quickly if LPC->SPI translation is active.
+	 */
+	if ((programmer == PROGRAMMER_INTERNAL) && !(tmp & (0x0E))) {
+		msg_pdbg("No IT87* serial flash segment enabled.\n");
 		exit_conf_mode_ite(port);
-		break;
-	/* TODO: Handle more IT87xx if they support flash translation */
-	default:
-		msg_pdbg("SuperI/O ID %04hx is not on the controller list.\n", id);
+		/* Nothing to do. */
+		return 1;
 	}
-	return flashport;
+	msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
+		 0xFFFE0000, 0xFFFFFFFF, (tmp & 1 << 1) ? "en" : "dis");
+	msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
+		 0x000E0000, 0x000FFFFF, (tmp & 1 << 1) ? "en" : "dis");
+	msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
+		 0xFFEE0000, 0xFFEFFFFF, (tmp & 1 << 2) ? "en" : "dis");
+	msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
+		 0xFFF80000, 0xFFFEFFFF, (tmp & 1 << 3) ? "en" : "dis");
+	msg_pdbg("LPC write to serial flash %sabled\n",
+		 (tmp & 1 << 4) ? "en" : "dis");
+	/* The LPC->SPI force write enable below only makes sense for
+	 * non-programmer mode.
+	 */
+	/* If any serial flash segment is enabled, enable writing. */
+	if ((tmp & 0xe) && (!(tmp & 1 << 4))) {
+		msg_pdbg("Enabling LPC write to serial flash\n");
+		tmp |= 1 << 4;
+		sio_write(port, 0x24, tmp);
+	}
+	msg_pdbg("Serial flash pin %i\n", (tmp & 1 << 5) ? 87 : 29);
+	/* LDN 0x7, reg 0x64/0x65 */
+	sio_write(port, 0x07, 0x7);
+	flashport = sio_read(port, 0x64) << 8;
+	flashport |= sio_read(port, 0x65);
+	msg_pdbg("Serial flash port 0x%04x\n", flashport);
+	/* Non-default port requested? */
+	portpos = extract_programmer_param("it87spiport");
+	if (portpos) {
+		char *endptr = NULL;
+		unsigned long forced_flashport;
+		forced_flashport = strtoul(portpos, &endptr, 0);
+		/* Port 0, port >0x1000, unaligned ports and garbage strings
+		 * are rejected.
+		 */
+		if (!forced_flashport || (forced_flashport >= 0x1000) ||
+		    (forced_flashport & 0x7) || (*endptr != '\0')) {
+			/* Using ports below 0x100 is a really bad idea, and
+			 * should only be done if no port between 0x100 and
+			 * 0xff8 works due to routing issues.
+			 */
+			msg_perr("Error: it87spiport specified, but no valid "
+				 "port specified.\nPort must be a multiple of "
+				 "0x8 and lie between 0x100 and 0xff8.\n");
+			free(portpos);
+			/* FIXME: Return failure here once it87spi_common_init()
+			 * can handle the return value sanely.
+			 */
+			exit(1);
+		} else {
+			flashport = (uint16_t)forced_flashport;
+			msg_pinfo("Forcing serial flash port 0x%04x\n",
+				  flashport);
+			sio_write(port, 0x64, (flashport >> 8));
+			sio_write(port, 0x65, (flashport & 0xff));
+		}
+	}
+	free(portpos);
+	exit_conf_mode_ite(port);
+	it8716f_flashport = flashport;
+	if (buses_supported & CHIP_BUSTYPE_SPI)
+		msg_pdbg("Overriding chipset SPI with IT87 SPI.\n");
+	spi_controller = SPI_CONTROLLER_IT87XX;
+	buses_supported |= CHIP_BUSTYPE_SPI;
+	return 0;
 }
 
-int it87spi_common_init(void)
+int init_superio_ite(void)
 {
 	if (superio.vendor != SUPERIO_VENDOR_ITE)
 		return 1;
 
-	it8716f_flashport = find_ite_spi_flash_port(superio.port, superio.model);
-
-	if (it8716f_flashport)
-		spi_controller = SPI_CONTROLLER_IT87XX;
-
-	return (!it8716f_flashport);
+	switch (superio.model) {
+	case 0x8705:
+		return it8705f_write_enable(superio.port);
+		break;
+	case 0x8716:
+	case 0x8718:
+	case 0x8720:
+		return it87spi_probe(superio.port);
+		break;
+	default:
+		msg_pdbg("Super I/O ID 0x%04hx is not on the list of flash "
+			 "capable controllers.\n", superio.model);
+	}
+	return 1;
 }
 
 
@@ -188,24 +210,11 @@ int it87spi_init(void)
 	get_io_perms();
 	/* Probe for the Super I/O chip and fill global struct superio. */
 	probe_superio();
-	ret = it87spi_common_init();
+	ret = init_superio_ite();
 	if (!ret) {
 		buses_supported = CHIP_BUSTYPE_SPI;
 	} else {
 		buses_supported = CHIP_BUSTYPE_NONE;
-	}
-	return ret;
-}
-
-int it87xx_probe_spi_flash(const char *name)
-{
-	int ret;
-
-	ret = it87spi_common_init();
-	if (!ret) {
-		if (buses_supported & CHIP_BUSTYPE_SPI)
-			msg_pdbg("Overriding chipset SPI with IT87 SPI.\n");
-		buses_supported |= CHIP_BUSTYPE_SPI;
 	}
 	return ret;
 }
@@ -284,7 +293,7 @@ int it8716f_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 }
 
 /* Page size is usually 256 bytes */
-static int it8716f_spi_page_program(struct flashchip *flash, int block, uint8_t *buf)
+static int it8716f_spi_page_program(struct flashchip *flash, uint8_t *buf, int start)
 {
 	int i;
 	int result;
@@ -297,7 +306,7 @@ static int it8716f_spi_page_program(struct flashchip *flash, int block, uint8_t 
 	OUTB(0x06, it8716f_flashport + 1);
 	OUTB(((2 + (fast_spi ? 1 : 0)) << 4), it8716f_flashport);
 	for (i = 0; i < 256; i++) {
-		chip_writeb(buf[256 * block + i], bios + 256 * block + i);
+		chip_writeb(buf[i], bios + start + i);
 	}
 	OUTB(0, it8716f_flashport);
 	/* Wait until the Write-In-Progress bit is cleared.
@@ -326,29 +335,38 @@ int it8716f_spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int 
 	return 0;
 }
 
-int it8716f_spi_chip_write_256(struct flashchip *flash, uint8_t *buf)
+int it8716f_spi_chip_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
-	int total_size = 1024 * flash->total_size;
-	int i;
-
 	/*
 	 * IT8716F only allows maximum of 512 kb SPI chip size for memory
 	 * mapped access.
 	 */
-	if ((programmer == PROGRAMMER_IT87SPI) || (total_size > 512 * 1024)) {
-		spi_chip_write_1(flash, buf);
+	if ((programmer == PROGRAMMER_IT87SPI) || (flash->total_size * 1024 > 512 * 1024)) {
+		spi_chip_write_1_new(flash, buf, start, len);
 	} else {
-		spi_disable_blockprotect();
-		/* Erase first */
-		msg_pinfo("Erasing flash before programming... ");
-		if (erase_flash(flash)) {
-			msg_perr("ERASE FAILED!\n");
-			return -1;
+		int lenhere;
+
+		if (start % 256) {
+			/* start to the end of the page or start + len,
+			 * whichever is smaller. Page length is hardcoded to
+			 * 256 bytes (IT87 SPI hardware limitation).
+			 */
+			lenhere = min(len, (start | 0xff) - start + 1);
+			spi_chip_write_1_new(flash, buf, start, lenhere);
+			start += lenhere;
+			len -= lenhere;
+			buf += lenhere;
 		}
-		msg_pinfo("done.\n");
-		for (i = 0; i < total_size / 256; i++) {
-			it8716f_spi_page_program(flash, i, buf);
+
+		/* FIXME: Handle chips which have max writechunk size >1 and <256. */
+		while (len >= 256) {
+			it8716f_spi_page_program(flash, buf, start);
+			start += 256;
+			len -= 256;
+			buf += 256;
 		}
+		if (len)
+			spi_chip_write_1_new(flash, buf, start, len);
 	}
 
 	return 0;

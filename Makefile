@@ -48,6 +48,10 @@ ifeq ($(OS_ARCH), FreeBSD)
 CPPFLAGS += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib
 endif
+ifeq ($(OS_ARCH), OpenBSD)
+CPPFLAGS += -I/usr/local/include
+LDFLAGS += -L/usr/local/lib
+endif
 ifeq ($(OS_ARCH), DOS)
 EXEC_SUFFIX := .exe
 CPPFLAGS += -I../libgetopt -I../libpci/include
@@ -108,14 +112,25 @@ CONFIG_INTERNAL ?= yes
 # Always enable serprog for now. Needs to be disabled on Windows.
 CONFIG_SERPROG ?= yes
 
-# Bitbanging SPI infrastructure is not used yet.
+# RayeR SPIPGM hardware support
+CONFIG_RAYER_SPI ?= yes
+
+# Bitbanging SPI infrastructure, default off unless needed.
+ifeq ($(CONFIG_RAYER_SPI), yes)
+override CONFIG_BITBANG_SPI = yes
+else
+ifeq ($(CONFIG_INTERNAL), yes)
+override CONFIG_BITBANG_SPI = yes
+else
 CONFIG_BITBANG_SPI ?= no
+endif
+endif
 
 # Always enable 3Com NICs for now.
 CONFIG_NIC3COM ?= yes
 
-# Disable NVIDIA graphics cards for now, write/erase don't work properly.
-CONFIG_GFXNVIDIA ?= no
+# Enable NVIDIA graphics cards. Note: write and erase do not work properly.
+CONFIG_GFXNVIDIA ?= yes
 
 # Always enable SiI SATA controllers for now.
 CONFIG_SATASII ?= yes
@@ -152,7 +167,7 @@ ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
 PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o
 # FIXME: The PROGRAMMER_OBJS below should only be included on x86.
-PROGRAMMER_OBJS += it87spi.o ichspi.o sb600spi.o wbsio_spi.o
+PROGRAMMER_OBJS += it87spi.o ichspi.o sb600spi.o wbsio_spi.o mcp6x_spi.o
 NEED_PCI := yes
 endif
 
@@ -161,6 +176,13 @@ FEATURE_CFLAGS += -D'CONFIG_SERPROG=1'
 PROGRAMMER_OBJS += serprog.o
 NEED_SERIAL := yes
 NEED_NET := yes
+endif
+
+ifeq ($(CONFIG_RAYER_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_RAYER_SPI=1'
+PROGRAMMER_OBJS += rayer_spi.o
+# Actually, NEED_PCI is wrong. NEED_IOPORT_ACCESS would be more correct.
+NEED_PCI := yes
 endif
 
 ifeq ($(CONFIG_BITBANG_SPI), yes)
@@ -260,6 +282,10 @@ ifeq ($(OS_ARCH), DOS)
 LIBS += ../libpci/lib/libpci.a
 else
 LIBS += -lpci
+ifeq ($(OS_ARCH), OpenBSD)
+# For (i386|amd64)_iopl(2).
+LIBS += -l$(shell uname -m)
+endif
 endif
 endif
 endif
