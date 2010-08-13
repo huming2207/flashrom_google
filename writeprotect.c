@@ -148,6 +148,17 @@ static struct w25q_range w25q64_ranges[] = {
 	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
 };
 
+struct w25q_range w25x40_ranges[] = {
+	{ X, X, 0, {0, 0} },	/* none */
+	{ 0, 0, 0x1, {0x070000, 64 * 1024} },
+	{ 0, 0, 0x2, {0x060000, 128 * 1024} },
+	{ 0, 0, 0x3, {0x040000, 256 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 64 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
+	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
+	{ 0, X, 0x4, {0x000000, 512 * 1024} },
+};
+
 struct w25q_status {
 	/* this maps to register layout -- do not change ordering */
 	unsigned char busy : 1;
@@ -174,6 +185,10 @@ static int w25_set_range(struct flashchip *flash,
 	if (flash->manufacture_id != WINBOND_NEX_ID)
 		return -1;
 	switch(flash->model_id) {
+	case W_25X40:
+		w25q_ranges = w25x40_ranges;
+		num_entries = ARRAY_SIZE(w25x40_ranges);
+		break;
 	case W_25Q80:
 		w25q_ranges = w25q80_ranges;
 		num_entries = ARRAY_SIZE(w25q80_ranges);
