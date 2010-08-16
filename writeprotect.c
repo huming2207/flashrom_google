@@ -174,39 +174,47 @@ struct w25q_status {
 //	unsigned char qe : 1;
 } __attribute__ ((packed));
 
-static int w25_set_range(struct flashchip *flash,
-                         unsigned int start, unsigned int len)
+int wp_get_status(const struct flashchip *flash,
+                  unsigned int start, unsigned int len,
+                  struct w25q_status *status)
 {
-	struct w25q_status status;
 	struct w25q_range *w25q_ranges;
 	int i, num_entries = 0;
 	int tmp = 0, range_found = 0;
 
-	if (flash->manufacture_id != WINBOND_NEX_ID)
-		return -1;
-	switch(flash->model_id) {
-	case W_25X40:
-		w25q_ranges = w25x40_ranges;
-		num_entries = ARRAY_SIZE(w25x40_ranges);
-		break;
-	case W_25Q80:
-		w25q_ranges = w25q80_ranges;
-		num_entries = ARRAY_SIZE(w25q80_ranges);
-		break;
-	case W_25Q16:
-		w25q_ranges = w25q16_ranges;
-		num_entries = ARRAY_SIZE(w25q16_ranges);
-		break;
-	case W_25Q32:
-		w25q_ranges = w25q32_ranges;
-		num_entries = ARRAY_SIZE(w25q32_ranges);
-		break;
-	case W_25Q64:
-		w25q_ranges = w25q64_ranges;
-		num_entries = ARRAY_SIZE(w25q64_ranges);
+	switch (flash->manufacture_id) {
+	case WINBOND_NEX_ID:
+		switch(flash->model_id) {
+		case W_25X40:
+			w25q_ranges = w25x40_ranges;
+			num_entries = ARRAY_SIZE(w25x40_ranges);
+			break;
+		case W_25Q80:
+			w25q_ranges = w25q80_ranges;
+			num_entries = ARRAY_SIZE(w25q80_ranges);
+			break;
+		case W_25Q16:
+			w25q_ranges = w25q16_ranges;
+			num_entries = ARRAY_SIZE(w25q16_ranges);
+			break;
+		case W_25Q32:
+			w25q_ranges = w25q32_ranges;
+			num_entries = ARRAY_SIZE(w25q32_ranges);
+			break;
+		case W_25Q64:
+			w25q_ranges = w25q64_ranges;
+			num_entries = ARRAY_SIZE(w25q64_ranges);
+			break;
+		default:
+			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
+			         ", aborting\n", __func__, __LINE__,
+			         flash->model_id);
+			return -1;
+		}
 		break;
 	default:
-		msg_cerr("%s: flash chip mismatch, aborting\n", __func__);
+		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
+		         __func__, flash->manufacture_id);
 		return -1;
 	}
 
@@ -221,11 +229,11 @@ static int w25_set_range(struct flashchip *flash,
 		msg_cspew("comparing range 0x%x 0x%x / 0x%x 0x%x\n",
 			  start, len, r->start, r->len);
 		if ((start == r->start) && (len == r->len)) {
-			status.bp0 = w25q_ranges[i].bp & 1;
-			status.bp1 = w25q_ranges[i].bp >> 1;
-			status.bp2 = w25q_ranges[i].bp >> 2;
-			status.tb = w25q_ranges[i].tb;
-			status.sec = w25q_ranges[i].sec;
+			status->bp0 = w25q_ranges[i].bp & 1;
+			status->bp1 = w25q_ranges[i].bp >> 1;
+			status->bp2 = w25q_ranges[i].bp >> 2;
+			status->tb = w25q_ranges[i].tb;
+			status->sec = w25q_ranges[i].sec;
 
 			range_found = 1;
 			break;
@@ -236,6 +244,21 @@ static int w25_set_range(struct flashchip *flash,
 		msg_cerr("matching range not found\n");
 		return -1;
 	}
+	return 0;
+}
+
+static int w25_set_range(struct flashchip *flash,
+                         unsigned int start, unsigned int len)
+{
+	struct w25q_status status;
+	int tmp;
+
+	memset(&status, 0, sizeof(status));
+	tmp = spi_read_status_register();
+	memcpy(&status, &tmp, 1);
+	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
+
+	if (wp_get_status(flash, start, len, &status)) return -1;
 
 	msg_cdbg("status.busy: %x\n", status.busy);
 	msg_cdbg("status.wel: %x\n", status.wel);
@@ -247,7 +270,6 @@ static int w25_set_range(struct flashchip *flash,
 	msg_cdbg("status.srp0: %x\n", status.srp0);
 
 	memcpy(&tmp, &status, sizeof(status));
-	spi_write_status_enable();
 	spi_write_status_register(flash, tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
