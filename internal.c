@@ -106,6 +106,7 @@ struct superio superio = {};
 void probe_superio(void)
 {
 	superio = probe_superio_ite();
+	superio = probe_superio_ite85xx();
 #if 0
 	/* Winbond Super I/O code is not yet available. */
 	if (superio.vendor == SUPERIO_VENDOR_NONE)
@@ -234,6 +235,7 @@ int internal_init(void)
 	 * IT87* Parallel write enable.
 	 */
 	init_superio_ite();
+	it85xx_probe_spi_flash(NULL);
 #endif
 
 	board_flash_enable(lb_vendor, lb_part);
@@ -267,6 +269,10 @@ int internal_init(void)
 int internal_shutdown(void)
 {
 	release_io_perms();
+
+#if defined(__i386__) || defined(__x86_64__)
+	it85xx_shutdown();
+#endif
 
 	return 0;
 }
