@@ -1248,6 +1248,10 @@ int spi_write_chunked(struct flashchip *flash, uint8_t *buf, int start, int len,
 		/* Byte position of the first byte in the range in this page. */
 		/* starthere is an offset to the base address of the chip. */
 		starthere = max(start, i * page_size);
+		if (!in_valid_romentry(starthere)) {
+			msg_cdbg("0x%06x skipped, ", starthere);
+			continue;
+		}
 		/* Length of bytes in the range in this page. */
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 		for (j = 0; j < lenhere; j += chunksize) {

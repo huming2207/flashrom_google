@@ -234,3 +234,28 @@ int handle_romentries(uint8_t *buffer, struct flashchip *flash)
 
 	return 0;
 }
+
+/* Given an addr, this function returns if the addr falls in the regions
+ * those user specifies with -i option (partition).
+ *
+ * Returns: 1 if this addr falls in -i regions.
+ *          0 if not in regions.
+ */
+int in_valid_romentry(const chipaddr addr) {
+	int i;
+
+	if (romimages) {
+		for (i = 0; i < romimages; ++i) {
+			if (!rom_entries[i].included)
+				continue;
+
+			if ((addr >= rom_entries[i].start) &&
+			    (addr <= rom_entries[i].end)) {
+				return 1;
+			}
+		}
+		return 0;
+	} else {
+		return 1;  /* always TRUE if no layout is specified */
+	}
+}
