@@ -31,6 +31,17 @@ struct w25q_range {
 	struct wp_range range;
 };
 
+struct w25q_range en25f40_ranges[] = {
+	{ X, X, 0, {0, 0} },    /* none */
+	{ 0, 0, 0x1, {0x000000, 504 * 1024} },
+	{ 0, 0, 0x2, {0x000000, 496 * 1024} },
+	{ 0, 0, 0x3, {0x000000, 480 * 1024} },
+	{ 0, 0, 0x4, {0x000000, 448 * 1024} },
+	{ 0, 0, 0x5, {0x000000, 384 * 1024} },
+	{ 0, 0, 0x6, {0x000000, 256 * 1024} },
+	{ 0, 0, 0x7, {0x000000, 512 * 1024} },
+};
+
 static struct w25q_range mx25l3205d_ranges[] = {
 	{ X, 0, 0, {0, 0} },	/* none */
 	{ X, 0, 0x1, {0x3f0000, 64 * 1024} },
@@ -229,6 +240,19 @@ int wp_get_status(const struct flashchip *flash,
 			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
 			         flash->model_id);
+			return -1;
+		}
+		break;
+	case EON_ID_NOPREFIX:
+		switch (flash->model_id) {
+		case EN_25F40:
+			w25q_ranges = en25f40_ranges;
+			num_entries = ARRAY_SIZE(en25f40_ranges);
+			break;
+		default:
+			msg_cerr("%s():%d: EON flash chip mismatch (0x%04x)"
+			         ", aborting\n", __func__, __LINE__,
+				 flash->model_id);
 			return -1;
 		}
 		break;
