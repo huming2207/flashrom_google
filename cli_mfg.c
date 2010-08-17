@@ -528,5 +528,6 @@ int cli_mfg(int argc, char *argv[])
 		rc = doit(flash, force, filename, read_it, write_it, erase_it, verify_it);
 	}
 
+	programmer_shutdown();
 	return rc;
 }
