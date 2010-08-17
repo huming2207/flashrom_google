@@ -238,6 +238,10 @@ int read_romlayout(char *name);
 int find_romentry(char *name);
 int handle_romentries(uint8_t *buffer, struct flashchip *flash);
 int in_valid_romentry(const chipaddr addr);
+int do_romentries(uint8_t *buffer, struct flashchip *flash,
+                  int (*do_action)(struct flashchip *flash,
+                                   uint8_t *buf,
+                                   const chipaddr addr, size_t len));
 
 /* spi.c */
 struct spi_command {

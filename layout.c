@@ -258,4 +258,43 @@ int in_valid_romentry(const chipaddr addr) {
 	} else {
 		return 1;  /* always TRUE if no layout is specified */
 	}
+
+	return 0;
+}
+
+/** Given a callback function, only *included* entries apply the callback.
+ *  @buffer - the start of buffer
+ *  @flash - point to flash info
+ *  @do_action - callback function that handles included entry.
+ */
+int do_romentries(uint8_t *buffer, struct flashchip *flash,
+                  int (*do_action)(struct flashchip *flash,
+                                   uint8_t *buf,
+                                   const chipaddr addr, size_t len))
+{
+	int i;
+	int len;
+	if (!do_action) return 1;
+
+	if (romimages) {
+		for (i = 0; i < romimages; i++) {
+			if (!rom_entries[i].included)
+				continue;
+
+			len = rom_entries[i].end - rom_entries[i].start + 1;
+			msg_gdbg("Doing %p(%p) 0x%08x (len=0x%08x)\n",
+			         do_action, buffer,
+			         rom_entries[i].start, len);
+			if (do_action(flash, buffer,
+			              rom_entries[i].start, len))
+				return 1;
+		}
+	} else {
+		/* no layout table specified, apply to whole flash. */
+		len = flash->total_size * 1024;
+		if (do_action(flash, buffer, 0, len))
+			return 1;
+	}
+
+	return 0;
 }
