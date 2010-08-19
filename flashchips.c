@@ -7740,5 +7740,21 @@ struct flashchip flashchips[] = {
 		.write		= NULL,
 	},
 
+	{
+		.vendor		= "Nuvoton",
+		.name		= "WPCE775x",
+		.bustype	= CHIP_BUSTYPE_FWH,
+		.manufacture_id	= GENERIC_MANUF_ID,
+		.model_id	= GENERIC_DEVICE_ID,
+		.total_size	= 2048,
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_wpce775x,
+		.probe_timing	= TIMING_ZERO,
+		/* .block_erasers is generated according to detected flashchip. */
+		.write		= write_wpce775x,
+		.read		= read_memmapped,
+	},
+
 	{ NULL 	}
 };

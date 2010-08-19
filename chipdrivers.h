@@ -130,6 +130,11 @@ int unlock_winbond_fwhub(struct flashchip *flash);
 /* w29ee011.c */
 int probe_w29ee011(struct flashchip *flash);
 
+/* wpce775x.c */
+int probe_wpce775x(struct flashchip *flash);
+int erase_wpce775x(struct flashchip *flash, unsigned int page, unsigned int size);
+int write_wpce775x(struct flashchip *flash, uint8_t * buf);
+
 /* stm50flw0x0x.c */
 int erase_sector_stm50flw0x0x(struct flashchip *flash, unsigned int block, unsigned int blocksize);
 int erase_chip_stm50flw0x0x(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
