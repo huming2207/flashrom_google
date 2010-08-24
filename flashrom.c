@@ -1229,10 +1229,22 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 		 */
 		len = eraser.eraseblocks[i].size;
 		for (j = 0; j < eraser.eraseblocks[i].count; j++) {
-			msg_cdbg("0x%06x-0x%06x, ", start,
+			msg_cdbg("0x%06x-0x%06x", start,
 				     start + len - 1);
+
+			/* Don't erase those region not specified by -i
+			 * if -l is specified. */
+			if (!in_valid_romentry(start)) {
+				msg_cdbg(" skipped, ");
+				start += len;
+				continue;
+			} else {
+				msg_cdbg(", ");
+			}
+
 			if (do_something(flash, start, len))
 				return 1;
+
 			start += len;
 		}
 	}
