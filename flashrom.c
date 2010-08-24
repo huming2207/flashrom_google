@@ -1077,14 +1077,27 @@ notfound:
 	return flash;
 }
 
+/* Wrapper function for verify_range() to be compatible with do_romentries() of
+ * layout.c (for -l and -i options).
+ * verify_range() accepts 5 arguments, and the last argument is printing message
+ * when error. do_romentries() accepts callback function of 4 arguments so that
+ * we drop the printing message in this wrapper.
+ */
+int verify_range_wrapper(struct flashchip *flash, uint8_t *cmpbuf, const chipaddr start, size_t len) {
+	return verify_range(flash, &cmpbuf[start], start, len, NULL);
+}
+
 int verify_flash(struct flashchip *flash, uint8_t *buf)
 {
 	int ret;
-	int total_size = flash->total_size * 1024;
 
 	msg_cinfo("Verifying flash... ");
 
-	ret = verify_range(flash, buf, 0, total_size, NULL);
+	/* FIXME: eventually, verify_range should support the same
+	   functionality as do_romentries with the verify_range_wrapper */
+//	ret = verify_range(flash, buf, 0, total_size, NULL);
+
+	ret = do_romentries(buf, flash, verify_range_wrapper);
 
 	if (!ret)
 		msg_cinfo("VERIFIED.          \n");
@@ -1244,6 +1257,13 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 
 			if (do_something(flash, start, len))
 				return 1;
+
+			/* Don't erase those region not specified by -i
+			 * if -l is specified. */
+			if (!in_valid_romentry(start)) {
+				msg_cdbg("skip; ");
+				continue;
+			}
 
 			start += len;
 		}
