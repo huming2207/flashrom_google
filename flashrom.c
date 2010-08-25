@@ -1258,13 +1258,6 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 			if (do_something(flash, start, len))
 				return 1;
 
-			/* Don't erase those region not specified by -i
-			 * if -l is specified. */
-			if (!in_valid_romentry(start)) {
-				msg_cdbg("skip; ");
-				continue;
-			}
-
 			start += len;
 		}
 	}
