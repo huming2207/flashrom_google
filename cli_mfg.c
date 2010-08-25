@@ -32,6 +32,7 @@
 #include "flash.h"
 #include "flashchips.h"
 #include "programmer.h"
+#include "writeprotect.h"
 
 void cli_mfg_usage(const char *name)
 {

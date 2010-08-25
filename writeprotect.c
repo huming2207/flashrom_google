@@ -24,6 +24,7 @@
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
+#include "writeprotect.h"
 
 /*
  * The following procedures rely on look-up tables to match the user-specified
@@ -209,21 +210,6 @@ struct w25q_range w25x40_ranges[] = {
 	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
 	{ 0, X, 0x4, {0x000000, 512 * 1024} },
 };
-
-struct w25q_status {
-	/* this maps to register layout -- do not change ordering */
-	unsigned char busy : 1;
-	unsigned char wel : 1;
-	unsigned char bp0 : 1;
-	unsigned char bp1 : 1;
-	unsigned char bp2 : 1;
-	unsigned char tb : 1;
-	unsigned char sec : 1;
-	unsigned char srp0 : 1;
-	/* FIXME: what about the second status register? */
-//	unsigned char srp1 : 1;
-//	unsigned char qe : 1;
-} __attribute__ ((packed));
 
 int wp_get_status(const struct flashchip *flash,
                   unsigned int start, unsigned int len,
