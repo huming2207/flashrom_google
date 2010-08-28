@@ -1379,7 +1379,7 @@ void print_sysinfo(void)
 
 void print_version(void)
 {
-	msg_ginfo("flashrom v%s", flashrom_version);
+	msg_ginfo("flashrom v%s\n", flashrom_version);
 	print_sysinfo();
 }
 
