@@ -7755,6 +7755,7 @@ struct flashchip flashchips[] = {
 		/* .block_erasers is generated according to detected flashchip. */
 		.write		= write_wpce775x,
 		.read		= read_memmapped,
+		.wp             = &wp_wpce775x,
 	},
 
 	{ NULL 	}

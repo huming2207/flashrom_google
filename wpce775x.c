@@ -48,6 +48,7 @@
 #include "flashchips.h"
 #include "programmer.h"
 #include "spi.h"
+#include "writeprotect.h"
 
 /**
  *  Definition of WPCE775X WCB (Write Command Buffer), as known as Shared Access
@@ -702,3 +703,45 @@ int write_wpce775x(struct flashchip *flash, uint8_t * buf)
 {
 	return do_romentries(buf, flash, write_wpce775x_entry);
 }
+
+int set_range_wpce775x(struct flashchip *flash, unsigned int start, unsigned int len) {
+	struct w25q_status status;
+
+	if (wp_get_status(scan, start, len, &status)) return -1;
+
+	/* Since WPCE775x doesn't support reading status register, we have to
+	 * set SRP0 to 1 when writing status register. */
+	status.srp0 = 1;
+
+	msg_cdbg("Going to set: 0x%02x\n", *((unsigned char*)&status));
+	msg_cdbg("status.busy: %x\n", status.busy);
+	msg_cdbg("status.wel: %x\n", status.wel);
+	msg_cdbg("status.bp0: %x\n", status.bp0);
+	msg_cdbg("status.bp1: %x\n", status.bp1);
+	msg_cdbg("status.bp2: %x\n", status.bp2);
+	msg_cdbg("status.tb: %x\n", status.tb);
+	msg_cdbg("status.sec: %x\n", status.sec);
+	msg_cdbg("status.srp0: %x\n", status.srp0);
+
+	/* InitFlash (with particular status value), and EnterFlashUpdate() then
+	 * ExitFlashUpdate() immediately. Thus, the flash status register will
+	 * be updated. */
+	if (InitFlash(*(unsigned char*)&status))
+		return -1;
+	if (EnterFlashUpdate()) return 1;
+		ExitFlashUpdateFirmwareNoChange();
+
+	return 0;
+}
+
+static int enable_wpce775x(struct flashchip *flash)
+{
+	msg_cdbg("WPCE775x always sets SRP0 in set_range_wpce775x()\n");
+	return 0;
+}
+
+
+struct wp wp_wpce775x = {
+	.set_range      = set_range_wpce775x,
+	.enable         = enable_wpce775x,
+};
