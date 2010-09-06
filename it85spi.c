@@ -38,7 +38,8 @@
 #define ITE_SUPERIO_PORT2	0x4e
 
 /* Legacy I/O */
-#define LEGACY_KBC_PORT		0x64
+#define LEGACY_KBC_PORT_DATA	0x60
+#define LEGACY_KBC_PORT_CMD	0x64
 
 /* Constants for Logical Device registers */
 #define LDNSEL			0x07
@@ -115,16 +116,45 @@ struct superio probe_superio_ite85xx(void)
  * functions before/after flash erase/program. */
 void it85xx_enter_scratch_rom()
 {
+	int ret;
+
 	if (it85xx_scratch_rom_reenter > 0) return;
 	it85xx_scratch_rom_reenter++;
-	OUTB(0xb4, LEGACY_KBC_PORT);
+
+	/* FIXME: this a workaround for the bug that SMBus signal would
+	 *        interfere the EC firmware update. Should be removed if
+	 *        we find out the root cause. */
+	ret = system("stop powerd");
+	if (ret) {
+		msg_perr("Cannot stop powerd.\n");
+		return;
+	}
+
+	while((INB(LEGACY_KBC_PORT_CMD) & 2));  /* IBF: input buffer is !full */
+	OUTB(0xb4, LEGACY_KBC_PORT_CMD);        /* Copy EC firmware to SRAM. */
+	while((INB(LEGACY_KBC_PORT_CMD) & 1));  /* OBF: output buffer has data */
+	while((INB(LEGACY_KBC_PORT_DATA) != 0xFA));  /* EC already runs on SRAM */
 }
 
 void it85xx_exit_scratch_rom()
 {
+	int ret;
+
 	if (it85xx_scratch_rom_reenter <= 0) return;
 	it85xx_scratch_rom_reenter = 0;
-	OUTB(0xfe, LEGACY_KBC_PORT);
+
+	while((INB(LEGACY_KBC_PORT_CMD) & 2));  /* IBF: input buffer is !full */
+	OUTB(0xfe, LEGACY_KBC_PORT_CMD);        /* Exit SRAM. Run on flash. */
+	while((INB(LEGACY_KBC_PORT_CMD) & 1));  /* OBF: output buffer has data */
+
+	/* FIXME: this a workaround for the bug that SMBus signal would
+	 *        interfere the EC firmware update. Should be removed if
+	 *        we find out the root cause. */
+	ret = system("start powerd");
+	if (ret) {
+		msg_perr("Cannot start powerd again.\n");
+		return;
+	}
 }
 
 int it85xx_spi_common_init(void)
@@ -256,6 +286,14 @@ int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		readarr[i] = *ce_low;
 #endif
 	}
+#ifdef LPC_IO
+	INDIRECT_A1(shm_io_base, (((unsigned int)ce_high) >> 8) & 0xff);
+	INDIRECT_WRITE(shm_io_base, 0xFF);  /* Write anything to this address.*/
+#endif
+#ifdef LPC_MEMORY
+	*ce_high = 0;
+#endif
+
 	return 0;
 }
 
