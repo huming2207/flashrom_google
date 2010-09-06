@@ -24,6 +24,7 @@
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
+#include "spi.h"
 #include "writeprotect.h"
 
 /*
@@ -281,11 +282,6 @@ int wp_get_status(const struct flashchip *flash,
 		return -1;
 	}
 
-	memset(&status, 0, sizeof(status));
-	tmp = spi_read_status_register();
-	memcpy(&status, &tmp, 1);
-	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
-
 	for (i = 0; i < num_entries; i++) {
 		struct wp_range *r = &w25q_ranges[i].range;
 
@@ -308,6 +304,38 @@ int wp_get_status(const struct flashchip *flash,
 		return -1;
 	}
 	return 0;
+}
+
+/* Since most chips we use must be WREN-ed before WRSR,
+ * we copy a write status function here before we have a good solution. */
+static int spi_write_status_register_WREN(int status)
+{
+	int result;
+	struct spi_command cmds[] = {
+	{
+	/* FIXME: WRSR requires either EWSR or WREN depending on chip type. */
+		.writecnt       = JEDEC_WREN_OUTSIZE,
+		.writearr       = (const unsigned char[]){ JEDEC_WREN },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = JEDEC_WRSR_OUTSIZE,
+		.writearr       = (const unsigned char[]){ JEDEC_WRSR, (unsigned char) status },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = 0,
+		.writearr       = NULL,
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}};
+
+	result = spi_send_multicommand(cmds);
+	if (result) {
+	        msg_cerr("%s failed during command execution\n",
+	                __func__);
+	}
+	return result;
 }
 
 static int w25_set_range(struct flashchip *flash,
@@ -333,7 +361,7 @@ static int w25_set_range(struct flashchip *flash,
 	msg_cdbg("status.srp0: %x\n", status.srp0);
 
 	memcpy(&tmp, &status, sizeof(status));
-	spi_write_status_register(flash, tmp);
+	spi_write_status_register_WREN(tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
 
@@ -352,8 +380,7 @@ static int w25_enable_writeprotect(struct flashchip *flash)
 
 	status.srp0 = 1;
 	memcpy(&tmp, &status, sizeof(status));
-	spi_write_status_enable();
-	spi_write_status_register(flash, tmp);
+	spi_write_status_register_WREN(tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
 
