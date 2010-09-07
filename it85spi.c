@@ -127,7 +127,6 @@ void it85xx_enter_scratch_rom()
 	ret = system("stop powerd");
 	if (ret) {
 		msg_perr("Cannot stop powerd.\n");
-		return;
 	}
 
 	while((INB(LEGACY_KBC_PORT_CMD) & 2));  /* IBF: input buffer is !full */
@@ -153,7 +152,6 @@ void it85xx_exit_scratch_rom()
 	ret = system("start powerd");
 	if (ret) {
 		msg_perr("Cannot start powerd again.\n");
-		return;
 	}
 }
 
