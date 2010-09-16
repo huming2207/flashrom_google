@@ -201,6 +201,23 @@ static struct w25q_range w25q64_ranges[] = {
 	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
 };
 
+struct w25q_range w25x10_ranges[] = {
+	{ X, X, 0, {0, 0} },    /* none */
+	{ 0, 0, 0x1, {0x010000, 64 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 64 * 1024} },
+	{ X, X, 0x2, {0x000000, 128 * 1024} },
+	{ X, X, 0x3, {0x000000, 128 * 1024} },
+};
+
+struct w25q_range w25x20_ranges[] = {
+	{ X, X, 0, {0, 0} },    /* none */
+	{ 0, 0, 0x1, {0x030000, 64 * 1024} },
+	{ 0, 0, 0x2, {0x020000, 128 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 64 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
+	{ 0, X, 0x3, {0x000000, 256 * 1024} },
+};
+
 struct w25q_range w25x40_ranges[] = {
 	{ X, X, 0, {0, 0} },	/* none */
 	{ 0, 0, 0x1, {0x070000, 64 * 1024} },
@@ -210,6 +227,21 @@ struct w25q_range w25x40_ranges[] = {
 	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
 	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
 	{ 0, X, 0x4, {0x000000, 512 * 1024} },
+};
+
+struct w25q_range w25x80_ranges[] = {
+	{ X, X, 0, {0, 0} },    /* none */
+	{ 0, 0, 0x1, {0x0F0000, 64 * 1024} },
+	{ 0, 0, 0x2, {0x0E0000, 128 * 1024} },
+	{ 0, 0, 0x3, {0x0C0000, 256 * 1024} },
+	{ 0, 0, 0x4, {0x080000, 512 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 64 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
+	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
+	{ 0, 1, 0x4, {0x000000, 512 * 1024} },
+	{ 0, X, 0x5, {0x000000, 1024 * 1024} },
+	{ 0, X, 0x6, {0x000000, 1024 * 1024} },
+	{ 0, X, 0x7, {0x000000, 1024 * 1024} },
 };
 
 int wp_get_status(const struct flashchip *flash,
@@ -223,9 +255,21 @@ int wp_get_status(const struct flashchip *flash,
 	switch (flash->manufacture_id) {
 	case WINBOND_NEX_ID:
 		switch(flash->model_id) {
+		case W_25X10:
+			w25q_ranges = w25x10_ranges;
+			num_entries = ARRAY_SIZE(w25x10_ranges);
+			break;
+		case W_25X20:
+			w25q_ranges = w25x20_ranges;
+			num_entries = ARRAY_SIZE(w25x20_ranges);
+			break;
 		case W_25X40:
 			w25q_ranges = w25x40_ranges;
 			num_entries = ARRAY_SIZE(w25x40_ranges);
+			break;
+		case W_25X80:
+			w25q_ranges = w25x80_ranges;
+			num_entries = ARRAY_SIZE(w25x80_ranges);
 			break;
 		case W_25Q80:
 			w25q_ranges = w25q80_ranges;
