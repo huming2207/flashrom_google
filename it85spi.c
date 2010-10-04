@@ -285,7 +285,7 @@ int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 #endif
 	}
 #ifdef LPC_IO
-	INDIRECT_A1(shm_io_base, (((unsigned int)ce_high) >> 8) & 0xff);
+	INDIRECT_A1(shm_io_base, (((unsigned long int)ce_high) >> 8) & 0xff);
 	INDIRECT_WRITE(shm_io_base, 0xFF);  /* Write anything to this address.*/
 #endif
 #ifdef LPC_MEMORY
