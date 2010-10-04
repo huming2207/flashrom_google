@@ -250,7 +250,7 @@ int wp_get_status(const struct flashchip *flash,
 {
 	struct w25q_range *w25q_ranges;
 	int i, num_entries = 0;
-	int tmp = 0, range_found = 0;
+	int range_found = 0;
 
 	switch (flash->manufacture_id) {
 	case WINBOND_NEX_ID:
