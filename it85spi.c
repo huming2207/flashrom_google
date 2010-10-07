@@ -27,11 +27,14 @@
 #if defined(__i386__) || defined(__x86_64__)
 
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "spi.h"
 #include "programmer.h"
+
+#define MAX_TRY 1000
 
 /* Constans for I/O ports */
 #define ITE_SUPERIO_PORT1	0x2e
@@ -112,11 +115,12 @@ struct superio probe_superio_ite85xx(void)
 	return ret;
 }
 
-/* IT8502 employs a scratch rom when flash is updating. Call the following two
- * functions before/after flash erase/program. */
+/* IT8502 employs a scratch ram when flash is being updated. Call the following
+ * two functions before/after flash erase/program. */
 void it85xx_enter_scratch_rom()
 {
 	int ret;
+	int tries;
 
 	if (it85xx_scratch_rom_reenter > 0) return;
 	it85xx_scratch_rom_reenter++;
@@ -129,22 +133,77 @@ void it85xx_enter_scratch_rom()
 		msg_perr("Cannot stop powerd.\n");
 	}
 
-	while((INB(LEGACY_KBC_PORT_CMD) & 2));  /* IBF: input buffer is !full */
-	OUTB(0xb4, LEGACY_KBC_PORT_CMD);        /* Copy EC firmware to SRAM. */
-	while((INB(LEGACY_KBC_PORT_CMD) & 1));  /* OBF: output buffer has data */
-	while((INB(LEGACY_KBC_PORT_DATA) != 0xFA));  /* EC already runs on SRAM */
+	/* Wait until IBF (input buffer) is not full. */
+	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
+		if (tries >= MAX_TRY) {
+			msg_perr("EC timeout at waiting for !IBF: %s():%d\n",
+			         __FUNCTION__, __LINE__);
+			return;
+		}
+		internal_delay(1000);
+	}
+
+	/* Copy EC firmware to SRAM. */
+	OUTB(0xb4, LEGACY_KBC_PORT_CMD);
+
+	/* Confirm EC has taken away the command. */
+	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
+		if (tries >= MAX_TRY) {
+			msg_perr("EC timeout at taking command: %s():%d\n",
+			         __FUNCTION__, __LINE__);
+			return;
+		}
+		internal_delay(1000);
+	}
+
+	/* Waiting for OBF (output buffer) has data. */
+	for(tries = 0; !(INB(LEGACY_KBC_PORT_CMD) & 1); ++tries) {
+		if (tries >= MAX_TRY) {
+			msg_perr("EC timeout at waiting for OBF: %s():%d\n",
+			         __FUNCTION__, __LINE__);
+			return;
+		}
+		internal_delay(1000);
+	}
+
+	/* Expect EC outputs 0xFA to indicate running on SRAM. */
+	if (((ret = INB(LEGACY_KBC_PORT_DATA)) != 0xFA)) {
+		msg_perr("EC cannot run on SRAM!!!  0x%02x\n", ret);
+		return;
+	}
+	/* EC already runs on SRAM */
 }
 
 void it85xx_exit_scratch_rom()
 {
 	int ret;
+	int tries;
 
 	if (it85xx_scratch_rom_reenter <= 0) return;
 	it85xx_scratch_rom_reenter = 0;
 
-	while((INB(LEGACY_KBC_PORT_CMD) & 2));  /* IBF: input buffer is !full */
-	OUTB(0xfe, LEGACY_KBC_PORT_CMD);        /* Exit SRAM. Run on flash. */
-	while((INB(LEGACY_KBC_PORT_CMD) & 1));  /* OBF: output buffer has data */
+	/* Wait until IBF (input buffer) is not full. */
+	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
+		if (tries >= MAX_TRY) {
+			msg_perr("EC timeout at waiting for !IBF: %s():%d\n",
+			         __FUNCTION__, __LINE__);
+			return;
+		}
+		internal_delay(1000);
+	}
+
+	/* Exit SRAM. Run on flash. */
+	OUTB(0xfe, LEGACY_KBC_PORT_CMD);
+
+	/* Confirm EC has taken away the command. */
+	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
+		if (tries >= MAX_TRY) {
+			msg_perr("EC timeout at taking command: %s():%d\n",
+			         __FUNCTION__, __LINE__);
+			return;
+		}
+		internal_delay(1000);
+	}
 
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
