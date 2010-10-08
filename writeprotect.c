@@ -244,48 +244,48 @@ struct w25q_range w25x80_ranges[] = {
 	{ 0, X, 0x7, {0x000000, 1024 * 1024} },
 };
 
-int wp_get_status(const struct flashchip *flash,
-                  unsigned int start, unsigned int len,
-                  struct w25q_status *status)
+/* Given a flash chip, this function returns its range table. */
+static int w25_range_table(const struct flashchip *flash,
+                           struct w25q_range **w25q_ranges,
+                           int *num_entries)
 {
-	struct w25q_range *w25q_ranges;
-	int i, num_entries = 0;
-	int range_found = 0;
+	*w25q_ranges = 0;
+	*num_entries = 0;
 
 	switch (flash->manufacture_id) {
 	case WINBOND_NEX_ID:
 		switch(flash->model_id) {
 		case W_25X10:
-			w25q_ranges = w25x10_ranges;
-			num_entries = ARRAY_SIZE(w25x10_ranges);
+			*w25q_ranges = w25x10_ranges;
+			*num_entries = ARRAY_SIZE(w25x10_ranges);
 			break;
 		case W_25X20:
-			w25q_ranges = w25x20_ranges;
-			num_entries = ARRAY_SIZE(w25x20_ranges);
+			*w25q_ranges = w25x20_ranges;
+			*num_entries = ARRAY_SIZE(w25x20_ranges);
 			break;
 		case W_25X40:
-			w25q_ranges = w25x40_ranges;
-			num_entries = ARRAY_SIZE(w25x40_ranges);
+			*w25q_ranges = w25x40_ranges;
+			*num_entries = ARRAY_SIZE(w25x40_ranges);
 			break;
 		case W_25X80:
-			w25q_ranges = w25x80_ranges;
-			num_entries = ARRAY_SIZE(w25x80_ranges);
+			*w25q_ranges = w25x80_ranges;
+			*num_entries = ARRAY_SIZE(w25x80_ranges);
 			break;
 		case W_25Q80:
-			w25q_ranges = w25q80_ranges;
-			num_entries = ARRAY_SIZE(w25q80_ranges);
+			*w25q_ranges = w25q80_ranges;
+			*num_entries = ARRAY_SIZE(w25q80_ranges);
 			break;
 		case W_25Q16:
-			w25q_ranges = w25q16_ranges;
-			num_entries = ARRAY_SIZE(w25q16_ranges);
+			*w25q_ranges = w25q16_ranges;
+			*num_entries = ARRAY_SIZE(w25q16_ranges);
 			break;
 		case W_25Q32:
-			w25q_ranges = w25q32_ranges;
-			num_entries = ARRAY_SIZE(w25q32_ranges);
+			*w25q_ranges = w25q32_ranges;
+			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
 		case W_25Q64:
-			w25q_ranges = w25q64_ranges;
-			num_entries = ARRAY_SIZE(w25q64_ranges);
+			*w25q_ranges = w25q64_ranges;
+			*num_entries = ARRAY_SIZE(w25q64_ranges);
 			break;
 		default:
 			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
@@ -297,8 +297,8 @@ int wp_get_status(const struct flashchip *flash,
 	case EON_ID_NOPREFIX:
 		switch (flash->model_id) {
 		case EN_25F40:
-			w25q_ranges = en25f40_ranges;
-			num_entries = ARRAY_SIZE(en25f40_ranges);
+			*w25q_ranges = en25f40_ranges;
+			*num_entries = ARRAY_SIZE(en25f40_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: EON flash chip mismatch (0x%04x)"
@@ -310,8 +310,8 @@ int wp_get_status(const struct flashchip *flash,
 	case MX_ID:
 		switch (flash->model_id) {
 		case MX_25L3205:
-			w25q_ranges = mx25l3205d_ranges;
-			num_entries = ARRAY_SIZE(mx25l3205d_ranges);
+			*w25q_ranges = mx25l3205d_ranges;
+			*num_entries = ARRAY_SIZE(mx25l3205d_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
@@ -326,6 +326,18 @@ int wp_get_status(const struct flashchip *flash,
 		return -1;
 	}
 
+	return 0;
+}
+
+int w25_range_to_status(const struct flashchip *flash,
+                        unsigned int start, unsigned int len,
+                        struct w25q_status *status)
+{
+	struct w25q_range *w25q_ranges;
+	int i, range_found = 0;
+	int num_entries;
+
+	if (w25_range_table(flash, &w25q_ranges, &num_entries)) return -1;
 	for (i = 0; i < num_entries; i++) {
 		struct wp_range *r = &w25q_ranges[i].range;
 
@@ -345,6 +357,41 @@ int wp_get_status(const struct flashchip *flash,
 
 	if (!range_found) {
 		msg_cerr("matching range not found\n");
+		return -1;
+	}
+	return 0;
+}
+
+int w25_status_to_range(const struct flashchip *flash,
+                        const struct w25q_status *status,
+                        unsigned int *start, unsigned int *len)
+{
+	struct w25q_range *w25q_ranges;
+	int i, status_found = 0;
+	int num_entries;
+
+	if (w25_range_table(flash, &w25q_ranges, &num_entries)) return -1;
+	for (i = 0; i < num_entries; i++) {
+		int bp;
+
+		bp = status->bp0 | (status->bp1 << 1) | (status->bp2 << 2);
+		msg_cspew("comparing  0x%x 0x%x / 0x%x 0x%x / 0x%x 0x%x\n",
+		          bp, w25q_ranges[i].bp,
+		          status->tb, w25q_ranges[i].tb,
+		          status->sec, w25q_ranges[i].sec);
+		if ((bp == w25q_ranges[i].bp) &&
+		    (status->tb == w25q_ranges[i].tb) &&
+		    (status->sec == w25q_ranges[i].sec)) {
+			*start = w25q_ranges[i].range.start;
+			*len = w25q_ranges[i].range.len;
+
+			status_found = 1;
+			break;
+		}
+	}
+
+	if (!status_found) {
+		msg_cerr("matching status not found\n");
 		return -1;
 	}
 	return 0;
@@ -393,7 +440,7 @@ static int w25_set_range(struct flashchip *flash,
 	memcpy(&status, &tmp, 1);
 	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
 
-	if (wp_get_status(flash, start, len, &status)) return -1;
+	if (w25_range_to_status(flash, start, len, &status)) return -1;
 
 	msg_cdbg("status.busy: %x\n", status.busy);
 	msg_cdbg("status.wel: %x\n", status.wel);
@@ -410,6 +457,32 @@ static int w25_set_range(struct flashchip *flash,
 		  __func__, spi_read_status_register());
 
 	return 0;
+}
+
+static int w25_wp_status(struct flashchip *flash)
+{
+	struct w25q_status status;
+	int tmp;
+	int start, len;
+	int ret = 0;
+
+	tmp = spi_read_status_register();
+	/* FIXME: this is NOT endian-free copy. */
+	memcpy(&status, &tmp, 1);
+	msg_cinfo("WP: status: 0x%02x\n", tmp);
+	msg_cinfo("WP: status.srp0: %x\n", status.srp0);
+	msg_cinfo("WP: write protect is %s.\n",
+	          status.srp0 ? "enabled" : "disabled");
+
+	msg_cinfo("WP: write protect range: ");
+	if (w25_status_to_range(flash, &status, &start, &len)) {
+		msg_cinfo("(cannot resolve the range)\n");
+		ret = -1;
+	} else {
+		msg_cinfo("start=0x%08x, len=0x%08x\n", start, len);
+	}
+
+	return ret;
 }
 
 static int w25_set_srp0(struct flashchip *flash, int enable)
@@ -459,4 +532,5 @@ struct wp wp_w25 = {
 	.set_range	= w25_set_range,
 	.enable		= w25_enable_writeprotect,
 	.disable	= w25_disable_writeprotect,
+	.wp_status	= w25_wp_status,
 };

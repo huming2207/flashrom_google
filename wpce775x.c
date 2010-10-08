@@ -707,7 +707,7 @@ int write_wpce775x(struct flashchip *flash, uint8_t * buf)
 int set_range_wpce775x(struct flashchip *flash, unsigned int start, unsigned int len) {
 	struct w25q_status status;
 
-	if (wp_get_status(scan, start, len, &status)) return -1;
+	if (w25_range_to_status(scan, start, len, &status)) return -1;
 
 	/* Since WPCE775x doesn't support reading status register, we have to
 	 * set SRP0 to 1 when writing status register. */

@@ -116,6 +116,7 @@ void cli_mfg_usage(const char *name)
 
 	printf("Long-options:\n");
 	printf("   --get-size                        get chip size (bytes)\n");
+	printf("   --wp-status                       show write protect status\n");
 	printf("   --wp-range <start> <length>       set write protect range\n");
 	printf("   --wp-enable                       enable write protection\n");
 	printf("   --wp-disable                      disable write protection\n");
@@ -140,6 +141,7 @@ void cli_mfg_abort_usage(const char *name)
 enum LONGOPT_RETURN_VALUES {
 	/* start after ASCII chars */
 	LONGOPT_GET_SIZE = 256,
+	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
 	LONGOPT_WP_DISABLE,
@@ -158,7 +160,7 @@ int cli_mfg(int argc, char *argv[])
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0;
+	    set_wp_disable = 0, wp_status = 0;
 	int dont_verify_it = 0, list_supported = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
@@ -186,6 +188,7 @@ int cli_mfg(int argc, char *argv[])
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'R'},
 		{"get-size", 0, 0, LONGOPT_GET_SIZE},
+		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
@@ -364,6 +367,9 @@ int cli_mfg(int argc, char *argv[])
 		case LONGOPT_GET_SIZE:
 			get_size = 1;
 			break;
+		case LONGOPT_WP_STATUS:
+			wp_status = 1;
+			break;
 		case LONGOPT_WP_SET_RANGE:
 			set_wp_range = 1;
 			break;
@@ -484,7 +490,8 @@ int cli_mfg(int argc, char *argv[])
 	}
 
 	if (!(read_it | write_it | verify_it | erase_it |
-	      get_size | set_wp_range | set_wp_enable | set_wp_disable)) {
+	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
+	      wp_status)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		programmer_shutdown();
@@ -514,6 +521,7 @@ int cli_mfg(int argc, char *argv[])
 
 		if ((argc - optind) != 2) {
 			printf("Error: invalid number of arguments\n");
+			programmer_shutdown();
 			exit(1);
 		}
 
@@ -521,12 +529,14 @@ int cli_mfg(int argc, char *argv[])
 		start = strtoul(argv[optind], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
 			printf("Error: value \"%s\" invalid\n", argv[optind]);
+			programmer_shutdown();
 			exit(1);
 		}
 
 		len = strtoul(argv[optind + 1], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
 			printf("Error: value \"%s\" invalid\n", argv[optind + 1]);
+			programmer_shutdown();
 			exit(1);
 		}
 
@@ -541,6 +551,9 @@ int cli_mfg(int argc, char *argv[])
 	} else if (get_size) {
 		printf("%d\n", flash->total_size * 1024);
 		rc = 0;
+	} else if (wp_status) {
+		if (flash->wp && flash->wp->wp_status)
+			rc = flash->wp->wp_status(flash);
 	} else {
 		rc = doit(flash, force, filename, read_it, write_it, erase_it, verify_it);
 	}

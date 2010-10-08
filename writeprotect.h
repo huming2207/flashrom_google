@@ -27,6 +27,7 @@ struct wp {
 			 unsigned int start, unsigned int len);
 	int (*enable)(struct flashchip *flash);
 	int (*disable)(struct flashchip *flash);
+	int (*wp_status)(struct flashchip *flash);
 };
 
 /* winbond w25-series */
@@ -48,8 +49,11 @@ struct w25q_status {
 //	unsigned char qe : 1;
 } __attribute__ ((packed));
 
-int wp_get_status(const struct flashchip *flash,
-                  unsigned int start, unsigned int len,
-                  struct w25q_status *status);
+int w25_range_to_status(const struct flashchip *flash,
+                        unsigned int start, unsigned int len,
+                        struct w25q_status *status);
+int w25_status_to_range(const struct flashchip *flash,
+                        const struct w25q_status *status,
+                        unsigned int *start, unsigned int *len);
 
 #endif				/* !__WRITEPROTECT_H__ */
