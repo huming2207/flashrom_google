@@ -34,7 +34,7 @@
 #include "spi.h"
 #include "programmer.h"
 
-#define MAX_TRY 1000
+#define MAX_TRY 1000000
 
 /* Constans for I/O ports */
 #define ITE_SUPERIO_PORT1	0x2e
@@ -140,7 +140,7 @@ void it85xx_enter_scratch_rom()
 			         __FUNCTION__, __LINE__);
 			return;
 		}
-		internal_delay(1000);
+		internal_delay(1);
 	}
 
 	/* Copy EC firmware to SRAM. */
@@ -153,17 +153,17 @@ void it85xx_enter_scratch_rom()
 			         __FUNCTION__, __LINE__);
 			return;
 		}
-		internal_delay(1000);
+		internal_delay(1);
 	}
 
 	/* Waiting for OBF (output buffer) has data. */
-	for(tries = 0; !(INB(LEGACY_KBC_PORT_CMD) & 1); ++tries) {
+	for(tries = 0; !((INB(LEGACY_KBC_PORT_CMD) & 1)); ++tries) {
 		if (tries >= MAX_TRY) {
 			msg_perr("EC timeout at waiting for OBF: %s():%d\n",
 			         __FUNCTION__, __LINE__);
 			return;
 		}
-		internal_delay(1000);
+		internal_delay(1);
 	}
 
 	/* Expect EC outputs 0xFA to indicate running on SRAM. */
@@ -189,7 +189,7 @@ void it85xx_exit_scratch_rom()
 			         __FUNCTION__, __LINE__);
 			return;
 		}
-		internal_delay(1000);
+		internal_delay(1);
 	}
 
 	/* Exit SRAM. Run on flash. */
@@ -202,7 +202,7 @@ void it85xx_exit_scratch_rom()
 			         __FUNCTION__, __LINE__);
 			return;
 		}
-		internal_delay(1000);
+		internal_delay(1);
 	}
 
 	/* FIXME: this a workaround for the bug that SMBus signal would
