@@ -26,6 +26,7 @@ struct wp {
 	int (*set_range)(struct flashchip *flash,
 			 unsigned int start, unsigned int len);
 	int (*enable)(struct flashchip *flash);
+	int (*disable)(struct flashchip *flash);
 };
 
 /* winbond w25-series */

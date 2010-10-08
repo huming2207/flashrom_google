@@ -118,6 +118,7 @@ void cli_mfg_usage(const char *name)
 	printf("   --get-size                        get chip size (bytes)\n");
 	printf("   --wp-range <start> <length>       set write protect range\n");
 	printf("   --wp-enable                       enable write protection\n");
+	printf("   --wp-disable                      disable write protection\n");
 //	printf("   --bp-list                         list block protection"
 //	       "address ranges\n");
 
@@ -141,6 +142,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_GET_SIZE = 256,
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
+	LONGOPT_WP_DISABLE,
 //	LONGOPT_BLOCKPROTECT_LIST,
 };
 
@@ -155,7 +157,8 @@ int cli_mfg(int argc, char *argv[])
 	int option_index = 0;
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
-	    get_size = 0, set_wp_range = 0, set_wp_enable = 0;
+	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
+	    set_wp_disable = 0;
 	int dont_verify_it = 0, list_supported = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
@@ -185,6 +188,7 @@ int cli_mfg(int argc, char *argv[])
 		{"get-size", 0, 0, LONGOPT_GET_SIZE},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
+		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
 //		{"bp-list", 0, 0, LONGOPT_BLOCKPROTECT_LIST},
 		{0, 0, 0, 0}
 	};
@@ -366,6 +370,9 @@ int cli_mfg(int argc, char *argv[])
 		case LONGOPT_WP_ENABLE:
 			set_wp_enable = 1;
 			break;
+		case LONGOPT_WP_DISABLE:
+			set_wp_disable = 1;
+			break;
 		default:
 			cli_mfg_abort_usage(argv[0]);
 			break;
@@ -477,11 +484,17 @@ int cli_mfg(int argc, char *argv[])
 	}
 
 	if (!(read_it | write_it | verify_it | erase_it |
-	      get_size | set_wp_range | set_wp_enable)) {
+	      get_size | set_wp_range | set_wp_enable | set_wp_disable)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		programmer_shutdown();
 		exit(0);
+	}
+
+	if (set_wp_enable && set_wp_disable) {
+		printf("Error: --wp-enable and --wp-disable are mutually exclusive\n");
+		programmer_shutdown();
+		exit(1);
 	}
 
 	if (!filename && (read_it | write_it | verify_it)) {
@@ -522,6 +535,9 @@ int cli_mfg(int argc, char *argv[])
 	} else if (set_wp_enable) {
 		if (flash->wp && flash->wp->enable)
 			rc = flash->wp->enable(flash);
+	} else if (set_wp_disable) {
+		if (flash->wp && flash->wp->disable)
+			rc = flash->wp->disable(flash);
 	} else if (get_size) {
 		printf("%d\n", flash->total_size * 1024);
 		rc = 0;

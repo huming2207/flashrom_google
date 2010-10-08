@@ -406,13 +406,13 @@ static int w25_set_range(struct flashchip *flash,
 
 	memcpy(&tmp, &status, sizeof(status));
 	spi_write_status_register_WREN(tmp);
-	msg_cdbg("%s: new status: 0x%02x\n",
+	msg_cinfo("%s: new status: 0x%02x\n",
 		  __func__, spi_read_status_register());
 
 	return 0;
 }
 
-static int w25_enable_writeprotect(struct flashchip *flash)
+static int w25_set_srp0(struct flashchip *flash, int enable)
 {
 	struct w25q_status status;
 	int tmp = 0;
@@ -422,7 +422,7 @@ static int w25_enable_writeprotect(struct flashchip *flash)
 	memcpy(&status, &tmp, 1);
 	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
 
-	status.srp0 = 1;
+	status.srp0 = enable ? 1 : 0;
 	memcpy(&tmp, &status, sizeof(status));
 	spi_write_status_register_WREN(tmp);
 	msg_cdbg("%s: new status: 0x%02x\n",
@@ -431,7 +431,32 @@ static int w25_enable_writeprotect(struct flashchip *flash)
 	return 0;
 }
 
+static int w25_enable_writeprotect(struct flashchip *flash)
+{
+	int ret;
+
+	ret = w25_set_srp0(flash, 1);
+	if (!ret)
+		msg_cinfo("SUCCESS.\n");
+	else
+		msg_cinfo("FAILED, error=%d.\n", ret);
+	return ret;
+}
+
+static int w25_disable_writeprotect(struct flashchip *flash)
+{
+	int ret;
+
+	ret = w25_set_srp0(flash, 0);
+	if (!ret)
+		msg_cinfo("SUCCESS.\n");
+	else
+		msg_cinfo("FAILED, error=%d.\n", ret);
+	return ret;
+}
+
 struct wp wp_w25 = {
 	.set_range	= w25_set_range,
 	.enable		= w25_enable_writeprotect,
+	.disable	= w25_disable_writeprotect,
 };
