@@ -443,7 +443,18 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	/* Map RCBA to virtual memory */
 	rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
+	/* Set BBS (Boot BIOS Straps) field of GCS register. */
 	gcs = mmio_readl(rcrb + 0x3410);
+	if (target_bus == CHIP_BUSTYPE_LPC) {
+		msg_pdbg("Setting BBS to LPC\n");
+		gcs = (gcs & ~0xc00) | (0x3 << 10);
+		mmio_writel(gcs, rcrb + 0x3410);
+	} else if (target_bus == CHIP_BUSTYPE_SPI) {
+		msg_pdbg("Setting BBS to SPI\n");
+		gcs = (gcs & ~0xc00) | (0x1 << 10);
+		mmio_writel(gcs, rcrb + 0x3410);
+	}
+
 	msg_pdbg("GCS = 0x%x: ", gcs);
 	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
 		     (gcs & 0x1) ? "en" : "dis");
