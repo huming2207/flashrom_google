@@ -61,6 +61,9 @@ enum chipbustype {
 	CHIP_BUSTYPE_UNKNOWN	= CHIP_BUSTYPE_PARALLEL | CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI,
 };
 
+/* used to select bus which target chip resides */
+extern enum chipbustype target_bus;
+
 /*
  * How many different contiguous runs of erase blocks with one size each do
  * we have for a given erase function?

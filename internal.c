@@ -116,6 +116,7 @@ void probe_superio(void)
 #endif
 
 int is_laptop = 0;
+enum chipbustype target_bus;
 
 int internal_init(void)
 {
@@ -164,6 +165,27 @@ int internal_init(void)
 		return 1;
 	}
 	free(arg);
+
+	arg = extract_programmer_param("bus");
+	if (arg) {
+		if (!strcasecmp(arg,"parallel")) {
+			target_bus = CHIP_BUSTYPE_PARALLEL;
+		} else if (!strcasecmp(arg,"lpc")) {
+			target_bus = CHIP_BUSTYPE_LPC;
+		} else if (!strcasecmp(arg,"fwh")) {
+			target_bus = CHIP_BUSTYPE_FWH;
+		} else if (!strcasecmp(arg,"spi")) {
+			target_bus = CHIP_BUSTYPE_SPI;
+		} else {
+			msg_perr("Supported busses for %s programmer: parallel,"
+			         " lpc, fwh, spi\n",
+				 programmer_table[programmer].name);
+			free(arg);
+			return 1;
+		}
+
+		free(arg);
+	}
 
 	get_io_perms();
 
