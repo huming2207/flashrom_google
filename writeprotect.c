@@ -463,7 +463,7 @@ static int w25_wp_status(struct flashchip *flash)
 {
 	struct w25q_status status;
 	int tmp;
-	int start, len;
+	unsigned int start, len;
 	int ret = 0;
 
 	tmp = spi_read_status_register();
