@@ -128,7 +128,7 @@ void it85xx_enter_scratch_rom()
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
 	 *        we find out the root cause. */
-	ret = system("stop powerd");
+	ret = system("stop powerd >&2");
 	if (ret) {
 		msg_perr("Cannot stop powerd.\n");
 	}
@@ -208,7 +208,7 @@ void it85xx_exit_scratch_rom()
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
 	 *        we find out the root cause. */
-	ret = system("start powerd");
+	ret = system("start powerd >&2");
 	if (ret) {
 		msg_perr("Cannot start powerd again.\n");
 	}
