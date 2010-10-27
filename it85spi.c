@@ -34,7 +34,8 @@
 #include "spi.h"
 #include "programmer.h"
 
-#define MAX_TRY 1000000
+#define MAX_TIMEOUT 100000
+#define MAX_TRY 5
 
 /* Constans for I/O ports */
 #define ITE_SUPERIO_PORT1	0x2e
@@ -53,6 +54,13 @@
 /* These are standard Super I/O 16-bit base address registers */
 #define SHM_IO_BAD0		0x60  /* big-endian, this is high bits */
 #define SHM_IO_BAD1		0x61
+
+/* 8042 keyboard controller uses an input buffer and an output buffer to
+ * communicate with host CPU. Both buffers are 1-byte depth. That means the
+ * IBF is set to 1 when host CPU sends a command to input buffer (standing on
+ * the EC side). IBF is cleared to 0 once the command is read by EC. */
+#define KB_IBF 			(1 << 1)  /* Input Buffer Full */
+#define KB_OBF 			(1 << 0)  /* Output Buffer Full */
 
 /* IT8502 supports two access modes:
  *   LPC_MEMORY: through the memory window in 0xFFFFFxxx (follow mode)
@@ -115,6 +123,35 @@ struct superio probe_superio_ite85xx(void)
 	return ret;
 }
 
+/* This function will poll the keyboard status register until either
+ *   an expected value shows up, or
+ *   timeout reaches.
+ *
+ * Returns: 0 -- the expected value has shown.
+ *          1 -- timeout reached.
+ */
+static int wait_for(
+		const unsigned int mask,
+		const unsigned int expected_value,
+		const int timeout,  /* in usec */
+		const char* error_message,
+		const char* function_name,
+		const int lineno
+) {
+	int time_passed;
+
+	for (time_passed = 0;; ++time_passed) {
+		if ((INB(LEGACY_KBC_PORT_CMD) & mask) == expected_value)
+			return 0;
+		if (time_passed >= timeout)
+			break;
+		programmer_delay(1);
+	}
+	if (error_message)
+		msg_perr("%s():%d %s", function_name, lineno, error_message);
+	return 1;
+}
+
 /* IT8502 employs a scratch ram when flash is being updated. Call the following
  * two functions before/after flash erase/program. */
 void it85xx_enter_scratch_rom()
@@ -122,8 +159,8 @@ void it85xx_enter_scratch_rom()
 	int ret;
 	int tries;
 
+	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0) return;
-	it85xx_scratch_rom_reenter++;
 
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
@@ -133,45 +170,45 @@ void it85xx_enter_scratch_rom()
 		msg_perr("Cannot stop powerd.\n");
 	}
 
-	/* Wait until IBF (input buffer) is not full. */
-	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
-		if (tries >= MAX_TRY) {
-			msg_perr("EC timeout at waiting for !IBF: %s():%d\n",
+	for (tries = 0; tries < MAX_TRY; ++tries) {
+		/* Wait until IBF (input buffer) is not full. */
+		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
+		             "* timeout at waiting for IBF==0.\n",
+		             __FUNCTION__, __LINE__))
+			continue;
+
+		/* Copy EC firmware to SRAM. */
+		OUTB(0xb4, LEGACY_KBC_PORT_CMD);
+
+		/* Confirm EC has taken away the command. */
+		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
+		             "* timeout at taking command.\n",
+		             __FUNCTION__, __LINE__))
+			continue;
+
+		/* Waiting for OBF (output buffer) has data.
+		 * Note sometimes the replied command might be stolen by kernel
+		 * ISR so that it is okay as long as the command is 0xFA. */
+		if (wait_for(KB_OBF, KB_OBF, MAX_TIMEOUT, NULL, NULL, 0))
+			msg_pdbg("%s():%d * timeout at waiting for OBF.\n",
 			         __FUNCTION__, __LINE__);
-			return;
+		if ((ret = INB(LEGACY_KBC_PORT_DATA)) == 0xFA) {
+			break;
+		} else {
+			msg_perr("%s():%d * not run on SRAM ret=%d\n",
+			         __FUNCTION__, __LINE__, ret);
+			continue;
 		}
-		internal_delay(1);
 	}
 
-	/* Copy EC firmware to SRAM. */
-	OUTB(0xb4, LEGACY_KBC_PORT_CMD);
-
-	/* Confirm EC has taken away the command. */
-	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
-		if (tries >= MAX_TRY) {
-			msg_perr("EC timeout at taking command: %s():%d\n",
-			         __FUNCTION__, __LINE__);
-			return;
-		}
-		internal_delay(1);
+	if (tries < MAX_TRY) {
+		/* EC already runs on SRAM */
+		it85xx_scratch_rom_reenter++;
+		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+	} else {
+		msg_perr("%s():%d * Max try reached.\n",
+		         __FUNCTION__, __LINE__);
 	}
-
-	/* Waiting for OBF (output buffer) has data. */
-	for(tries = 0; !((INB(LEGACY_KBC_PORT_CMD) & 1)); ++tries) {
-		if (tries >= MAX_TRY) {
-			msg_perr("EC timeout at waiting for OBF: %s():%d\n",
-			         __FUNCTION__, __LINE__);
-			return;
-		}
-		internal_delay(1);
-	}
-
-	/* Expect EC outputs 0xFA to indicate running on SRAM. */
-	if (((ret = INB(LEGACY_KBC_PORT_DATA)) != 0xFA)) {
-		msg_perr("EC cannot run on SRAM!!!  0x%02x\n", ret);
-		return;
-	}
-	/* EC already runs on SRAM */
 }
 
 void it85xx_exit_scratch_rom()
@@ -179,30 +216,50 @@ void it85xx_exit_scratch_rom()
 	int ret;
 	int tries;
 
+	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter <= 0) return;
-	it85xx_scratch_rom_reenter = 0;
 
-	/* Wait until IBF (input buffer) is not full. */
-	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
-		if (tries >= MAX_TRY) {
-			msg_perr("EC timeout at waiting for !IBF: %s():%d\n",
-			         __FUNCTION__, __LINE__);
-			return;
+	/* FIXME: This is ugly workaround before we find out the root cause.
+	 * Without this delay (at least 10ms), the keyboard won't response
+	 * any pressing after EC exits the scratch rom.
+	 * A simple way to reproduce the bug is running any of following:
+	 *
+	 *   flashrom --wp-enable
+	 *   flashrom --wp-disable
+	 *   flashrom --wp-range 0 0
+	 */
+	programmer_delay(10000);
+
+	for (tries = 0; tries < MAX_TRY; ++tries) {
+		/* Wait until IBF (input buffer) is not full. */
+		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
+		             "* timeout at waiting for IBF==0.\n",
+		             __FUNCTION__, __LINE__))
+			continue;
+
+		/* Exit SRAM. Run on flash. */
+		OUTB(0xFE, LEGACY_KBC_PORT_CMD);
+
+		/* Confirm EC has taken away the command. */
+		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
+		             "* timeout at taking command.\n",
+		             __FUNCTION__, __LINE__)) {
+			/* We cannot ensure if EC has exited update mode.
+			 * If EC is in normal mode already, a further 0xFE
+			 * command will reboot system. So, exit loop here. */
+			tries = MAX_TRY;
+			break;
 		}
-		internal_delay(1);
+
+		break;
 	}
 
-	/* Exit SRAM. Run on flash. */
-	OUTB(0xfe, LEGACY_KBC_PORT_CMD);
-
-	/* Confirm EC has taken away the command. */
-	for(tries = 0; INB(LEGACY_KBC_PORT_CMD) & 2; ++tries) {
-		if (tries >= MAX_TRY) {
-			msg_perr("EC timeout at taking command: %s():%d\n",
-			         __FUNCTION__, __LINE__);
-			return;
-		}
-		internal_delay(1);
+	if (tries < MAX_TRY) {
+		it85xx_scratch_rom_reenter = 0;
+		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+	} else {
+		msg_perr("%s():%d * Max try reached.\n",
+		         __FUNCTION__, __LINE__);
 	}
 
 	/* FIXME: this a workaround for the bug that SMBus signal would
