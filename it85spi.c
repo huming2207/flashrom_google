@@ -219,17 +219,6 @@ void it85xx_exit_scratch_rom()
 	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter <= 0) return;
 
-	/* FIXME: This is ugly workaround before we find out the root cause.
-	 * Without this delay (at least 10ms), the keyboard won't response
-	 * any pressing after EC exits the scratch rom.
-	 * A simple way to reproduce the bug is running any of following:
-	 *
-	 *   flashrom --wp-enable
-	 *   flashrom --wp-disable
-	 *   flashrom --wp-range 0 0
-	 */
-	programmer_delay(10000);
-
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,

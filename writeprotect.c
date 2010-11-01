@@ -27,6 +27,13 @@
 #include "spi.h"
 #include "writeprotect.h"
 
+/* When update flash's status register, it takes few time to erase register.
+ * After surveying some flash vendor specs, such as Winbond, MXIC, EON,
+ * all of their update time are less than 20ms. After refering the spi25.c,
+ * use 100ms delay.
+ */
+#define WRITE_STATUS_REGISTER_DELAY 100 * 1000  /* unit: us */
+
 /*
  * The following procedures rely on look-up tables to match the user-specified
  * range with the chip's supported ranges. This turned out to be the most
@@ -426,6 +433,10 @@ static int spi_write_status_register_WREN(int status)
 	        msg_cerr("%s failed during command execution\n",
 	                __func__);
 	}
+
+	/* WRSR performs a self-timed erase before the changes take effect. */
+	programmer_delay(WRITE_STATUS_REGISTER_DELAY);
+
 	return result;
 }
 
