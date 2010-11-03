@@ -33,9 +33,13 @@
 #undef max
 #endif
 
+struct flashchip;	/* forward declare */
 typedef unsigned long chipaddr;
 
+#define CHIP_RESTORE_CALLBACK	int (*func) (struct flashchip *flash, uint8_t status)
+
 int register_shutdown(void (*function) (void *data), void *data);
+int register_chip_restore(CHIP_RESTORE_CALLBACK, struct flashchip *flash, uint8_t status);
 void *programmer_map_flash_region(const char *descr, unsigned long phys_addr,
 				  size_t len);
 void programmer_unmap_flash_region(void *virt_addr, size_t len);

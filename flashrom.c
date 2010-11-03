@@ -417,6 +417,14 @@ const struct programmer_entry programmer_table[] = {
 	{}, /* This entry corresponds to PROGRAMMER_INVALID. */
 };
 
+#define CHIP_RESTORE_MAXFN 4
+static int chip_restore_fn_count = 0;
+struct chip_restore_func_data {
+	CHIP_RESTORE_CALLBACK;
+	struct flashchip *flash;
+	uint8_t status;
+} static chip_restore_fn[CHIP_RESTORE_MAXFN];
+
 #define SHUTDOWN_MAXFN 4
 static int shutdown_fn_count = 0;
 struct shutdown_func_data {
@@ -455,6 +463,23 @@ int register_shutdown(void (*function) (void *data), void *data)
 	return 0;
 }
 
+//int register_chip_restore(int (*function) (void *data), void *data)
+int register_chip_restore(CHIP_RESTORE_CALLBACK,
+                          struct flashchip *flash, uint8_t status)
+{
+	if (chip_restore_fn_count >= CHIP_RESTORE_MAXFN) {
+		msg_perr("Tried to register more than %i chip restore"
+		         " functions.\n", CHIP_RESTORE_MAXFN);
+		return 1;
+	}
+	chip_restore_fn[chip_restore_fn_count].func = func;	/* from macro */
+	chip_restore_fn[chip_restore_fn_count].flash = flash;
+	chip_restore_fn[chip_restore_fn_count].status = status;
+	chip_restore_fn_count++;
+
+	return 0;
+}
+
 int programmer_init(char *param)
 {
 	int ret;
@@ -487,6 +512,19 @@ int programmer_init(char *param)
 		/* Do not error out here, the init itself was successful. */
 	}
 	return ret;
+}
+
+int chip_restore()
+{
+	int rc = 0;
+
+	while (chip_restore_fn_count > 0) {
+		int i = --chip_restore_fn_count;
+		rc |= chip_restore_fn[i].func(chip_restore_fn[i].flash,
+		                              chip_restore_fn[i].status);
+	}
+
+	return rc;
 }
 
 int programmer_shutdown(void)
@@ -1616,7 +1654,8 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 			emergency_help_message();
 	}
 
-	programmer_shutdown();
+	chip_restore();	/* must be done before programmer_shutdown() */
+	programmer_shutdown();	/* must be done after chip_restore() */
 
 	return ret;
 }
