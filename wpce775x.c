@@ -414,14 +414,14 @@ int probe_wpce775x(struct flashchip *flash)
 	}
 	srid = sio_read(sio_port, NUVOTON_SIOCFG_SRID);
 	if ((srid & 0xE0) == 0xA0) {
-		msg_pinfo("Found EC: WPCE775x (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		          sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		          srid >> 5, srid & 0x1f, sio_port);
+		msg_pdbg("Found EC: WPCE775x (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
 
 	} else {
-		msg_pinfo("Found EC: Nuvoton (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		          sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		          srid >> 5, srid & 0x1f, sio_port);
+		msg_pdbg("Found EC: Nuvoton (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
 	}
 
 	/* get the address of Shadow Window 2. */

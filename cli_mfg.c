@@ -202,7 +202,6 @@ int cli_mfg(int argc, char *argv[])
 	char *pparam = NULL;
 
 	print_version();
-	print_banner();
 
 	if (selfcheck())
 		exit(1);

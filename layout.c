@@ -75,7 +75,7 @@ int show_id(uint8_t *bios, int size, int force)
 	mb_vendor_offset = *(walk - 2);
 	if ((*walk) == 0 || ((*walk) & 0x3ff) != 0 || (*walk) > size ||
 	    mb_part_offset > size || mb_vendor_offset > size) {
-		msg_pinfo("Flash image seems to be a legacy BIOS. Disabling checks.\n");
+		msg_pdbg("Flash image seems to be a legacy BIOS. Disabling checks.\n");
 		return 0;
 	}
 
@@ -83,7 +83,7 @@ int show_id(uint8_t *bios, int size, int force)
 	mb_vendor = (char *)(bios + size - mb_vendor_offset);
 	if (!isprint((unsigned char)*mb_part) ||
 	    !isprint((unsigned char)*mb_vendor)) {
-		msg_pinfo("Flash image seems to have garbage in the ID location."
+		msg_pdbg("Flash image seems to have garbage in the ID location."
 		       " Disabling checks.\n");
 		return 0;
 	}
@@ -101,7 +101,7 @@ int show_id(uint8_t *bios, int size, int force)
 	 * not found. Nor was -m VENDOR:PART specified.
 	 */
 	if (!lb_vendor || !lb_part) {
-		msg_pinfo("Note: If the following flash access fails, "
+		msg_pdbg("Note: If the following flash access fails, "
 		       "try -m <vendor>:<mainboard>.\n");
 		return 0;
 	}
@@ -189,16 +189,16 @@ int find_romentry(char *name)
 	if (!romimages)
 		return -1;
 
-	msg_ginfo("Looking for \"%s\"... ", name);
+	msg_gdbg("Looking for \"%s\"... ", name);
 
 	for (i = 0; i < romimages; i++) {
 		if (!strcmp(rom_entries[i].name, name)) {
 			rom_entries[i].included = 1;
-			msg_ginfo("found.\n");
+			msg_gdbg("found.\n");
 			return i;
 		}
 	}
-	msg_ginfo("not found.\n");	// Not found. Error.
+	msg_gdbg("not found.\n");	// Not found. Error.
 
 	return -1;
 }

@@ -238,7 +238,7 @@ int coreboot_init(void)
 	}
 
 	if (!lb_table) {
-		msg_pinfo("No coreboot table found.\n");
+		msg_pdbg("No coreboot table found.\n");
 		return -1;
 	}
 

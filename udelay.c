@@ -88,7 +88,7 @@ void myusec_calibrate_delay(void)
 	unsigned long timeusec, resolution;
 	int i, tries = 0;
 
-	msg_pinfo("Calibrating delay loop... ");
+	msg_pdbg("Calibrating delay loop... ");
 	resolution = measure_os_delay_resolution();
 	if (resolution) {
 		msg_pdbg("OS timer resolution is %lu usecs, ", resolution);
@@ -164,7 +164,7 @@ recalibrate:
 	timeusec = measure_delay(resolution * 4);
 	msg_pdbg("%ld myus = %ld us, ", resolution * 4, timeusec);
 
-	msg_pinfo("OK.\n");
+	msg_pdbg("OK.\n");
 }
 
 void internal_delay(int usecs)

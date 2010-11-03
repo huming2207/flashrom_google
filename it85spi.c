@@ -107,11 +107,11 @@ struct superio probe_superio_ite85xx(void)
 		ret.model = probe_id_ite85(ret.port);
 		switch (ret.model >> 8) {
 		case 0x85:
-			msg_pinfo("Found EC: ITE85xx (Vendor:0x%02x,ID:0x%02x,"
-			          "Rev:0x%02x) on sio_port:0x%x.\n",
-			          ret.model >> 8, ret.model & 0xff,
-			          sio_read(ret.port, CHIP_CHIP_VER_REG),
-			          ret.port);
+			msg_pdbg("Found EC: ITE85xx (Vendor:0x%02x,ID:0x%02x,"
+			         "Rev:0x%02x) on sio_port:0x%x.\n",
+			         ret.model >> 8, ret.model & 0xff,
+			         sio_read(ret.port, CHIP_CHIP_VER_REG),
+			         ret.port);
 			return ret;
 		}
 	}

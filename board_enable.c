@@ -1903,15 +1903,15 @@ int board_flash_enable(const char *vendor, const char *part)
 				board->max_rom_decode_parallel * 1024;
 
 		if (board->enable != NULL) {
-			msg_pinfo("Disabling flash write protection for "
+			msg_pdbg("Disabling flash write protection for "
 			       "board \"%s %s\"... ", board->vendor_name,
 			       board->board_name);
 
 			ret = board->enable();
 			if (ret)
-				msg_pinfo("FAILED!\n");
+				msg_pdbg("FAILED!\n");
 			else
-				msg_pinfo("OK.\n");
+				msg_pdbg("OK.\n");
 		}
 	}
 

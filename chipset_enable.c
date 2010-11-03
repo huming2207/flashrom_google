@@ -1180,7 +1180,7 @@ int chipset_flash_enable(void)
 					chipset_enables[i].device_name);
 			continue;
 		}
-		msg_pinfo("Found chipset \"%s %s\", enabling flash write... ",
+		msg_pdbg("Found chipset \"%s %s\", enabling flash write... ",
 		       chipset_enables[i].vendor_name,
 		       chipset_enables[i].device_name);
 		msg_pdbg("chipset PCI ID is %04x:%04x, ",
@@ -1191,17 +1191,17 @@ int chipset_flash_enable(void)
 					      chipset_enables[i].device_name);
 		if (ret == NOT_DONE_YET) {
 			ret = -2;
-			msg_pinfo("OK - searching further chips.\n");
+			msg_pdbg("OK - searching further chips.\n");
 		} else if (ret < 0)
-			msg_pinfo("FAILED!\n");
+			msg_perr("Unable to enable flash write\n");
 		else if(ret == 0)
-			msg_pinfo("OK.\n");
+			msg_pdbg("OK.\n");
 		else if(ret == ERROR_NONFATAL)
 			msg_pinfo("PROBLEMS, continuing anyway\n");
 	}
 
-	msg_pinfo("This chipset supports the following protocols: %s.\n",
-	       flashbuses_to_text(buses_supported));
+	msg_pdbg("This chipset supports the following protocols: %s.\n",
+	         flashbuses_to_text(buses_supported));
 
 	return ret;
 }

@@ -1104,7 +1104,7 @@ notfound:
 	if (!flash || !flash->name)
 		return NULL;
 
-	msg_cinfo("%s chip \"%s %s\" (%d KB, %s) at physical address 0x%lx.\n",
+	msg_cdbg("%s chip \"%s %s\" (%d KB, %s) at physical address 0x%lx.\n",
 	       force ? "Assuming" : "Found",
 	       flash->vendor, flash->name, flash->total_size,
 	       flashbuses_to_text(flash->bustype), base);
@@ -1175,8 +1175,8 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 
 	msg_cinfo("Reading flash... ");
 	if (!buf) {
-		msg_gerr("Memory allocation failed!\n");
 		msg_cinfo("FAILED.\n");
+		msg_gerr("Memory allocation failed!\n");
 		return 1;
 	}
 	if (!flash->read) {
@@ -1193,7 +1193,10 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 	ret = write_buf_to_file(buf, flash->total_size * 1024, filename);
 out_free:
 	free(buf);
-	msg_cinfo("%s.\n", ret ? "FAILED" : "done");
+	if (ret)
+		msg_cerr("FAILED.");
+	else
+		msg_cdbg("done.");
 	return ret;
 }
 
@@ -1306,7 +1309,7 @@ int erase_flash(struct flashchip *flash)
 {
 	int k, ret = 0, found = 0;
 
-	msg_cinfo("Erasing flash chip... ");
+	msg_cdbg("Erasing flash chip... ");
 	for (k = 0; k < NUM_ERASEFUNCTIONS; k++) {
 		struct block_eraser eraser = flash->block_erasers[k];
 
@@ -1344,7 +1347,7 @@ int erase_flash(struct flashchip *flash)
 	if (ret) {
 		msg_cerr("FAILED!\n");
 	} else {
-		msg_cinfo("SUCCESS.\n");
+		msg_cdbg("SUCCESS.\n");
 	}
 	return ret;
 }
@@ -1373,51 +1376,53 @@ void list_programmers(char *delim)
 
 void print_sysinfo(void)
 {
+	/* send to stderr for chromium os */
 #if HAVE_UTSNAME == 1
 	struct utsname osinfo;
 	uname(&osinfo);
 
-	msg_ginfo(" on %s %s (%s)", osinfo.sysname, osinfo.release,
+	msg_gerr(" on %s %s (%s)", osinfo.sysname, osinfo.release,
 		  osinfo.machine);
 #else
-	msg_ginfo(" on unknown machine");
+	msg_gerr(" on unknown machine");
 #endif
-	msg_ginfo(", built with");
+	msg_gerr(", built with");
 #if NEED_PCI == 1
 #ifdef PCILIB_VERSION
-	msg_ginfo(" libpci %s,", PCILIB_VERSION);
+	msg_gerr(" libpci %s,", PCILIB_VERSION);
 #else
-	msg_ginfo(" unknown PCI library,");
+	msg_gerr(" unknown PCI library,");
 #endif
 #endif
 #ifdef __clang__
-	msg_ginfo(" LLVM Clang");
+	msg_gerr(" LLVM Clang");
 #ifdef __clang_version__
-	msg_ginfo(" %s,", __clang_version__);
+	msg_gerr(" %s,", __clang_version__);
 #else
-	msg_ginfo(" unknown version (before r102686),");
+	msg_gerr(" unknown version (before r102686),");
 #endif
 #elif defined(__GNUC__)
-	msg_ginfo(" GCC");
+	msg_gerr(" GCC");
 #ifdef __VERSION__
-	msg_ginfo(" %s,", __VERSION__);
+	msg_gerr(" %s,", __VERSION__);
 #else
-	msg_ginfo(" unknown version,");
+	msg_gerr(" unknown version,");
 #endif
 #else
-	msg_ginfo(" unknown compiler,");
+	msg_gerr(" unknown compiler,");
 #endif
 #if defined (__FLASHROM_LITTLE_ENDIAN__)
-	msg_ginfo(" little endian");
+	msg_gerr(" little endian");
 #else
-	msg_ginfo(" big endian");
+	msg_gerr(" big endian");
 #endif
-	msg_ginfo("\n");
+	msg_gerr("\n");
 }
 
 void print_version(void)
 {
-	msg_ginfo("flashrom v%s\n", flashrom_version);
+	/* send to stderr for chromium os */
+	msg_gerr("flashrom v%s", flashrom_version);
 	print_sysinfo();
 }
 
@@ -1625,7 +1630,7 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 	// ////////////////////////////////////////////////////////////
 
 	if (write_it) {
-		msg_cinfo("Writing flash chip... ");
+		msg_cinfo("Writing flash chip...\n");
 		if (!flash->write) {
 			msg_cerr("Error: flashrom has no write function for this flash chip.\n");
 			programmer_shutdown();
@@ -1638,7 +1643,7 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 			programmer_shutdown();
 			return 1;
 		} else {
-			msg_cinfo("COMPLETE.\n");
+			msg_cdbg("COMPLETE.\n");
 		}
 	}
 
@@ -1657,5 +1662,6 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 	chip_restore();	/* must be done before programmer_shutdown() */
 	programmer_shutdown();	/* must be done after chip_restore() */
 
+	msg_ginfo("%s\n", ret ? "FAILED" : "SUCCESS");
 	return ret;
 }
