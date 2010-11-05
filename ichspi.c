@@ -970,7 +970,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		}
 		msg_pdbg("\n");
 		if (mmio_readw(ich_spibar) & (1 << 15)) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+			msg_perr("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
 		ich_init_opcodes();
@@ -1024,7 +1024,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		msg_pdbg("0xB0: 0x%08x (FDOC)\n",
 			     mmio_readl(ich_spibar + 0xB0));
 		if (tmp2 & (1 << 15)) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+			msg_perr("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
 		ich_init_opcodes();

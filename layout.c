@@ -114,10 +114,10 @@ int show_id(uint8_t *bios, int size, int force)
 		msg_pdbg("This firmware image matches this mainboard.\n");
 	} else {
 		if (force_boardmismatch) {
-			msg_pinfo("WARNING: This firmware image does not "
+			msg_perr("WARNING: This firmware image does not "
 			       "seem to fit to this machine - forcing it.\n");
 		} else {
-			msg_pinfo("ERROR: Your firmware image (%s:%s) does not "
+			msg_perr("ERROR: Your firmware image (%s:%s) does not "
 			       "appear to\n       be correct for the detected "
 			       "mainboard (%s:%s)\n\nOverride with -p internal:"
 			       "boardmismatch=force if you are absolutely sure "

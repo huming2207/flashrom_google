@@ -1475,7 +1475,7 @@ void check_chip_supported(struct flashchip *flash)
 		    (!(flash->tested & TEST_BAD_READ) && !(flash->tested & TEST_OK_READ)) ||
 		    (!(flash->tested & TEST_BAD_ERASE) && !(flash->tested & TEST_OK_ERASE)) ||
 		    (!(flash->tested & TEST_BAD_WRITE) && !(flash->tested & TEST_OK_WRITE))) {
-			msg_cinfo("This flash part has status UNTESTED for operations:");
+			msg_cerr("This flash part has status UNTESTED for operations:");
 			if (!(flash->tested & TEST_BAD_PROBE) && !(flash->tested & TEST_OK_PROBE))
 				msg_cinfo(" PROBE");
 			if (!(flash->tested & TEST_BAD_READ) && !(flash->tested & TEST_OK_READ))

@@ -1883,7 +1883,7 @@ int board_flash_enable(const char *vendor, const char *part)
 
         if (board && board->status == NT) {
                 if (!force_boardenable) {
-                        msg_pinfo("WARNING: Your mainboard is %s %s, but the mainboard-specific\n"
+                        msg_perr("WARNING: Your mainboard is %s %s, but the mainboard-specific\n"
                                "code has not been tested, and thus will not not be executed by default.\n"
                                "Depending on your hardware environment, erasing, writing or even probing\n"
                                "can fail without running the board specific code.\n\n"
@@ -1892,7 +1892,7 @@ int board_flash_enable(const char *vendor, const char *part)
                                board->vendor_name, board->board_name);
                         board = NULL;
                 } else {
-                        msg_pinfo("NOTE: Running an untested board enable procedure.\n"
+                        msg_perr("NOTE: Running an untested board enable procedure.\n"
                                "Please report success/failure to flashrom@flashrom.org.\n");
 		}
         }
