@@ -1,0 +1,33 @@
+Flashrom Testing
+
+Overall idea:
+- Break tests into small chunks
+- Have a single program that does generic setup and shutdown functions
+- Executes specified tests in a simple loop
+
+Dependencies:
+- uuencode
+- diff
+- A version of flashrom which is installed in $PATH. This is assumed to be a
+  "good" version of Flashrom and will be used to obtain a backup copy of the
+  ROM image at the beginning, and restore the image at the end.
+
+Important environment variables:
+FLASHROM: Path to the Flashrom binary to test
+FLASHROM_PARAM: Extra parameters to pass into flashrom, such as -p. Do *not*
+specify chip operations such as read/write/erase/verify here, as they are
+redundant with commands the script executes.
+
+Important global variables:
+BACKUP: The backup copy of ROM image which is read before executing any tests,
+        and restored unconditionally after execution of tests.
+
+Syntax:
+ENV_VARS="blah" ./do_tests.sh <test1> <test2>
+
+Example:
+FLASHROM="../flashrom" FLASHROM_PARAM="-p internal:bus=spi" ./do_tests foo.sh bar.sh
+
+Each unit test might have its own special requirements, such as extra
+environment variables, layout files, etc. Please read the comments at the top
+of each unit test to ensure there are no special dependencies.
