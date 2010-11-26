@@ -34,6 +34,12 @@
  */
 #define WRITE_STATUS_REGISTER_DELAY 100 * 1000  /* unit: us */
 
+/* Mask to extract SRP0 and range bits in status register.
+ *   SRP0:           bit 7
+ *   range(BP2-BP0): bit 4-2
+ */
+#define MASK_WP_AREA (0x9C)
+
 /*
  * The following procedures rely on look-up tables to match the user-specified
  * range with the chip's supported ranges. This turned out to be the most
@@ -440,11 +446,15 @@ static int spi_write_status_register_WREN(int status)
 	return result;
 }
 
+/* Given a [start, len], this function calls w25_range_to_status() to convert
+ * it to flash-chip-specific range bits, then sets into status register.
+ */
 static int w25_set_range(struct flashchip *flash,
                          unsigned int start, unsigned int len)
 {
 	struct w25q_status status;
-	int tmp;
+	int tmp = 0;
+	int expected = 0;
 
 	memset(&status, 0, sizeof(status));
 	tmp = spi_read_status_register();
@@ -462,14 +472,22 @@ static int w25_set_range(struct flashchip *flash,
 	msg_cdbg("status.sec: %x\n", status.sec);
 	msg_cdbg("status.srp0: %x\n", status.srp0);
 
-	memcpy(&tmp, &status, sizeof(status));
-	spi_write_status_register_WREN(tmp);
-	msg_cinfo("%s: new status: 0x%02x\n",
-		  __func__, spi_read_status_register());
+	memcpy(&expected, &status, sizeof(status));
+	spi_write_status_register_WREN(expected);
 
-	return 0;
+	tmp = spi_read_status_register();
+	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
+	if ((tmp & MASK_WP_AREA) == (expected & MASK_WP_AREA)) {
+		msg_cinfo("SUCCESS.\n");
+		return 0;
+	} else {
+		msg_cinfo("FAILED, expected=0x%02x, but actual=0x%02x.\n",
+		          expected, tmp);
+		return 1;
+	}
 }
 
+/* Print out the current status register value with human-readable text. */
 static int w25_wp_status(struct flashchip *flash)
 {
 	struct w25q_status status;
@@ -477,6 +495,7 @@ static int w25_wp_status(struct flashchip *flash)
 	unsigned int start, len;
 	int ret = 0;
 
+	memset(&status, 0, sizeof(status));
 	tmp = spi_read_status_register();
 	/* FIXME: this is NOT endian-free copy. */
 	memcpy(&status, &tmp, 1);
@@ -496,21 +515,27 @@ static int w25_wp_status(struct flashchip *flash)
 	return ret;
 }
 
+/* Set/clear the SRP0 bit in the status register. */
 static int w25_set_srp0(struct flashchip *flash, int enable)
 {
 	struct w25q_status status;
 	int tmp = 0;
+	int expected = 0;
 
 	memset(&status, 0, sizeof(status));
 	tmp = spi_read_status_register();
+	/* FIXME: this is NOT endian-free copy. */
 	memcpy(&status, &tmp, 1);
 	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
 
 	status.srp0 = enable ? 1 : 0;
-	memcpy(&tmp, &status, sizeof(status));
-	spi_write_status_register_WREN(tmp);
-	msg_cdbg("%s: new status: 0x%02x\n",
-		  __func__, spi_read_status_register());
+	memcpy(&expected, &status, sizeof(status));
+	spi_write_status_register_WREN(expected);
+
+	tmp = spi_read_status_register();
+	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
+	if ((tmp & MASK_WP_AREA) != (expected & MASK_WP_AREA))
+		return 1;
 
 	return 0;
 }
