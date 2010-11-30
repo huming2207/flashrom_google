@@ -711,7 +711,10 @@ int set_range_wpce775x(struct flashchip *flash, unsigned int start, unsigned int
 
 	/* Since WPCE775x doesn't support reading status register, we have to
 	 * set SRP0 to 1 when writing status register. */
+	/* FIXME: this line should be removed once the reading status register
+	 * has been supported in WPCE775x firmware. */
 	status.srp0 = 1;
+	msg_cinfo("INFO: SRP0 bit is set.\n");
 
 	msg_cdbg("Going to set: 0x%02x\n", *((unsigned char*)&status));
 	msg_cdbg("status.busy: %x\n", status.busy);
@@ -728,15 +731,42 @@ int set_range_wpce775x(struct flashchip *flash, unsigned int start, unsigned int
 	 * be updated. */
 	if (InitFlash(*(unsigned char*)&status))
 		return -1;
-	if (EnterFlashUpdate()) return 1;
-		ExitFlashUpdateFirmwareNoChange();
+	if (EnterFlashUpdate())
+		return -1;
 
+	ExitFlashUpdateFirmwareNoChange();
+	msg_cinfo("SUCCESS.\n");
 	return 0;
 }
 
+/* FIXME: the following enable and disable functions are just tempapory
+ * solution before the WPCE775x firmware supports reading status register.
+ * Should be refined later.
+ */
 static int enable_wpce775x(struct flashchip *flash)
 {
-	msg_cdbg("WPCE775x always sets SRP0 in set_range_wpce775x()\n");
+	msg_cinfo("INFO: set_range_wpce775x() already set SRP0 bit.\n");
+	msg_cinfo("SUCCESS.\n");
+	return 0;
+}
+
+static int disable_wpce775x(struct flashchip *flash)
+{
+	struct w25q_status status;
+
+	memset(&status, 0, sizeof(status));
+	msg_cinfo("INFO: Unlock both SRP0 and range bits.\n");
+
+	/* InitFlash (with particular status value), and EnterFlashUpdate() then
+	 * ExitFlashUpdate() immediately. Thus, the flash status register will
+	 * be updated. */
+	if (InitFlash(*(unsigned char*)&status))
+		return -1;
+	if (EnterFlashUpdate())
+		return -1;
+
+	ExitFlashUpdateFirmwareNoChange();
+	msg_cinfo("SUCCESS.\n");
 	return 0;
 }
 
@@ -744,4 +774,5 @@ static int enable_wpce775x(struct flashchip *flash)
 struct wp wp_wpce775x = {
 	.set_range      = set_range_wpce775x,
 	.enable         = enable_wpce775x,
+	.disable        = disable_wpce775x,
 };
