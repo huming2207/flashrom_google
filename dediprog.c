@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <usb.h>
 #include "flash.h"
@@ -26,6 +27,7 @@
 
 #define DEFAULT_TIMEOUT 3000
 static usb_dev_handle *dediprog_handle;
+static int dediprog_endpoint;
 
 #if 0
 /* Might be useful for other pieces of code as well. */
@@ -55,34 +57,35 @@ static struct usb_device *get_device_by_vid_pid(uint16_t vid, uint16_t pid)
 
 //int usb_control_msg(usb_dev_handle *dev, int requesttype, int request, int value, int index, char *bytes, int size, int timeout);
 
-static int dediprog_set_spi_voltage(uint16_t voltage)
+static int dediprog_set_spi_voltage(int millivolt)
 {
 	int ret;
-	unsigned int mv;
+	uint16_t voltage_selector;
 
-	switch (voltage) {
-	case 0x0:
+	switch (millivolt) {
+	case 0:
 		/* Admittedly this one is an assumption. */
-		mv = 0;
+		voltage_selector = 0x0;
 		break;
-	case 0x12:
-		mv = 1800;
+	case 1800:
+		voltage_selector = 0x12;
 		break;
-	case 0x11:
-		mv = 2500;
+	case 2500:
+		voltage_selector = 0x11;
 		break;
-	case 0x10:
-		mv = 3500;
+	case 3500:
+		voltage_selector = 0x10;
 		break;
 	default:
-		msg_perr("Unknown voltage selector 0x%x! Aborting.\n", voltage);
+		msg_perr("Unknown voltage %i mV! Aborting.\n", millivolt);
 		return 1;
 	}
-	msg_pdbg("Setting SPI voltage to %u.%03u V\n", mv / 1000, mv % 1000);
+	msg_pdbg("Setting SPI voltage to %u.%03u V\n", millivolt / 1000,
+		 millivolt % 1000);
 
-	ret = usb_control_msg(dediprog_handle, 0x42, 0x9, voltage, 0xff, NULL, 0x0, DEFAULT_TIMEOUT);
+	ret = usb_control_msg(dediprog_handle, 0x42, 0x9, voltage_selector, 0xff, NULL, 0x0, DEFAULT_TIMEOUT);
 	if (ret != 0x0) {
-		msg_perr("Command Set SPI Voltage 0x%x failed!\n", voltage);
+		msg_perr("Command Set SPI Voltage 0x%x failed!\n", voltage_selector);
 		return 1;
 	}
 	return 0;
@@ -146,11 +149,99 @@ static int dediprog_set_spi_speed(uint16_t speed)
 }
 #endif
 
+/* Bulk read interface, will read multiple 512 byte chunks aligned to 512 bytes.
+ * @start	start address
+ * @len		length
+ * @return	0 on success, 1 on failure
+ */
+static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
+				  int start, int len)
+{
+	int ret;
+	int i;
+	/* chunksize must be 512, other sizes will NOT work at all. */
+	const int chunksize = 0x200;
+	const int count = len / chunksize;
+	const char count_and_chunk[] = {count & 0xff,
+					(count >> 8) & 0xff,
+					chunksize & 0xff,
+					(chunksize >> 8) & 0xff};
+
+	if ((start % chunksize) || (len % chunksize)) {
+		msg_perr("%s: Unaligned start=%i, len=%i! Please report a bug "
+			 "at flashrom@flashrom.org\n", __func__, start, len);
+		return 1;
+	}
+
+	/* No idea if the hardware can handle empty reads, so chicken out. */
+	if (!len)
+		return 0;
+	/* Command Read SPI Bulk. No idea which read command is used on the
+	 * SPI side.
+	 */
+	ret = usb_control_msg(dediprog_handle, 0x42, 0x20, start % 0x10000,
+			      start / 0x10000, (char *)count_and_chunk,
+			      sizeof(count_and_chunk), DEFAULT_TIMEOUT);
+	if (ret != sizeof(count_and_chunk)) {
+		msg_perr("Command Read SPI Bulk failed, %i %s!\n", ret,
+			 usb_strerror());
+		return 1;
+	}
+
+	for (i = 0; i < count; i++) {
+		ret = usb_bulk_read(dediprog_handle, 0x80 | dediprog_endpoint,
+				    (char *)buf + i * chunksize, chunksize,
+				    DEFAULT_TIMEOUT);
+		if (ret != chunksize) {
+			msg_perr("SPI bulk read %i failed, expected %i, got %i "
+				 "%s!\n", i, chunksize, ret, usb_strerror());
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int dediprog_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
-	msg_pspew("%s, start=0x%x, len=0x%x\n", __func__, start, len);
-	/* Chosen read length is 16 bytes for now. */
-	return spi_read_chunked(flash, buf, start, len, 16);
+	int ret;
+	/* chunksize must be 512, other sizes will NOT work at all. */
+	const int chunksize = 0x200;
+	int residue = start % chunksize ? chunksize - start % chunksize : 0;
+	int bulklen;
+
+	if (residue) {
+		msg_pdbg("Slow read for partial block from 0x%x, length 0x%x\n",
+			 start, residue);
+		ret = spi_read_chunked(flash, buf, start, residue, 16);
+		if (ret)
+			return ret;
+	}
+
+	/* Round down. */
+	bulklen = (len - residue) / chunksize * chunksize;
+	ret = dediprog_spi_bulk_read(flash, buf + residue, start + residue,
+				     bulklen);
+	if (ret)
+		return ret;
+
+	len -= residue + bulklen;
+	if (len) {
+		msg_pdbg("Slow read for partial block from 0x%x, length 0x%x\n",
+			 start, len);
+		ret = spi_read_chunked(flash, buf + residue + bulklen,
+				       start + residue + bulklen, len, 16);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int dediprog_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
+{
+	/* No idea about the real limit. Maybe 12, maybe more, maybe less. */
+	return spi_write_chunked(flash, buf, start, len, 12);
 }
 
 int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
@@ -160,7 +251,7 @@ int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 
 	msg_pspew("%s, writecnt=%i, readcnt=%i\n", __func__, writecnt, readcnt);
 	/* Paranoid, but I don't want to be blamed if anything explodes. */
-	if (writecnt > 5) {
+	if (writecnt > 16) {
 		msg_perr("Untested writecnt=%i, aborting.\n", writecnt);
 		return 1;
 	}
@@ -191,6 +282,7 @@ int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 static int dediprog_check_devicestring(void)
 {
 	int ret;
+	int fw[3];
 	char buf[0x11];
 
 	/* Command Prepare Receive Device String. */
@@ -215,10 +307,14 @@ static int dediprog_check_devicestring(void)
 		msg_perr("Device not a SF100!\n");
 		return 1;
 	}
+	if (sscanf(buf, "SF100 V:%d.%d.%d ", &fw[0], &fw[1], &fw[2]) != 3) {
+		msg_perr("Unexpected firmware version string!\n");
+		return 1;
+	}
 	/* Only these versions were tested. */
-	if (memcmp(buf, "SF100   V:2.1.1 ", 0x10) &&
-	    memcmp(buf, "SF100   V:3.1.8 ", 0x10)) {
-		msg_perr("Unexpected firmware version!\n");
+	if (fw[0] < 2 || fw[0] > 5) {
+		msg_perr("Unexpected firmware version %d.%d.%d!\n", fw[0],
+			 fw[1], fw[2]);
 		return 1;
 	}
 	return 0;
@@ -235,6 +331,10 @@ static int dediprog_command_a(void)
 
 	memset(buf, 0, sizeof(buf));
 	ret = usb_control_msg(dediprog_handle, 0xc3, 0xb, 0x0, 0x0, buf, 0x1, DEFAULT_TIMEOUT);
+	if (ret < 0) {
+		msg_perr("Command A failed (%s)!\n", usb_strerror());
+		return 1;
+	}
 	if ((ret != 0x1) || (buf[0] != 0x6f)) {
 		msg_perr("Unexpected response to Command A!\n");
 		return 1;
@@ -279,12 +379,74 @@ static int dediprog_command_f(int timeout)
 }
 #endif
 
+static int parse_voltage(char *voltage)
+{
+	char *tmp = NULL;
+	int i;
+	int millivolt;
+	int fraction = 0;
+
+	if (!voltage || !strlen(voltage)) {
+		msg_perr("Empty voltage= specified.\n");
+		return -1;
+	}
+	millivolt = (int)strtol(voltage, &tmp, 0);
+	voltage = tmp;
+	/* Handle "," and "." as decimal point. Everything after it is assumed
+	 * to be in decimal notation.
+	 */
+	if ((*voltage == '.') || (*voltage == ',')) {
+		voltage++;
+		for (i = 0; i < 3; i++) {
+			fraction *= 10;
+			/* Don't advance if the current character is invalid,
+			 * but continue multiplying.
+			 */
+			if ((*voltage < '0') || (*voltage > '9'))
+				continue;
+			fraction += *voltage - '0';
+			voltage++;
+		}
+		/* Throw away remaining digits. */
+		voltage += strspn(voltage, "0123456789");
+	}
+	/* The remaining string must be empty or "mV" or "V". */
+	tolower_string(voltage);
+
+	/* No unit or "V". */
+	if ((*voltage == '\0') || !strncmp(voltage, "v", 1)) {
+		millivolt *= 1000;
+		millivolt += fraction;
+	} else if (!strncmp(voltage, "mv", 2) ||
+		   !strncmp(voltage, "milliv", 6)) {
+		/* No adjustment. fraction is discarded. */
+	} else {
+		/* Garbage at the end of the string. */
+		msg_perr("Garbage voltage= specified.\n");
+		return -1;
+	}
+	return millivolt;
+}
+
 /* URB numbers refer to the first log ever captured. */
 int dediprog_init(void)
 {
 	struct usb_device *dev;
+	char *voltage;
+	int millivolt = 3500;
+	int ret;
 
 	msg_pspew("%s\n", __func__);
+
+	voltage = extract_programmer_param("voltage");
+	if (voltage) {
+		millivolt = parse_voltage(voltage);
+		free(voltage);
+		if (millivolt < 0) {
+			return 1;
+		}
+		msg_pinfo("Setting voltage to %i mV\n", millivolt);
+	}
 
 	/* Here comes the USB stuff. */
 	usb_init();
@@ -299,8 +461,23 @@ int dediprog_init(void)
 		 dev->descriptor.idVendor,
 		 dev->descriptor.idProduct);
 	dediprog_handle = usb_open(dev);
-	usb_set_configuration(dediprog_handle, 1);
-	usb_claim_interface(dediprog_handle, 0);
+	ret = usb_set_configuration(dediprog_handle, 1);
+	if (ret < 0) {
+		msg_perr("Could not set USB device configuration: %i %s\n",
+			 ret, usb_strerror());
+		if (usb_close(dediprog_handle))
+			msg_perr("Could not close USB device!\n");
+		return 1;
+	}
+	ret = usb_claim_interface(dediprog_handle, 0);
+	if (ret < 0) {
+		msg_perr("Could not claim USB device interface %i: %i %s\n",
+			 0, ret, usb_strerror());
+		if (usb_close(dediprog_handle))
+			msg_perr("Could not close USB device!\n");
+		return 1;
+	}
+	dediprog_endpoint = 2;
 	/* URB 6. Command A. */
 	if (dediprog_command_a())
 		return 1;
@@ -315,7 +492,7 @@ int dediprog_init(void)
 	if (dediprog_command_c())
 		return 1;
 	/* URB 11. Command Set SPI Voltage. */
-	if (dediprog_set_spi_voltage(0x10))
+	if (dediprog_set_spi_voltage(millivolt))
 		return 1;
 
 	buses_supported = CHIP_BUSTYPE_SPI;
@@ -389,8 +566,12 @@ int dediprog_shutdown(void)
 	if (dediprog_set_spi_voltage(0x0))
 		return 1;
 
+	if (usb_release_interface(dediprog_handle, 0)) {
+		msg_perr("Could not release USB interface!\n");
+		return 1;
+	}
 	if (usb_close(dediprog_handle)) {
-		msg_perr("Couldn't close USB device!\n");
+		msg_perr("Could not close USB device!\n");
 		return 1;
 	}
 	return 0;

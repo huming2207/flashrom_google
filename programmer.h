@@ -37,10 +37,10 @@ enum programmer {
 #if CONFIG_NICREALTEK == 1
 	PROGRAMMER_NICREALTEK,
 	PROGRAMMER_NICREALTEK2,
-#endif	
+#endif
 #if CONFIG_NICNATSEMI == 1
 	PROGRAMMER_NICNATSEMI,
-#endif	
+#endif
 #if CONFIG_GFXNVIDIA == 1
 	PROGRAMMER_GFXNVIDIA,
 #endif
@@ -72,6 +72,9 @@ enum programmer {
 #endif
 #if CONFIG_RAYER_SPI == 1
 	PROGRAMMER_RAYER_SPI,
+#endif
+#if CONFIG_NICINTEL_SPI == 1
+	PROGRAMMER_NICINTEL_SPI,
 #endif
 	PROGRAMMER_INVALID /* This must always be the last entry. */
 };
@@ -110,6 +113,9 @@ enum bitbang_spi_master_type {
 #if CONFIG_RAYER_SPI == 1
 	BITBANG_SPI_MASTER_RAYER,
 #endif
+#if CONFIG_NICINTEL_SPI == 1
+	BITBANG_SPI_MASTER_NICINTEL,
+#endif
 #if CONFIG_INTERNAL == 1
 #if defined(__i386__) || defined(__x86_64__)
 	BITBANG_SPI_MASTER_MCP,
@@ -125,6 +131,8 @@ struct bitbang_spi_master {
 	void (*set_sck) (int val);
 	void (*set_mosi) (int val);
 	int (*get_miso) (void);
+	void (*request_bus) (void);
+	void (*release_bus) (void);
 };
 
 #if CONFIG_INTERNAL == 1
@@ -204,10 +212,16 @@ struct pcidev_status {
 };
 uint32_t pcidev_validate(struct pci_dev *dev, uint32_t bar, const struct pcidev_status *devs);
 uint32_t pcidev_init(uint16_t vendor_id, uint32_t bar, const struct pcidev_status *devs);
+/* rpci_write_* are reversible writes. The original PCI config space register
+ * contents will be restored on shutdown.
+ */
+int rpci_write_byte(struct pci_dev *dev, int reg, u8 data);
+int rpci_write_word(struct pci_dev *dev, int reg, u16 data);
+int rpci_write_long(struct pci_dev *dev, int reg, u32 data);
 #endif
 
 /* print.c */
-#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT >= 1
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL_SPI >= 1
 void print_supported_pcidevs(const struct pcidev_status *devs);
 #endif
 
@@ -378,6 +392,16 @@ uint8_t nicnatsemi_chip_readb(const chipaddr addr);
 extern const struct pcidev_status nics_natsemi[];
 #endif
 
+/* nicintel_spi.c */
+#if CONFIG_NICINTEL_SPI == 1
+int nicintel_spi_init(void);
+int nicintel_spi_shutdown(void);
+int nicintel_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+	const unsigned char *writearr, unsigned char *readarr);
+void nicintel_spi_chip_writeb(uint8_t val, chipaddr addr);
+extern const struct pcidev_status nics_intel_spi[];
+#endif
+
 /* satasii.c */
 #if CONFIG_SATASII == 1
 int satasii_init(void);
@@ -399,11 +423,11 @@ extern const struct pcidev_status ata_hpt[];
 /* ft2232_spi.c */
 #if CONFIG_FT2232_SPI == 1
 struct usbdev_status {
-uint16_t vendor_id;
-        uint16_t device_id;
-        int status;
-        const char *vendor_name;
-        const char *device_name;
+	uint16_t vendor_id;
+	uint16_t device_id;
+	int status;
+	const char *vendor_name;
+	const char *device_name;
 };
 int ft2232_spi_init(void);
 int ft2232_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
@@ -427,6 +451,7 @@ int mcp6x_spi_init(int want_spi);
 
 /* bitbang_spi.c */
 int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod);
+int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 int bitbang_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
 int bitbang_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
 int bitbang_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
@@ -447,6 +472,7 @@ int dediprog_init(void);
 int dediprog_shutdown(void);
 int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
 int dediprog_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
+int dediprog_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
 
 /* flashrom.c */
 struct decode_sizes {
@@ -478,6 +504,7 @@ enum spi_controller {
 	SPI_CONTROLLER_VIA,
 	SPI_CONTROLLER_WBSIO,
 	SPI_CONTROLLER_MCP6X_BITBANG,
+	SPI_CONTROLLER_WPCE775X,
 #endif
 #endif
 #if CONFIG_FT2232_SPI == 1
@@ -494,6 +521,9 @@ enum spi_controller {
 #endif
 #if CONFIG_RAYER_SPI == 1
 	SPI_CONTROLLER_RAYER,
+#endif
+#if CONFIG_NICINTEL_SPI == 1
+	SPI_CONTROLLER_NICINTEL,
 #endif
 	SPI_CONTROLLER_INVALID /* This must always be the last entry. */
 };
@@ -577,6 +607,18 @@ typedef HANDLE fdtype;
 #else
 typedef int fdtype;
 #endif
+
+/* wpce775x.c */
+struct superio probe_superio_wpce775x(void);
+int wpce775x_shutdown(void);
+int wpce775x_probe_spi_flash(const char *name);
+int wpce775x_spi_read(struct flashchip *flash,
+                      uint8_t * buf, int start, int len);
+int wpce775x_spi_write_256(struct flashchip *flash,
+                           uint8_t *buf, int start, int len);
+int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+			      const unsigned char *writearr,
+			      unsigned char *readarr);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

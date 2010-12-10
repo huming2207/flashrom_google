@@ -88,9 +88,10 @@ int probe_82802ab(struct flashchip *flash)
 	return 1;
 }
 
-uint8_t wait_82802ab(chipaddr bios)
+uint8_t wait_82802ab(struct flashchip *flash)
 {
 	uint8_t status;
+	chipaddr bios = flash->virtual_memory;
 
 	chip_writeb(0x70, bios);
 	if ((chip_readb(bios) & 0x80) == 0) {	// it's busy
@@ -132,70 +133,31 @@ int erase_block_82802ab(struct flashchip *flash, unsigned int page, unsigned int
 	programmer_delay(10);
 
 	// now let's see what the register is
-	status = wait_82802ab(bios);
+	status = wait_82802ab(flash);
 	print_status_82802ab(status);
 
 	if (check_erased_range(flash, page, pagesize)) {
 		msg_cerr("ERASE FAILED!\n");
 		return -1;
 	}
-	msg_cinfo("DONE BLOCK 0x%x\n", page);
 
 	return 0;
 }
 
-int erase_82802ab(struct flashchip *flash)
+/* chunksize is 1 */
+int write_82802ab(struct flashchip *flash, uint8_t *src, int start, int len)
 {
 	int i;
-	unsigned int total_size = flash->total_size * 1024;
+	chipaddr dst = flash->virtual_memory + start;
 
-	msg_cspew("total_size is %d; flash->page_size is %d\n",
-	       total_size, flash->page_size);
-	for (i = 0; i < total_size; i += flash->page_size)
-		if (erase_block_82802ab(flash, i, flash->page_size)) {
-			msg_cerr("ERASE FAILED!\n");
-			return -1;
-		}
-	msg_cinfo("DONE ERASE\n");
-
-	return 0;
-}
-
-void write_page_82802ab(chipaddr bios, uint8_t *src,
-			chipaddr dst, int page_size)
-{
-	int i;
-
-	for (i = 0; i < page_size; i++) {
+	for (i = 0; i < len; i++) {
 		/* transfer data from source to destination */
 		chip_writeb(0x40, dst);
 		chip_writeb(*src++, dst++);
-		wait_82802ab(bios);
-	}
-}
-
-int write_82802ab(struct flashchip *flash, uint8_t *buf)
-{
-	int i;
-	chipaddr bios = flash->virtual_memory;
-
-	if (erase_flash(flash)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
+		wait_82802ab(flash);
 	}
 
-	msg_cinfo("Programming at: ");
-	for (i = 0; i < flash->total_size; i++) {
-		if ((i & 0x3) == 0)
-			msg_cinfo("address: 0x%08lx", (unsigned long)i * 1024);
-
-                write_page_82802ab(bios, buf + i * 1024, bios + i * 1024, 1024);
-
-		if ((i & 0x3) == 0)
-			msg_cinfo("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	}
-
-	msg_cinfo("DONE!\n");
+	/* FIXME: Ignore errors for now. */
 	return 0;
 }
 

@@ -193,6 +193,7 @@ cpu_to_be(64)
   #define INL(x) __extension__ ({ u_int inl_tmp = (x); inl(inl_tmp); })
 #else
 #if defined(__DARWIN__)
+    /* Header is part of the DirectHW library. */
     #include <DirectIO/darwinio.h>
     #define off64_t off_t
     #define lseek64 lseek
@@ -252,7 +253,6 @@ cpu_to_be(64)
       #define iopl amd64_iopl
     #endif
 #endif
-  #include <stdint.h>
 
 static inline void outb(uint8_t value, uint16_t port)
 {
@@ -292,7 +292,7 @@ static inline uint32_t inl(uint16_t port)
   #endif
 #endif
 
-#if !defined(__DARWIN__) && !defined(__FreeBSD__) && !defined(__DragonFly__)
+#if !defined(__DARWIN__) && !defined(__FreeBSD__) && !defined(__DragonFly__) && !defined(__LIBPAYLOAD__)
 typedef struct { uint32_t hi, lo; } msr_t;
 msr_t rdmsr(int addr);
 int wrmsr(int addr, msr_t msr);
@@ -306,6 +306,16 @@ int wrmsr(int addr, msr_t msr);
 typedef struct { uint32_t hi, lo; } msr_t;
 msr_t freebsd_rdmsr(int addr);
 int freebsd_wrmsr(int addr, msr_t msr);
+#endif
+#if defined(__LIBPAYLOAD__)
+#include <arch/io.h>
+#include <arch/msr.h>
+typedef struct { uint32_t hi, lo; } msr_t;
+msr_t libpayload_rdmsr(int addr);
+int libpayload_wrmsr(int addr, msr_t msr);
+#undef rdmsr
+#define rdmsr libpayload_rdmsr
+#define wrmsr libpayload_wrmsr
 #endif
 
 #elif defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__)

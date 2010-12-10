@@ -167,7 +167,7 @@ int cli_mfg(int argc, char *argv[])
 #endif
 	int operation_specified = 0;
 	int i;
-	int rc = 1;
+	int rc = 0;
 
 	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzh";
 	static struct option long_options[] = {
@@ -514,6 +514,13 @@ int cli_mfg(int argc, char *argv[])
 	if (write_it && !dont_verify_it)
 		verify_it = 1;
 
+	/* Note: set_wp_disable should be done before setting the range */
+	if (set_wp_disable) {
+		if (flash->wp && flash->wp->disable)
+			rc = flash->wp->disable(flash);
+	}
+
+	/* Note: set_wp_range must happen before set_wp_enable */
 	if (set_wp_range) {
 		unsigned int start, len;
 		char *endptr = NULL;
@@ -541,22 +548,28 @@ int cli_mfg(int argc, char *argv[])
 
 		if (flash->wp && flash->wp->set_range)
 			rc = flash->wp->set_range(flash, start, len);
-	} else if (set_wp_enable) {
+	}
+	
+	if (!rc && set_wp_enable) {
 		if (flash->wp && flash->wp->enable)
 			rc = flash->wp->enable(flash);
-	} else if (set_wp_disable) {
-		if (flash->wp && flash->wp->disable)
-			rc = flash->wp->disable(flash);
-	} else if (get_size) {
+	}
+	
+	if (get_size) {
 		printf("%d\n", flash->total_size * 1024);
 		rc = 0;
-	} else if (wp_status) {
-		if (flash->wp && flash->wp->wp_status)
-			rc = flash->wp->wp_status(flash);
-	} else {
-		rc = doit(flash, force, filename, read_it, write_it, erase_it, verify_it);
 	}
 
-	programmer_shutdown();
+	if (wp_status) {
+		if (flash->wp && flash->wp->wp_status)
+			rc = flash->wp->wp_status(flash);
+	}
+	
+	if (read_it || write_it || erase_it || verify_it)
+		rc = doit(flash, force, filename,
+		          read_it, write_it, erase_it, verify_it);
+
+	programmer_shutdown();	/* must be done after chip_restore() */
+	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 	return rc;
 }

@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-/* Driver for the Nvidia MCP6x/MCP7x MCP6X_SPI controller.
+/* Driver for the NVIDIA MCP6x/MCP7x MCP6X_SPI controller.
  * Based on clean room reverse engineered docs from
  * http://www.flashrom.org/pipermail/flashrom/2009-December/001180.html
  * created by Michael Karcher.
@@ -25,7 +25,6 @@
 
 #if defined(__i386__) || defined(__x86_64__)
 
-#include <stdint.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include "flash.h"
@@ -42,73 +41,53 @@
 
 void *mcp6x_spibar = NULL;
 
+/* Cached value of last GPIO state. */
+static uint8_t mcp_gpiostate;
+
 static void mcp6x_request_spibus(void)
 {
-	uint8_t tmp;
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp |= 1 << MCP6X_SPI_REQUEST;
-	mmio_writeb(tmp, mcp6x_spibar + 0x530);
+	mcp_gpiostate = mmio_readb(mcp6x_spibar + 0x530);
+	mcp_gpiostate |= 1 << MCP6X_SPI_REQUEST;
+	mmio_writeb(mcp_gpiostate, mcp6x_spibar + 0x530);
 
 	/* Wait until we are allowed to use the SPI bus. */
 	while (!(mmio_readw(mcp6x_spibar + 0x530) & (1 << MCP6X_SPI_GRANT))) ;
+
+	/* Update the cache. */
+	mcp_gpiostate = mmio_readb(mcp6x_spibar + 0x530);
 }
 
 static void mcp6x_release_spibus(void)
 {
-	uint8_t tmp;
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp &= ~(1 << MCP6X_SPI_REQUEST);
-	mmio_writeb(tmp, mcp6x_spibar + 0x530);
+	mcp_gpiostate &= ~(1 << MCP6X_SPI_REQUEST);
+	mmio_writeb(mcp_gpiostate, mcp6x_spibar + 0x530);
 }
 
 static void mcp6x_bitbang_set_cs(int val)
 {
-	uint8_t tmp;
-
-	/* Requesting and releasing the SPI bus is handled in here to allow the
-	 * chipset to use its own SPI engine for native reads.
-	 */
-	if (val == 0)
-		mcp6x_request_spibus();
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp &= ~(1 << MCP6X_SPI_CS);
-	tmp |= (val << MCP6X_SPI_CS);
-	mmio_writeb(tmp, mcp6x_spibar + 0x530);
-
-	if (val == 1)
-		mcp6x_release_spibus();
+	mcp_gpiostate &= ~(1 << MCP6X_SPI_CS);
+	mcp_gpiostate |= (val << MCP6X_SPI_CS);
+	mmio_writeb(mcp_gpiostate, mcp6x_spibar + 0x530);
 }
 
 static void mcp6x_bitbang_set_sck(int val)
 {
-	uint8_t tmp;
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp &= ~(1 << MCP6X_SPI_SCK);
-	tmp |= (val << MCP6X_SPI_SCK);
-	mmio_writeb(tmp, mcp6x_spibar + 0x530);
+	mcp_gpiostate &= ~(1 << MCP6X_SPI_SCK);
+	mcp_gpiostate |= (val << MCP6X_SPI_SCK);
+	mmio_writeb(mcp_gpiostate, mcp6x_spibar + 0x530);
 }
 
 static void mcp6x_bitbang_set_mosi(int val)
 {
-	uint8_t tmp;
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp &= ~(1 << MCP6X_SPI_MOSI);
-	tmp |= (val << MCP6X_SPI_MOSI);
-	mmio_writeb(tmp, mcp6x_spibar + 0x530);
+	mcp_gpiostate &= ~(1 << MCP6X_SPI_MOSI);
+	mcp_gpiostate |= (val << MCP6X_SPI_MOSI);
+	mmio_writeb(mcp_gpiostate, mcp6x_spibar + 0x530);
 }
 
 static int mcp6x_bitbang_get_miso(void)
 {
-	uint8_t tmp;
-
-	tmp = mmio_readb(mcp6x_spibar + 0x530);
-	tmp = (tmp >> MCP6X_SPI_MISO) & 0x1;
-	return tmp;
+	mcp_gpiostate = mmio_readb(mcp6x_spibar + 0x530);
+	return (mcp_gpiostate >> MCP6X_SPI_MISO) & 0x1;
 }
 
 static const struct bitbang_spi_master bitbang_spi_master_mcp6x = {
@@ -117,6 +96,8 @@ static const struct bitbang_spi_master bitbang_spi_master_mcp6x = {
 	.set_sck = mcp6x_bitbang_set_sck,
 	.set_mosi = mcp6x_bitbang_set_mosi,
 	.get_miso = mcp6x_bitbang_get_miso,
+	.request_bus = mcp6x_request_spibus,
+	.release_bus = mcp6x_release_spibus,
 };
 
 int mcp6x_spi_init(int want_spi)
@@ -165,7 +146,7 @@ int mcp6x_spi_init(int want_spi)
 		return 0;
 	}
 	/* Map the BAR. Bytewise/wordwise access at 0x530 and 0x540. */
-	mcp6x_spibar = physmap("Nvidia MCP6x SPI", mcp6x_spibaraddr, 0x544);
+	mcp6x_spibar = physmap("NVIDIA MCP6x SPI", mcp6x_spibaraddr, 0x544);
 
 #if 0
 	/* FIXME: Run the physunmap in a shutdown function. */
@@ -176,9 +157,10 @@ int mcp6x_spi_init(int want_spi)
 	msg_pdbg("SPI control is 0x%04x, req=%i, gnt=%i\n",
 		 status, (status >> MCP6X_SPI_REQUEST) & 0x1,
 		 (status >> MCP6X_SPI_GRANT) & 0x1);
+	mcp_gpiostate = status & 0xff;
 
-	/* 1 usec halfperiod delay for now. */
-	if (bitbang_spi_init(&bitbang_spi_master_mcp6x, 1)) {
+	/* Zero halfperiod delay. */
+	if (bitbang_spi_init(&bitbang_spi_master_mcp6x, 0)) {
 		/* This should never happen. */
 		msg_perr("MCP6X bitbang SPI master init failed!\n");
 		return 1;

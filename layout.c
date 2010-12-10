@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
 #include "flash.h"
 #include "programmer.h"
 
@@ -134,6 +135,7 @@ int show_id(uint8_t *bios, int size, int force)
 }
 #endif
 
+#ifndef __LIBPAYLOAD__
 int read_romlayout(char *name)
 {
 	FILE *romlayout;
@@ -181,6 +183,7 @@ int read_romlayout(char *name)
 
 	return 0;
 }
+#endif
 
 int find_romentry(char *name)
 {
@@ -203,98 +206,62 @@ int find_romentry(char *name)
 	return -1;
 }
 
-int handle_romentries(uint8_t *buffer, struct flashchip *flash)
+int find_next_included_romentry(unsigned int start)
 {
 	int i;
+	unsigned int best_start = UINT_MAX;
+	int best_entry = -1;
 
-	// This function does not save flash write cycles.
-	// 
-	// Also it does not cope with overlapping rom layout
-	// sections. 
-	// example:
-	// 00000000:00008fff gfxrom
-	// 00009000:0003ffff normal
-	// 00040000:0007ffff fallback
-	// 00000000:0007ffff all
-	//
-	// If you'd specify -i all the included flag of all other
-	// sections is still 0, so no changes will be made to the
-	// flash. Same thing if you specify -i normal -i all only 
-	// normal will be updated and the rest will be kept.
-
+	/* First come, first serve for overlapping regions. */
 	for (i = 0; i < romimages; i++) {
-
-		if (rom_entries[i].included)
+		if (!rom_entries[i].included)
 			continue;
-
-		flash->read(flash, buffer + rom_entries[i].start,
-			    rom_entries[i].start,
-			    rom_entries[i].end - rom_entries[i].start + 1);
-	}
-
-	return 0;
-}
-
-/* Given an addr, this function returns if the addr falls in the regions
- * those user specifies with -i option (partition).
- *
- * Returns: 1 if this addr falls in -i regions.
- *          0 if not in regions.
- */
-int in_valid_romentry(const chipaddr addr) {
-	int i;
-
-	if (romimages) {
-		for (i = 0; i < romimages; ++i) {
-			if (!rom_entries[i].included)
-				continue;
-
-			if ((addr >= rom_entries[i].start) &&
-			    (addr <= rom_entries[i].end)) {
-				return 1;
-			}
+		/* Already past the current entry? */
+		if (start > rom_entries[i].end)
+			continue;
+		/* Inside the current entry? */
+		if (start >= rom_entries[i].start)
+			return i;
+		/* Entry begins after start. */
+		if (best_start > rom_entries[i].start) {
+			best_start = rom_entries[i].start;
+			best_entry = i;
 		}
-		return 0;
-	} else {
-		return 1;  /* always TRUE if no layout is specified */
 	}
-
-	return 0;
+	return best_entry;
 }
 
-/** Given a callback function, only *included* entries apply the callback.
- *  @buffer - the start of buffer
- *  @flash - point to flash info
- *  @do_action - callback function that handles included entry.
- */
-int do_romentries(uint8_t *buffer, struct flashchip *flash,
-                  int (*do_action)(struct flashchip *flash,
-                                   uint8_t *buf,
-                                   const chipaddr addr, size_t len))
+int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
-	int i;
-	int len;
-	if (!do_action) return 1;
+	unsigned int start = 0;
+	int entry;
+	unsigned int size = flash->total_size * 1024;
 
-	if (romimages) {
-		for (i = 0; i < romimages; i++) {
-			if (!rom_entries[i].included)
-				continue;
-
-			len = rom_entries[i].end - rom_entries[i].start + 1;
-			msg_gdbg("Doing %p(%p) 0x%08x (len=0x%08x)\n",
-			         do_action, buffer,
-			         rom_entries[i].start, len);
-			if (do_action(flash, buffer,
-			              rom_entries[i].start, len))
-				return 1;
+	/* If no layout file was specified or the layout file was empty, assume
+	 * that the user wants to flash the complete new image.
+	 */
+	if (!romimages)
+		return 0;
+	/* Non-included romentries are ignored.
+	 * The union of all included romentries is used from the new image.
+	 */
+	while (start < size) {
+		entry = find_next_included_romentry(start);
+		/* No more romentries for remaining region? */
+		if (entry < 0) {
+			memcpy(newcontents + start, oldcontents + start,
+			       size - start);
+			break;
 		}
-	} else {
-		/* no layout table specified, apply to whole flash. */
-		len = flash->total_size * 1024;
-		if (do_action(flash, buffer, 0, len))
-			return 1;
+		if (rom_entries[entry].start > start)
+			memcpy(newcontents + start, oldcontents + start,
+			       rom_entries[entry].start - start);
+		/* Skip to location after current romentry. */
+		start = rom_entries[entry].end + 1;
+		/* Catch overflow. */
+		if (!start)
+			break;
 	}
-
+			
 	return 0;
 }

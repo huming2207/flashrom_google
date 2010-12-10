@@ -21,7 +21,6 @@
 #if CONFIG_FT2232_SPI == 1
 
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -36,10 +35,16 @@
 #define FTDI_FT4232H_PID	0x6011
 #define AMONTEC_JTAGKEY_PID	0xCFF8
 
+#define FIC_VID			0x1457
+#define OPENMOKO_DBGBOARD_PID	0x5118
+
 const struct usbdev_status devs_ft2232spi[] = {
 	{FTDI_VID, FTDI_FT2232H_PID, OK, "FTDI", "FT2232H"},
 	{FTDI_VID, FTDI_FT4232H_PID, OK, "FTDI", "FT4232H"},
 	{FTDI_VID, AMONTEC_JTAGKEY_PID, OK, "Amontec", "JTAGkey"},
+	{FIC_VID, OPENMOKO_DBGBOARD_PID, OK,
+		"First International Computer, Inc.",
+		"OpenMoko Neo1973 Debug board (V2+)"},
 	{},
 };
 
@@ -47,11 +52,11 @@ const struct usbdev_status devs_ft2232spi[] = {
  * The 'H' chips can run internally at either 12MHz or 60MHz.
  * The non-H chips can only run at 12MHz.
  */
-#define CLOCK_5X 1
+static uint8_t clock_5x = 1;
 
 /*
  * In either case, the divisor is a simple integer clock divider.
- * If CLOCK_5X is set, this divisor divides 30MHz, else it divides 6MHz.
+ * If clock_5x is set, this divisor divides 30MHz, else it divides 6MHz.
  */
 #define DIVIDE_BY 3  /* e.g. '3' will give either 10MHz or 2MHz SPI clock. */
 
@@ -109,11 +114,16 @@ static int get_buf(struct ftdi_context *ftdic, const unsigned char *buf,
 		   int size)
 {
 	int r;
-	r = ftdi_read_data(ftdic, (unsigned char *) buf, size);
-	if (r < 0) {
-		msg_perr("ftdi_read_data: %d, %s\n", r,
-				ftdi_get_error_string(ftdic));
-		return 1;
+
+	while (size > 0) {
+		r = ftdi_read_data(ftdic, (unsigned char *) buf, size);
+		if (r < 0) {
+			msg_perr("ftdi_read_data: %d, %s\n", r,
+					ftdi_get_error_string(ftdic));
+			return 1;
+		}
+		buf += r;
+		size -= r;
 	}
 	return 0;
 }
@@ -127,6 +137,7 @@ int ft2232_spi_init(void)
 	int ft2232_type = FTDI_FT4232H_PID;
 	enum ftdi_interface ft2232_interface = INTERFACE_B;
 	char *arg;
+	double mpsse_clk;
 
 	arg = extract_programmer_param("type");
 	if (arg) {
@@ -139,8 +150,11 @@ int ft2232_spi_init(void)
 			ft2232_interface = INTERFACE_A;
 			cs_bits = 0x18;
 			pindir = 0x1b;
-		}
-		else {
+		} else if (!strcasecmp(arg, "openmoko")) {
+			ft2232_vid = FIC_VID;
+			ft2232_type = OPENMOKO_DBGBOARD_PID;
+			ft2232_interface = INTERFACE_A;
+		} else {
 			msg_perr("Error: Invalid device type specified.\n");
 			free(arg);
 			return 1;
@@ -149,7 +163,7 @@ int ft2232_spi_init(void)
 	free(arg);
 	arg = extract_programmer_param("port");
 	if (arg) {
-		switch (toupper(*arg)) {
+		switch (toupper((unsigned char)*arg)) {
 		case 'A':
 			ft2232_interface = INTERFACE_A;
 			break;
@@ -174,12 +188,18 @@ int ft2232_spi_init(void)
 		return EXIT_FAILURE; // TODO
 	}
 
-	f = ftdi_usb_open(ftdic, FTDI_VID, ft2232_type);
+	f = ftdi_usb_open(ftdic, ft2232_vid, ft2232_type);
 
 	if (f < 0 && f != -5) {
 		msg_perr("Unable to open FTDI device: %d (%s)\n", f,
 				ftdi_get_error_string(ftdic));
 		exit(-1); // TODO
+	}
+
+	if (ftdic->type != TYPE_2232H && ftdic->type != TYPE_4232H) {
+		msg_pdbg("FTDI chip type %d is not high-speed\n",
+			ftdic->type);
+		clock_5x = 0;
 	}
 
 	if (ftdi_set_interface(ftdic, ft2232_interface) < 0) {
@@ -195,7 +215,7 @@ int ft2232_spi_init(void)
 		msg_perr("Unable to set latency timer\n");
 	}
 
-	if (ftdi_write_data_set_chunksize(ftdic, 512)) {
+	if (ftdi_write_data_set_chunksize(ftdic, 256)) {
 		msg_perr("Unable to set chunk size\n");
 	}
 
@@ -203,18 +223,16 @@ int ft2232_spi_init(void)
 		msg_perr("Unable to set bitmode to SPI\n");
 	}
 
-#if CLOCK_5X
-	msg_pdbg("Disable divide-by-5 front stage\n");
-	buf[0] = 0x8a;		/* Disable divide-by-5. */
-	if (send_buf(ftdic, buf, 1))
-		return -1;
-#define MPSSE_CLK 60.0
+	if (clock_5x) {
+		msg_pdbg("Disable divide-by-5 front stage\n");
+		buf[0] = 0x8a;		/* Disable divide-by-5. */
+		if (send_buf(ftdic, buf, 1))
+			return -1;
+		mpsse_clk = 60.0;
+	} else {
+		mpsse_clk = 12.0;
+	}
 
-#else
-
-#define MPSSE_CLK 12.0
-
-#endif
 	msg_pdbg("Set clock divisor\n");
 	buf[0] = 0x86;		/* command "set divisor" */
 	/* valueL/valueH are (desired_divisor - 1) */
@@ -223,8 +241,10 @@ int ft2232_spi_init(void)
 	if (send_buf(ftdic, buf, 3))
 		return -1;
 
-	msg_pdbg("SPI clock is %fMHz\n",
-		 (double)(MPSSE_CLK / (((DIVIDE_BY - 1) + 1) * 2)));
+	msg_pdbg("MPSSE clock: %f MHz divisor: %d "
+		 "SPI clock: %f MHz\n",
+		 mpsse_clk, DIVIDE_BY,
+		 (double)(mpsse_clk / (((DIVIDE_BY - 1) + 1) * 2)));
 
 	/* Disconnect TDI/DO to TDO/DI for loopback. */
 	msg_pdbg("No loopback of TDI/DO TDO/DI\n");
@@ -347,6 +367,7 @@ void print_supported_usbdevs(const struct usbdev_status *devs)
 {
 	int i;
 
+	msg_pinfo("USB devices:\n");
 	for (i = 0; devs[i].vendor_name != NULL; i++) {
 		msg_pinfo("%s %s [%04x:%04x]%s\n", devs[i].vendor_name,
 			  devs[i].device_name, devs[i].vendor_id,

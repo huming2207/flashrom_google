@@ -42,6 +42,7 @@ STRIP_ARGS = -s
 endif
 ifeq ($(OS_ARCH), Darwin)
 CPPFLAGS += -I/opt/local/include -I/usr/local/include
+# DirectIO framework can be found in the DirectHW library.
 LDFLAGS += -framework IOKit -framework DirectIO -L/opt/local/lib -L/usr/local/lib
 endif
 ifeq ($(OS_ARCH), FreeBSD)
@@ -83,7 +84,7 @@ endif
 
 CHIP_OBJS = jedec.o stm50flw0x0x.o w39v040c.o w39v080fa.o w29ee011.o \
 	sst28sf040.o m29f400bt.o 82802ab.o pm49fl00x.o \
-	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o \
+	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
 	wpce775x.o writeprotect.o
 
 LIB_OBJS = layout.o
@@ -100,7 +101,7 @@ all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
 # will not require subversion. The downloadable snapshots are already exported.
 SVNVERSION := $(shell ./util/getversion.sh)
 
-RELEASE := 0.9.2
+RELEASE := 0.9.3
 VERSION := $(RELEASE) $(SVNVERSION)
 RELEASENAME ?= $(VERSION)
 
@@ -114,17 +115,6 @@ CONFIG_SERPROG ?= yes
 
 # RayeR SPIPGM hardware support
 CONFIG_RAYER_SPI ?= yes
-
-# Bitbanging SPI infrastructure, default off unless needed.
-ifeq ($(CONFIG_RAYER_SPI), yes)
-override CONFIG_BITBANG_SPI = yes
-else
-ifeq ($(CONFIG_INTERNAL), yes)
-override CONFIG_BITBANG_SPI = yes
-else
-CONFIG_BITBANG_SPI ?= no
-endif
-endif
 
 # Always enable 3Com NICs for now.
 CONFIG_NIC3COM ?= yes
@@ -154,6 +144,9 @@ CONFIG_NICREALTEK ?= yes
 # Disable National Semiconductor NICs until support is complete and tested.
 CONFIG_NICNATSEMI ?= no
 
+# Always enable SPI on Intel NICs for now.
+CONFIG_NICINTEL_SPI ?= yes
+
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= yes
 
@@ -162,6 +155,21 @@ CONFIG_DEDIPROG ?= no
 
 # Disable wiki printing by default. It is only useful if you have wiki access.
 CONFIG_PRINT_WIKI ?= no
+
+# Bitbanging SPI infrastructure, default off unless needed.
+ifeq ($(CONFIG_RAYER_SPI), yes)
+override CONFIG_BITBANG_SPI = yes
+else
+ifeq ($(CONFIG_INTERNAL), yes)
+override CONFIG_BITBANG_SPI = yes
+else
+ifeq ($(CONFIG_NICINTEL_SPI), yes)
+override CONFIG_BITBANG_SPI = yes
+else
+CONFIG_BITBANG_SPI ?= no
+endif
+endif
+endif
 
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
@@ -242,6 +250,12 @@ endif
 ifeq ($(CONFIG_NICNATSEMI), yes)
 FEATURE_CFLAGS += -D'CONFIG_NICNATSEMI=1'
 PROGRAMMER_OBJS += nicnatsemi.o
+NEED_PCI := yes
+endif
+
+ifeq ($(CONFIG_NICINTEL_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_NICINTEL_SPI=1'
+PROGRAMMER_OBJS += nicintel_spi.o
 NEED_PCI := yes
 endif
 

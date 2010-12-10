@@ -268,35 +268,35 @@ static int w25_range_table(const struct flashchip *flash,
 	switch (flash->manufacture_id) {
 	case WINBOND_NEX_ID:
 		switch(flash->model_id) {
-		case W_25X10:
+		case WINBOND_NEX_W25X10:
 			*w25q_ranges = w25x10_ranges;
 			*num_entries = ARRAY_SIZE(w25x10_ranges);
 			break;
-		case W_25X20:
+		case WINBOND_NEX_W25X20:
 			*w25q_ranges = w25x20_ranges;
 			*num_entries = ARRAY_SIZE(w25x20_ranges);
 			break;
-		case W_25X40:
+		case WINBOND_NEX_W25X40:
 			*w25q_ranges = w25x40_ranges;
 			*num_entries = ARRAY_SIZE(w25x40_ranges);
 			break;
-		case W_25X80:
+		case WINBOND_NEX_W25X80:
 			*w25q_ranges = w25x80_ranges;
 			*num_entries = ARRAY_SIZE(w25x80_ranges);
 			break;
-		case W_25Q80:
+		case WINBOND_NEX_W25Q80:
 			*w25q_ranges = w25q80_ranges;
 			*num_entries = ARRAY_SIZE(w25q80_ranges);
 			break;
-		case W_25Q16:
+		case WINBOND_NEX_W25Q16:
 			*w25q_ranges = w25q16_ranges;
 			*num_entries = ARRAY_SIZE(w25q16_ranges);
 			break;
-		case W_25Q32:
+		case WINBOND_NEX_W25Q32:
 			*w25q_ranges = w25q32_ranges;
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
-		case W_25Q64:
+		case WINBOND_NEX_W25Q64:
 			*w25q_ranges = w25q64_ranges;
 			*num_entries = ARRAY_SIZE(w25q64_ranges);
 			break;
@@ -309,7 +309,7 @@ static int w25_range_table(const struct flashchip *flash,
 		break;
 	case EON_ID_NOPREFIX:
 		switch (flash->model_id) {
-		case EN_25F40:
+		case EON_EN25F40:
 			*w25q_ranges = en25f40_ranges;
 			*num_entries = ARRAY_SIZE(en25f40_ranges);
 			break;
@@ -320,9 +320,9 @@ static int w25_range_table(const struct flashchip *flash,
 			return -1;
 		}
 		break;
-	case MX_ID:
+	case MACRONIX_ID:
 		switch (flash->model_id) {
-		case MX_25L3205:
+		case MACRONIX_MX25L3205:
 			*w25q_ranges = mx25l3205d_ranges;
 			*num_entries = ARRAY_SIZE(mx25l3205d_ranges);
 			break;
@@ -478,10 +478,9 @@ static int w25_set_range(struct flashchip *flash,
 	tmp = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
 	if ((tmp & MASK_WP_AREA) == (expected & MASK_WP_AREA)) {
-		msg_cinfo("SUCCESS.\n");
 		return 0;
 	} else {
-		msg_cinfo("FAILED, expected=0x%02x, but actual=0x%02x.\n",
+		msg_cerr("expected=0x%02x, but actual=0x%02x.\n",
 		          expected, tmp);
 		return 1;
 	}
@@ -545,10 +544,8 @@ static int w25_enable_writeprotect(struct flashchip *flash)
 	int ret;
 
 	ret = w25_set_srp0(flash, 1);
-	if (!ret)
-		msg_cinfo("SUCCESS.\n");
-	else
-		msg_cinfo("FAILED, error=%d.\n", ret);
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
 	return ret;
 }
 
@@ -557,10 +554,8 @@ static int w25_disable_writeprotect(struct flashchip *flash)
 	int ret;
 
 	ret = w25_set_srp0(flash, 0);
-	if (!ret)
-		msg_cinfo("SUCCESS.\n");
-	else
-		msg_cinfo("FAILED, error=%d.\n", ret);
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
 	return ret;
 }
 

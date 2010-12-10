@@ -27,26 +27,32 @@
    0x555 instead of 0x2AA. Do *not* blindly replace with standard JEDEC
    functions. */
 
-void write_page_m29f400bt(chipaddr bios, uint8_t *src,
-			  chipaddr dst, int page_size)
+/* chunksize is 1 */
+int write_m29f400bt(struct flashchip *flash, uint8_t *src, int start, int len)
 {
 	int i;
+	chipaddr bios = flash->virtual_memory;
+	chipaddr dst = flash->virtual_memory + start;
 
-	for (i = 0; i < page_size; i++) {
+	for (i = 0; i < len; i++) {
 		chip_writeb(0xAA, bios + 0xAAA);
 		chip_writeb(0x55, bios + 0x555);
 		chip_writeb(0xA0, bios + 0xAAA);
 
 		/* transfer data from source to destination */
 		chip_writeb(*src, dst);
-		//chip_writeb(0xF0, bios);
-		//programmer_delay(5);
 		toggle_ready_jedec(dst);
+#if 0
+		/* We only want to print something in the error case. */
 		msg_cerr("Value in the flash at address 0x%lx = %#x, want %#x\n",
 		     (dst - bios), chip_readb(dst), *src);
+#endif
 		dst++;
 		src++;
 	}
+
+	/* FIXME: Ignore errors for now. */
+	return 0;
 }
 
 int probe_m29f400bt(struct flashchip *flash)
@@ -113,7 +119,6 @@ int block_erase_m29f400bt(struct flashchip *flash, unsigned int start, unsigned 
 
 	chip_writeb(0xAA, bios + 0xAAA);
 	chip_writeb(0x55, bios + 0x555);
-	//chip_writeb(0x10, bios + 0xAAA);
 	chip_writeb(0x30, dst);
 
 	programmer_delay(10);
@@ -134,73 +139,4 @@ int block_erase_chip_m29f400bt(struct flashchip *flash, unsigned int address, un
 		return -1;
 	}
 	return erase_m29f400bt(flash);
-}
-
-int write_m29f400bt(struct flashchip *flash, uint8_t *buf)
-{
-	int i;
-	int total_size = flash->total_size * 1024;
-	int page_size = flash->page_size;
-	chipaddr bios = flash->virtual_memory;
-
-	//erase_m29f400bt (flash);
-	msg_cinfo("Programming page:\n ");
-	/*********************************
-	*Pages for M29F400BT:
-	* 16	0x7c000		0x7ffff		TOP
-	*  8 	0x7a000		0x7bfff
-	*  8 	0x78000		0x79fff
-	* 32	0x70000		0x77fff
-	* 64	0x60000		0x6ffff
-	* 64	0x50000		0x5ffff
-	* 64	0x40000		0x4ffff
-	*---------------------------------
-	* 64	0x30000		0x3ffff
-	* 64	0x20000		0x2ffff
-	* 64	0x10000		0x1ffff
-	* 64	0x00000		0x0ffff		BOTTOM
-	*********************************/
-	msg_cinfo("total_size/page_size = %d\n", total_size / page_size);
-	for (i = 0; i < (total_size / page_size) - 1; i++) {
-		msg_cinfo("%04d at address: 0x%08x\n", i, i * page_size);
-		if (block_erase_m29f400bt(flash, i * page_size, page_size)) {
-			msg_cerr("ERASE FAILED!\n");
-			return -1;
-		}
-		write_page_m29f400bt(bios, buf + i * page_size,
-				     bios + i * page_size, page_size);
-		msg_cinfo("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	}
-
-	msg_cinfo("%04d at address: 0x%08x\n", 7, 0x70000);
-	if (block_erase_m29f400bt(flash, 0x70000, 32 * 1024)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	write_page_m29f400bt(bios, buf + 0x70000, bios + 0x70000, 32 * 1024);
-
-	msg_cinfo("%04d at address: 0x%08x\n", 8, 0x78000);
-	if (block_erase_m29f400bt(flash, 0x78000, 8 * 1024)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	write_page_m29f400bt(bios, buf + 0x78000, bios + 0x78000, 8 * 1024);
-
-	msg_cinfo("%04d at address: 0x%08x\n", 9, 0x7a000);
-	if (block_erase_m29f400bt(flash, 0x7a000, 8 * 1024)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	write_page_m29f400bt(bios, buf + 0x7a000, bios + 0x7a000, 8 * 1024);
-
-	msg_cinfo("%04d at address: 0x%08x\n", 10, 0x7c000);
-	if (block_erase_m29f400bt(flash, 0x7c000, 16 * 1024)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	write_page_m29f400bt(bios, buf + 0x7c000, bios + 0x7c000, 16 * 1024);
-
-	msg_cinfo("\n");
-
-	return 0;
 }

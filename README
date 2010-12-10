@@ -42,7 +42,11 @@ processing.
 Build Instructions
 ------------------
 
-To build flashrom you need to install the following packages or ports:
+To build flashrom you need to install the following software:
+
+ * pciutils+libpci (if you want support for mainboard or PCI device flashing)
+ * libusb (if you want FT2232 or Dediprog support)
+ * libftdi (if you want FT2232 support)
 
 Linux et al:
 
@@ -87,15 +91,15 @@ To compile on OpenBSD, use:
 
 To compile and run on Darwin/Mac OS X:
 
- Install DirectIO from coresystems GmbH.
- DirectIO is available at http://www.coresystems.de/en/directio.
+ Install DirectHW from coresystems GmbH.
+ DirectHW is available at http://www.coresystems.de/en/directhw .
 
 To cross-compile on Linux for DOS:
 
  Get RPMs of the cross compiler from the DJGPP site and install them:
  djcross-binutils-2.19.1-10ap.i386.rpm
- djcross-gcc-tools-4.4.1-1ap.i686.rpm
  djcross-gcc-4.3.2-8ap.i686.rpm
+ djcrx-2.04pre_20090725-13ap.i386.rpm
  Download pciutils 3.1.5 and apply http://assembler.cz/flashrom/pciutils.patch
  Download and compile http://assembler.cz/flashrom/libgetopt/
  Compile pciutils, see README.DJGPP for instructions.
@@ -107,8 +111,21 @@ To cross-compile on Linux for DOS:
  or (above settings hardcoded)
  make djgpp-dos
  You might have to add WARNERROR=no to the make command line.
- To run flashrom.exe, download http://clio.rice.edu/djgpp/csdpmi7b.zip and
- make sure CWSDPMI.EXE is in the current directory.
+ To run flashrom.exe, download and unpack
+ http://homer.rice.edu/~sandmann/cwsdpmi/csdpmi7b.zip and make sure
+ CWSDPMI.EXE is in the current directory.
+
+Processor architecture dependent features:
+
+ On non-x86 architectures you have to disable a few programmers because they
+ use port-based I/O which is not directly available on non-x86. Please add
+ CONFIG_RAYER_SPI=no CONFIG_NIC3COM=no CONFIG_ATAHPT=no CONFIG_NICREALTEK=no \
+ CONFIG_NICNATSEMI=no
+ as parameters to the "make" invocation.
+ Besides that, the internal programmer is only supported on x86 and MIPS. On
+ other architectures, please add
+ CONFIG_INTERNAL=no
+ as parameter to the "make" invocation.
 
 Installation
 ------------

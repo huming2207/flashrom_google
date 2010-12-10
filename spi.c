@@ -22,6 +22,7 @@
  * Contains the generic SPI framework
  */
 
+#include <string.h>
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
@@ -86,7 +87,7 @@ const struct spi_programmer spi_programmer[] = {
 		.command = wbsio_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
 		.read = wbsio_spi_read,
-		.write_256 = spi_chip_write_1_new,
+		.write_256 = spi_chip_write_1,
 	},
 
 	{ /* SPI_CONTROLLER_MCP6X_BITBANG */
@@ -95,6 +96,14 @@ const struct spi_programmer spi_programmer[] = {
 		.read = bitbang_spi_read,
 		.write_256 = bitbang_spi_write_256,
 	},
+
+	{ /* SPI_CONTROLLER_WPCE775X */
+		.command = wpce775x_spi_send_command,
+		.multicommand = default_spi_send_multicommand,
+		.read = wpce775x_spi_read,
+		.write_256 = wpce775x_spi_write_256,
+	},
+
 #endif
 #endif
 
@@ -130,12 +139,21 @@ const struct spi_programmer spi_programmer[] = {
 		.command = dediprog_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
 		.read = dediprog_spi_read,
-		.write_256 = spi_chip_write_1_new,
+		.write_256 = dediprog_spi_write_256,
 	},
 #endif
 
 #if CONFIG_RAYER_SPI == 1
 	{ /* SPI_CONTROLLER_RAYER */
+		.command = bitbang_spi_send_command,
+		.multicommand = default_spi_send_multicommand,
+		.read = bitbang_spi_read,
+		.write_256 = bitbang_spi_write_256,
+	},
+#endif
+
+#if CONFIG_NICINTEL_SPI == 1
+	{ /* SPI_CONTROLLER_NICINTEL */
 		.command = bitbang_spi_send_command,
 		.multicommand = default_spi_send_multicommand,
 		.read = bitbang_spi_read,
@@ -205,6 +223,7 @@ int default_spi_send_multicommand(struct spi_command *cmds)
 
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
+	int addrbase = 0;
 	if (!spi_programmer[spi_controller].read) {
 		msg_perr("%s called, but SPI read is unsupported on this "
 			 "hardware. Please report a bug at "
@@ -212,7 +231,26 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len)
 		return 1;
 	}
 
-	return spi_programmer[spi_controller].read(flash, buf, start, len);
+	/* Check if the chip fits between lowest valid and highest possible
+	 * address. Highest possible address with the current SPI implementation
+	 * means 0xffffff, the highest unsigned 24bit number.
+	 */
+	addrbase = spi_get_valid_read_addr();
+	if (addrbase + flash->total_size * 1024 > (1 << 24)) {
+		msg_perr("Flash chip size exceeds the allowed access window. ");
+		msg_perr("Read will probably fail.\n");
+		/* Try to get the best alignment subject to constraints. */
+		addrbase = (1 << 24) - flash->total_size * 1024;
+	}
+	/* Check if alignment is native (at least the largest power of two which
+	 * is a factor of the mapped size of the chip).
+	 */
+	if (ffs(flash->total_size * 1024) > (ffs(addrbase) ? : 33)) {
+		msg_perr("Flash chip is not aligned natively in the allowed "
+			 "access window.\n");
+		msg_perr("Read will probably return garbage.\n");
+	}
+	return spi_programmer[spi_controller].read(flash, buf, addrbase + start, len);
 }
 
 /*
@@ -222,7 +260,7 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len)
  * .write_256 = spi_chip_write_1
  */
 /* real chunksize is up to 256, logical chunksize is 256 */
-int spi_chip_write_256_new(struct flashchip *flash, uint8_t *buf, int start, int len)
+int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
 	if (!spi_programmer[spi_controller].write_256) {
 		msg_perr("%s called, but SPI page write is unsupported on this "
@@ -232,26 +270,6 @@ int spi_chip_write_256_new(struct flashchip *flash, uint8_t *buf, int start, int
 	}
 
 	return spi_programmer[spi_controller].write_256(flash, buf, start, len);
-}
-
-/* Wrapper function until the generic code is converted to partial writes. */
-int spi_chip_write_256(struct flashchip *flash, uint8_t *buf)
-{
-	int ret;
-
-	msg_pinfo("Erasing flash before programming... ");
-	if (erase_flash(flash)) {
-		msg_perr("ERASE FAILED!\n");
-		return -1;
-	}
-	msg_pinfo("done.\n");
-	msg_pinfo("Programming flash... ");
-	ret = spi_chip_write_256_new(flash, buf, 0, flash->total_size * 1024);
-	if (!ret)
-		msg_pinfo("done.\n");
-	else
-		msg_pinfo("\n");
-	return ret;
 }
 
 /*

@@ -67,40 +67,11 @@ int erase_sector_49lfxxxc(struct flashchip *flash, unsigned int address, unsigne
 	chip_writeb(0x30, bios);
 	chip_writeb(0xD0, bios + address);
 
-	status = wait_82802ab(bios);
+	status = wait_82802ab(flash);
 
 	if (check_erased_range(flash, address, sector_size)) {
 		msg_cerr("ERASE FAILED!\n");
 		return -1;
 	}
-	return 0;
-}
-
-int write_49lfxxxc(struct flashchip *flash, uint8_t *buf)
-{
-	int i;
-	int total_size = flash->total_size * 1024;
-	int page_size = flash->page_size;
-	chipaddr bios = flash->virtual_memory;
-
-	write_lockbits_49lfxxxc(flash, 0);
-	msg_cinfo("Programming page: ");
-	for (i = 0; i < total_size / page_size; i++) {
-		/* erase the page before programming */
-		if (erase_sector_49lfxxxc(flash, i * page_size, flash->page_size)) {
-			msg_cerr("ERASE FAILED!\n");
-			return -1;
-		}
-
-		/* write to the sector */
-		msg_cinfo("%04d at address: 0x%08x", i, i * page_size);
-		write_page_82802ab(bios, buf + i * page_size,
-				      bios + i * page_size, page_size);
-		msg_cinfo("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	}
-	msg_cinfo("\n");
-
-	chip_writeb(0xFF, bios);
-
 	return 0;
 }

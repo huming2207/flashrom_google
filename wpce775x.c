@@ -43,6 +43,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "flashchips.h"
@@ -89,6 +90,51 @@ static volatile struct wpce775x_wcb *volatile wcb;
 /* count of entering flash update mode */
 static int in_flash_update_mode;
 
+static int firmware_changed;
+
+/*
+ * Bytes 0x4-0xf of InitFlash command. These represent opcodes and various
+ * parameters the WPCE775x will use when communicating with the SPI flash
+ * device. DO NOT RE-ORDER THIS STRUCTURE.
+ */
+struct wpce775x_initflash_cfg {
+	uint8_t read_device_id;		/* Byte 0x04. Ex: JEDEC_RDID */
+	uint8_t write_status_enable;	/* Byte 0x05. Ex: JEDEC_EWSR */
+	uint8_t write_enable;		/* Byte 0x06. Ex: JEDEC_WREN */
+	uint8_t read_status_register;	/* Byte 0x07. Ex: JEDEC_RDSR */
+	uint8_t write_status_register;	/* Byte 0x08. Ex: JEDEC_WRSR */
+	uint8_t flash_program;		/* Byte 0x09. Ex: JEDEC_BYTE_PROGRAM */
+
+	/* Byte 0x0A. Ex: sector/block/chip erase opcode */
+	uint8_t block_erase;	
+
+	uint8_t status_busy_mask;	/* Byte B: bit position of BUSY bit */
+
+	/* Byte 0x0C: value to remove write protection */
+	uint8_t status_reg_value;
+
+	/* Byte 0x0D: Number of bytes to program in each write transaction. */
+	uint8_t program_unit_size;
+
+	uint8_t page_size;		/* Byte 0x0E: 2^n bytes */
+
+	/*
+	 * Byte 0x0F: Method to read device ID. 0x47 will cause ID bytes to be
+	 * read immediately after read_device_id command is issued. Otherwise,
+	 * 3 dummy address bytes are sent after the read_device_id code.
+	 */
+	uint8_t read_device_id_type;
+} __attribute__((packed));
+
+/*
+ * The WPCE775x can use InitFlash multiple times during an update. We'll use
+ * this ability primarily for changing write protection bits.
+ */
+static struct wpce775x_initflash_cfg *initflash_cfg;
+
+static struct flashchip *flash_internal;
+
+
 /* Indicate the flash chip attached to the WPCE7xxx chip.
  * This variable should be set in probe_wpce775x().
  * 0 means we haven't or cannot detect the chip type. */
@@ -122,6 +168,10 @@ struct flashchip *scan = 0;
 #define WPCE775X_SHAW2BA_1	0xf9
 #define WPCE775X_SHAW2BA_2	0xfa
 #define WPCE775X_SHAW2BA_3	0xfb
+
+/* Read/write buffer size */
+#define WPCE775X_MAX_WRITE_SIZE	 8
+#define WPCE775X_MAX_READ_SIZE	12
 
 /** probe for super i/o index
  *  @returns 0 to indicate success, <0 to indicate error
@@ -308,56 +358,85 @@ static int blocked_exec(void)
 }
 
 /** Initialize the EC parameters.
+
  *  @return 1 for error; 0 for success.
  */
-static int InitFlash(unsigned char srp)
+static int InitFlash()
 {
-	assert_ec_is_free();
+	int i;
 
+	if (!initflash_cfg) {
+		msg_perr("%s(): InitFlash config is not defined\n", __func__);
+		return 1;
+	} 
+
+	assert_ec_is_free();
 	/* Byte 3: command code: Init Flash */
 	wcb->code = 0x5A;
-
-	/* Byte 4: opcode for Read Device Id */
-	wcb->field[0] = JEDEC_RDID;
-
-	/* Byte 5: opcode for Write Status Enable
-	           JEDEC_EWSR defines 0x50, but W25Q16
-	           accepts 0x06 to enable write status */
-	wcb->field[1] = 0x06;
-
-	/* Byte 6: opcode for Write Enable */
-	wcb->field[2] = JEDEC_WREN;
-
-	/* Byte 7: opcode for Read Status Register */
-	wcb->field[3] = JEDEC_RDSR;
-
-	/* Byte 8: opcode for Write Status Register */
-	wcb->field[4] = JEDEC_WRSR;
-
-	/* Byte 9: opcode for Flash Program */
-	wcb->field[5] = JEDEC_BYTE_PROGRAM;
-
-	/* Byte A: opcode for Sector or Block Erase. 0xD8: Block Erase (64KB), 0x20: Sector Erase (4KB) */
-	/* TODO: dhendrix: We may need a more sophisticated routine to determine the proper values on a chip-by-chip basis in the future. */
-	wcb->field[6] = JEDEC_SE;
-
-	/* Byte B: status busy mask */
-	wcb->field[7] = 0x01;
-
-	/* Byte C: Status Register Value */
-	wcb->field[8] = srp;  /* SRP (Status Register Protect), {TB, BP2, BP1, BP0} = {1, 0, 1, 1} */
-
-	/* Byte D: Program Unit Size */
-	wcb->field[9] = 0x01;
-
-	/* Byte E: Page Size, 2^X bytes */
-	wcb->field[10] = 0x08;
-
-	/* Byte F: Read Device ID Type. 0x47 -- send 3 dummy addresses before read ID from flash */
-	wcb->field[11] = 0x00;
+	msg_pdbg("%s(): InitFlash bytes: ", __func__);
+	for (i = 0; i < sizeof(struct wpce775x_initflash_cfg); i++) {
+		wcb->field[i] = *((uint8_t *)initflash_cfg + i);
+		msg_pdbg("%02x ", wcb->field[i]);
+	}
+	msg_pdbg("\n");
 
 	if (blocked_exec())
 		return 1;
+	return 0;
+}
+
+/* log2() could be used if we link with -lm */
+static int logbase2(int x)
+{
+	int log = 0;
+
+	/* naive way */
+	while (x) {
+		x >>= 1;
+		log++;
+	}
+	return log;
+}
+
+/* initialize initflash_cfg struct */
+int initflash_cfg_setup(struct flashchip *flash)
+{
+	if (!initflash_cfg)
+		initflash_cfg = malloc(sizeof(*initflash_cfg));
+
+	/* Copy flash struct pointer so that raw SPI commands that do not get 
+	   it passed in (e.g. called by spi_send_command) can access it. */
+	if (flash)
+		flash_internal = flash;
+
+	/* Set "sane" defaults. If the flash chip is known, then use parameters
+	   from it. */
+	initflash_cfg->read_device_id = JEDEC_RDID;
+	if (flash && (flash->feature_bits | FEATURE_WRSR_WREN))
+		initflash_cfg->write_status_enable = JEDEC_WREN;
+	else if (flash && (flash->feature_bits | FEATURE_WRSR_EWSR))
+		initflash_cfg->write_status_enable = JEDEC_EWSR;
+	else
+		initflash_cfg->write_status_enable = JEDEC_WREN;
+	initflash_cfg->write_enable = JEDEC_WREN;
+	initflash_cfg->read_status_register = JEDEC_RDSR;
+	initflash_cfg->write_status_register = JEDEC_WRSR;
+	initflash_cfg->flash_program = JEDEC_BYTE_PROGRAM;
+
+	/* note: these members are likely to be overridden later */
+	initflash_cfg->block_erase = JEDEC_SE;
+	initflash_cfg->status_busy_mask = 0x01;
+	initflash_cfg->status_reg_value = 0x00;
+
+	/* back to "sane" defaults... */
+	initflash_cfg->program_unit_size = 0x01;
+	if (flash)
+		initflash_cfg->page_size = logbase2(flash->page_size);
+	else
+		initflash_cfg->page_size = 0x08;
+	
+	initflash_cfg->read_device_id_type = 0x00;
+
 	return 0;
 }
 
@@ -368,6 +447,11 @@ static int InitFlash(unsigned char srp)
 static int ReadId(unsigned char* id0, unsigned char* id1,
 	          unsigned char* id2, unsigned char* id3)
 {
+	if (!initflash_cfg) {
+		initflash_cfg_setup(NULL);
+		InitFlash();
+	}
+
 	assert_ec_is_free();
 
 	wcb->code = 0xC0;       /* Byte 3: command code: Read ID */
@@ -392,140 +476,16 @@ static int ReadId(unsigned char* id0, unsigned char* id1,
 	return 0;
 }
 
-/** probe if WPCE775x is present.
- *  @return 0 for error; 1 for success
- */
-int probe_wpce775x(struct flashchip *flash)
-{
-	unsigned char ids[4];
-	unsigned long base;
-	uint16_t sio_port;
-	uint8_t srid;
-	uint8_t fwh_id;
-	uint32_t size;
-	chipaddr original_memory;
-	uint32_t original_size;
-	int i;
-
-	/* detect if wpce775x exists */
-	if (nuvoton_get_sio_index(&sio_port) < 0) {
-		msg_cdbg("No Nuvoton chip is found.\n");
-		return 0;
-	}
-	srid = sio_read(sio_port, NUVOTON_SIOCFG_SRID);
-	if ((srid & 0xE0) == 0xA0) {
-		msg_pdbg("Found EC: WPCE775x (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		         srid >> 5, srid & 0x1f, sio_port);
-
-	} else {
-		msg_pdbg("Found EC: Nuvoton (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		         srid >> 5, srid & 0x1f, sio_port);
-	}
-
-	/* get the address of Shadow Window 2. */
-	if (get_shaw2ba(&wcb_physical_address) < 0) {
-		msg_cdbg("Cannot get the address of Shadow Window 2");
-		return 0;
-	}
-	msg_cdbg("Get the address of WCB(SHA WIN2) at 0x%08x\n",
-	         (uint32_t)wcb_physical_address);
-	wcb = (struct wpce775x_wcb *)
-	      programmer_map_flash_region("WPCE775X WCB",
-	                                  wcb_physical_address,
-	                                  getpagesize() /* min page size */);
-	msg_cdbg("mapped wcb address: %p for physical addr: 0x%08lx\n", wcb, wcb_physical_address);
-	if (!wcb) {
-		msg_perr("FATAL! Cannot map memory area for wcb physical address.\n");
-		return 0;
-	}
-	memset((void*)wcb, 0, sizeof(*wcb));
-
-	if (get_fwh_id(&fwh_id) < 0) {
-		msg_cdbg("Cannot get fwh_id value.\n");
-		return 0;
-	}
-	msg_cdbg("get fwh_id: 0x%02x\n", fwh_id);
-
-	/* TODO: set fwh_idsel of chipset.
-	         Currently, we employ "-p internal:fwh_idsel=0x0000223e". */
-
-	/* Initialize the parameters of EC SHM component */
-	if (InitFlash(0x00))
-		return 0;
-
-	/* Query the flash vendor/device ID */
-	if (ReadId(&ids[0], &ids[1], &ids[2], &ids[3]))
-		return 0;
-
-	/* In current design, flash->virtual_memory is mapped before calling flash->probe().
-	 * So that we have to update flash->virtual_memory after we know real flash size.
-	 * Unmap allocated memory before allocate new memory. */
-	original_size = flash->total_size * 1024;  /* original flash size */
-	original_memory = flash->virtual_memory;
-
-	for (scan = &flashchips[0]; scan && scan->name; scan++) {
-	        if (!(scan->bustype & CHIP_BUSTYPE_SPI)) {
-	                msg_cdbg("WPCE775x: %s bustype supports no SPI: %s\n",
-	                         scan->name, flashbuses_to_text(scan->bustype));
-	                continue;
-	        }
-	        if ((scan->manufacture_id != GENERIC_MANUF_ID) &&
-	            (scan->manufacture_id != ids[0])) {
-	                msg_cdbg("WPCE775x: %s manufacture_id does not match: 0x%02x\n",
-	                         scan->name, scan->manufacture_id);
-	                continue;
-	        }
-	        if ((scan->model_id != GENERIC_DEVICE_ID) &&
-	            (scan->model_id != ((ids[1]<<8)|ids[2]))) {
-	                msg_cdbg("WPCE775x: %s model_id does not match: 0x%02x\n",
-	                         scan->name, scan->model_id);
-	                continue;
-	        }
-
-	        msg_cdbg("WPCE775x: found the flashchip %s.\n", scan->name);
-
-	        /* Copy neccesary information */
-	        flash->total_size = scan->total_size;
-	        flash->page_size = scan->page_size;
-	        memcpy(flash->block_erasers, scan->block_erasers,
-	               sizeof(scan->block_erasers));
-	        /* .block_erase is pointed to EC-specific way. */
-	        for (i = 0; i < NUM_ERASEFUNCTIONS; ++i)
-	                flash->block_erasers[i].block_erase = erase_wpce775x;
-	        break;
-	}
-	if (!scan || !scan->name) {
-	        msg_cdbg("WPCE775x: cannot recognize the flashchip.\n");
-	        scan = 0;  /* since scan is a global variable, reset pointer
-	                    * to indicate nothing was detected */
-	        return 0;
-	}
-
-	/* Unmap allocated memory before allocate new memory. */
-	programmer_unmap_flash_region((void*)original_memory, original_size);
-
-	/* In current design, flash->virtual_memory is mapped before calling flash->probe().
-	 * So that we have to update flash->virtual_memory after we know real flash size.
-	 * Map new virtual address here. */
-	size = flash->total_size * 1024;  /* new flash size */
-	base = 0xffffffff - size + 1;
-	flash->virtual_memory = (chipaddr)programmer_map_flash_region("flash chip", base, size);
-	msg_cdbg("Remap memory to 0x%08lx from base: 0x%08lx size=0x%08lx\n",
-	         flash->virtual_memory, base, (long unsigned int)size);
-
-	return 1;
-}
-
 /** Tell EC to "enter flash update" mode. */
-int EnterFlashUpdate(void)
+int EnterFlashUpdate()
 {
 	if (in_flash_update_mode) {
 		/* already in update mode */
-		in_flash_update_mode++;
+		msg_pdbg("%s: in_flash_update_mode: %d\n",
+		        __func__, in_flash_update_mode);
 		return 0;
 	}
+	assert_ec_is_free();
 
 	wcb->code = 0x10;  /* Enter Flash Update */
 	wcb->field[0] = 0x55;  /* required pattern by EC */
@@ -535,7 +495,7 @@ int EnterFlashUpdate(void)
 	if (blocked_exec()) {
 		return 1;
 	} else {
-		in_flash_update_mode++;
+		in_flash_update_mode = 1;
 		return 0;
 	}
 }
@@ -546,23 +506,23 @@ int EnterFlashUpdate(void)
  */
 int ExitFlashUpdate(unsigned char exit_code)
 {
-	if (in_flash_update_mode <= 0) {
+	/*
+	 * Note: ExitFlashUpdate must be called before shutting down the
+	 * machine, otherwise the EC will be stuck in update mode, leaving
+	 * the machine in a "wedged" state until power cycled.
+	 */
+	if (!in_flash_update_mode) {
 		msg_cdbg("Not in flash update mode yet.\n");
 		return 1;
-	}
-
-	if (in_flash_update_mode >= 2) {
-		in_flash_update_mode--;
-		return 0;
 	}
 
 	wcb->code = exit_code;  /* Exit Flash Update */
 	if (blocked_exec()) {
 		return 1;
-	} else {
-		in_flash_update_mode--;
-		return 0;
 	}
+
+	in_flash_update_mode = 0;
+	return 0;
 }
 
 /*
@@ -579,9 +539,199 @@ int ExitFlashUpdateFirmwareChanged(void) {
 	return ExitFlashUpdate(0x21);
 }
 
-int erase_wpce775x(struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen)
+int wpce775x_spi_common_init(void)
 {
+	uint16_t sio_port;
+	uint8_t srid;
+	uint8_t fwh_id;
+
+	msg_pdbg("%s(): entered\n", __func__);
+
+	/* detect if wpce775x exists */
+	if (nuvoton_get_sio_index(&sio_port) < 0) {
+		msg_pdbg("No Nuvoton chip is found.\n");
+		return 0;
+	}
+	srid = sio_read(sio_port, NUVOTON_SIOCFG_SRID);
+	if ((srid & 0xE0) == 0xA0) {
+		msg_pdbg("Found EC: WPCE775x (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
+
+	} else {
+		msg_pdbg("Found EC: Nuvoton (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
+	}
+
+	/* get the address of Shadow Window 2. */
+	if (get_shaw2ba(&wcb_physical_address) < 0) {
+		msg_pdbg("Cannot get the address of Shadow Window 2");
+		return 0;
+	}
+	msg_pdbg("Get the address of WCB(SHA WIN2) at 0x%08x\n",
+	         (uint32_t)wcb_physical_address);
+	wcb = (struct wpce775x_wcb *)
+	      programmer_map_flash_region("WPCE775X WCB",
+	                                  wcb_physical_address,
+	                                  getpagesize() /* min page size */);
+	msg_pdbg("mapped wcb address: %p for physical addr: 0x%08lx\n", wcb, wcb_physical_address);
+	if (!wcb) {
+		msg_perr("FATAL! Cannot map memory area for wcb physical address.\n");
+		return 0;
+	}
+	memset((void*)wcb, 0, sizeof(*wcb));
+
+	if (get_fwh_id(&fwh_id) < 0) {
+		msg_pdbg("Cannot get fwh_id value.\n");
+		return 0;
+	}
+	msg_pdbg("get fwh_id: 0x%02x\n", fwh_id);
+
+	/* TODO: set fwh_idsel of chipset.
+	         Currently, we employ "-p internal:fwh_idsel=0x0000223e". */
+
+	/* Enter flash update mode unconditionally. This is required even
+	   for reading. */
+	if (EnterFlashUpdate()) return 1;
+
+	spi_controller = SPI_CONTROLLER_WPCE775X;
+	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
+	return 0;
+
+}
+
+int wpce775x_shutdown(void)
+{
+	if (spi_controller != SPI_CONTROLLER_WPCE775X)
+		return 0;
+
+	msg_pdbg("%s(): firmware %s\n", __func__,
+		 firmware_changed ? "changed" : "not changed");
+
+	msg_pdbg("%s: in_flash_update_mode: %d\n", __func__, in_flash_update_mode);
+	if (in_flash_update_mode) {
+		if (firmware_changed)
+			ExitFlashUpdateFirmwareChanged();
+		else
+			ExitFlashUpdateFirmwareNoChange();
+
+		in_flash_update_mode = 0;
+	}
+
+	if (initflash_cfg)
+		free(initflash_cfg);
+	else
+		msg_perr("%s(): No initflash_cfg to free?!?\n", __func__);
+
+	return 0;
+}
+
+/* Called by internal_init() */
+int wpce775x_probe_spi_flash(const char *name)
+{
+	int ret;
+
+	if (!(buses_supported & CHIP_BUSTYPE_FWH)) {
+		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
+		return 1;
+	}
+	ret = wpce775x_spi_common_init();
+	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
+	if (!ret) {
+		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
+		          buses_supported);
+		if (buses_supported & CHIP_BUSTYPE_FWH)
+			msg_pdbg("Overriding chipset SPI with WPCE775x FWH|SPI.\n");
+		buses_supported |= CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
+	}
+	return ret;
+}
+
+int wpce775x_read(int addr, unsigned char *buf, unsigned int nbytes)
+{
+	int offset;
+        unsigned int bytes_read = 0;
+
 	assert_ec_is_free();
+	msg_pspew("%s: reading %d bytes at 0x%06x\n", __func__, nbytes, addr);
+
+	/* Set initial address; WPCE775x auto-increments address for successive
+	   read and write operations. */
+	wcb->code = 0xA0;
+	wcb->field[0] = addr & 0xff;
+	wcb->field[1] = (addr >> 8) & 0xff;
+	wcb->field[2] = (addr >> 16) & 0xff;
+	wcb->field[3] = (addr >> 24) & 0xff;
+	if (blocked_exec()) {
+		return 1;
+	}
+
+	for (offset = 0;
+	     offset < nbytes;
+	     offset += bytes_read) {
+		int i;
+        	unsigned int bytes_left;
+
+		bytes_left = nbytes - offset;
+		if (bytes_left > 0 && bytes_left < WPCE775X_MAX_READ_SIZE)
+			bytes_read = bytes_left;
+		else
+			bytes_read = WPCE775X_MAX_READ_SIZE;
+		wcb->code = 0xD0 | bytes_read;
+		if (blocked_exec()) {
+			return 1;
+		}
+
+		for (i = 0; i < bytes_read; i++)
+			buf[offset + i] = wcb->field[i];
+	}
+
+	return 0;
+}
+
+int wpce775x_erase_new(int blockaddr, uint8_t opcode) {
+	unsigned int current;
+	int blocksize;
+	int ret = 0;
+
+	assert_ec_is_free();
+
+	/* 
+	 * FIXME: In the long-run we should examine block_erasers within the
+	 * flash struct to ensure the proper blocksize is used. This is because
+	 * some chips implement commands differently. For now, we'll support
+	 * only a few "safe" block erase commands with predictable block size.
+	 *
+	 * Looking thru the list of flashchips, it seems JEDEC_BE_52 and
+	 * JEDEC_BE_D8 are not uniformly implemented. Thus, we cannot safely
+	 * assume a blocksize.
+	 *
+	 * Also, I was unable to test chip erase (due to equipment and time
+	 * constraints), but they might work.
+	 */
+	switch(opcode) {
+	case JEDEC_SE:
+	case JEDEC_BE_D7:
+		blocksize = 4 * 1024;
+		break;
+	case JEDEC_BE_52:
+	case JEDEC_BE_D8:
+	case JEDEC_CE_60:
+	case JEDEC_CE_C7:
+	default:
+		msg_perr("%s(): erase opcode=0x%02x not supported\n",
+		         __func__, opcode);
+		return 1;
+	}
+
+	msg_pspew("%s(): blockaddr=%d, blocksize=%d, opcode=0x%02x\n",
+	           __func__, blockaddr, blocksize, opcode);
+
+	if (!initflash_cfg)
+		initflash_cfg_setup(flash_internal);
+	initflash_cfg->block_erase = opcode;
+	InitFlash();
 
 	/* Set Write Window on flash chip (optional).
 	 * You may limit the window to partial flash for experimental. */
@@ -597,182 +747,195 @@ int erase_wpce775x(struct flashchip *flash, unsigned int blockaddr, unsigned int
 	if (blocked_exec())
 		return 1;
 
-	/* TODO: here assume block sizes are identical. The right way is to traverse
-	 *       block_erasers[] and find out the corresponding block size. */
-	unsigned int block_size = flash->block_erasers[0].eraseblocks[0].size;
-	unsigned int current;
-
-	msg_cdbg("Erasing ... 0x%08x 0x%08x\n", blockaddr, blocklen);
-
-	if (EnterFlashUpdate()) return 1;
+	msg_pspew("Erasing ... 0x%08x 0x%08x\n", blockaddr, blocksize);
 
 	for (current = 0;
-	     current < blocklen;
-	     current += block_size) {
+	     current < blocksize;
+	     current += blocksize) {
 		wcb->code = 0x80;  /* Sector/block erase */
 
-		/* WARNING: assume the block address for EC is lalways little-endian. */
+		/* WARNING: assume the block address for EC is always little-endian. */
 		unsigned int addr = blockaddr + current;
 		wcb->field[0] = addr & 0xff;
 		wcb->field[1] = (addr >> 8) & 0xff;
 		wcb->field[2] = (addr >> 16) & 0xff;
 		wcb->field[3] = (addr >> 24) & 0xff;
-		if (blocked_exec())
-			goto error_exit;
+		if (blocked_exec()) {
+			ret = 1;
+			goto wpce775x_erase_new_exit;
+		}
 	}
 
-	if (ExitFlashUpdateFirmwareChanged()) return 1;
+wpce775x_erase_new_exit:
+	firmware_changed = 1;
+	return ret;
+}
 
-	if (check_erased_range(flash, blockaddr, blocklen)) {
-		msg_perr("ERASE FAILED!\n");
+int wpce775x_nbyte_program(int addr, const unsigned char *buf,
+                          unsigned int nbytes)
+{
+	int offset, ret = 0;
+        unsigned int written = 0;
+
+	assert_ec_is_free();
+	msg_pspew("%s: writing %d bytes to 0x%06x\n", __func__, nbytes, addr);
+
+	/* Set initial address; WPCE775x auto-increments address for successive
+	   read and write operations. */
+	wcb->code = 0xA0;
+	wcb->field[0] = addr & 0xff;
+	wcb->field[1] = (addr >> 8) & 0xff;
+	wcb->field[2] = (addr >> 16) & 0xff;
+	wcb->field[3] = (addr >> 24) & 0xff;
+	if (blocked_exec()) {
 		return 1;
 	}
 
-	return 0;
-
-error_exit:
-	ExitFlashUpdateFirmwareChanged();
-	return 1;
-}
-
-/** Callback function for do_romentries().
- *  @flash - point to flash info
- *  @buf - the address of buffer
- *  @addr - the start offset in buffer
- *  @len - length to write (start from @addr)
- */
-int write_wpce775x_entry(struct flashchip *flash, uint8_t *buf,
-	                 const chipaddr addr, size_t len)
-{
-	chipaddr current;
-	unsigned int block_size = flash->block_erasers[0].eraseblocks[0].size;
-        unsigned int bytes_until_next_block;
-        unsigned int written = 0;
-
-	msg_cdbg("Writing ... 0x%08lx 0x%08lx\n", (long unsigned int)addr,
-	                                          (long unsigned int)len);
-
-	if (EnterFlashUpdate()) return 1;
-	for (current = addr;
-	     current < addr + len;
-	     current += written/* maximum program buffer */) {
-		/* erase sector before write it. */
-		if ((current & (block_size-1))==0) {
-			if (erase_wpce775x(flash, current, block_size))
-				goto error_exit;
-		}
-
-		/* wpce775x provides a 8-byte program buffer. */
-		wcb->code = 0xA0;  /* Set Address */
-		wcb->field[0] = current & 0xff;
-		wcb->field[1] = (current >> 8) & 0xff;
-		wcb->field[2] = (current >> 16) & 0xff;
-		wcb->field[3] = (current >> 24) & 0xff;
-		if (blocked_exec())
-			goto error_exit;
-
-                bytes_until_next_block = block_size - (current % block_size);
-                if (bytes_until_next_block > 0 && bytes_until_next_block < 8)
-                        written = bytes_until_next_block;
-                else
-                        written = 8;  /* maximum buffer size */
-		wcb->code = 0xB0 | written;
+	for (offset = 0;
+	     offset < nbytes;
+	     offset += written) {
 		int i;
-		for (i = 0; i < written; i++) {
-			wcb->field[i] = buf[current + i];
+        	unsigned int bytes_left;
+
+		bytes_left = nbytes - offset;
+		if (bytes_left > 0 && bytes_left < WPCE775X_MAX_WRITE_SIZE)
+			written = bytes_left;
+		else
+			written = WPCE775X_MAX_WRITE_SIZE;
+		wcb->code = 0xB0 | written;
+
+		for (i = 0; i < written; i++)
+			wcb->field[i] = buf[offset + i];
+		if (blocked_exec()) {
+			ret = 1;
+			goto wpce775x_nbyte_program_exit;
 		}
-		if (blocked_exec())
-			goto error_exit;
 	}
 
-	if (ExitFlashUpdateFirmwareChanged()) return 1;
-	return 0;
-
-error_exit:
-	ExitFlashUpdateFirmwareChanged();
-	return 1;
+wpce775x_nbyte_program_exit:
+	firmware_changed = 1;
+	return ret;
 }
 
-/** Write data to flash (layout supported).
- *  In some cases, EC and BIOS share a physical flash chip. So it is dangerous
- *  to erase whole flash chip when you only wanna update BIOS image.
- *  By calling do_romentries(), we won't erase/program those blocks/sectors
- *  not specified by -i parameter.
- */
-int write_wpce775x(struct flashchip *flash, uint8_t * buf)
+int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len)
 {
-	return do_romentries(buf, flash, write_wpce775x_entry);
+	if (!initflash_cfg) {
+		initflash_cfg_setup(flash);
+		InitFlash();
+	}
+	return spi_read_chunked(flash, buf, start, len, flash->page_size);
 }
 
-int set_range_wpce775x(struct flashchip *flash, unsigned int start, unsigned int len) {
-	struct w25q_status status;
+int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
+{
+	if (!initflash_cfg) {
+		initflash_cfg_setup(flash);
+		InitFlash();
+	}
+	return spi_write_chunked(flash, buf, start, len, flash->page_size);
+}
 
-	if (w25_range_to_status(scan, start, len, &status)) return -1;
+int wpce775x_spi_write_status_register(uint8_t val)
+{
+	assert_ec_is_free();
+	msg_pdbg("%s(): writing 0x%02x to status register\n", __func__, val);
 
-	/* Since WPCE775x doesn't support reading status register, we have to
-	 * set SRP0 to 1 when writing status register. */
-	/* FIXME: this line should be removed once the reading status register
-	 * has been supported in WPCE775x firmware. */
-	status.srp0 = 1;
-	msg_cinfo("INFO: SRP0 bit is set.\n");
+	if (!initflash_cfg)
+		initflash_cfg_setup(flash_internal);
 
-	msg_cdbg("Going to set: 0x%02x\n", *((unsigned char*)&status));
-	msg_cdbg("status.busy: %x\n", status.busy);
-	msg_cdbg("status.wel: %x\n", status.wel);
-	msg_cdbg("status.bp0: %x\n", status.bp0);
-	msg_cdbg("status.bp1: %x\n", status.bp1);
-	msg_cdbg("status.bp2: %x\n", status.bp2);
-	msg_cdbg("status.tb: %x\n", status.tb);
-	msg_cdbg("status.sec: %x\n", status.sec);
-	msg_cdbg("status.srp0: %x\n", status.srp0);
-
-	/* InitFlash (with particular status value), and EnterFlashUpdate() then
-	 * ExitFlashUpdate() immediately. Thus, the flash status register will
-	 * be updated. */
-	if (InitFlash(*(unsigned char*)&status))
-		return -1;
+	initflash_cfg->status_reg_value = val;
+	if (in_flash_update_mode) {
+		ExitFlashUpdateFirmwareNoChange();
+		in_flash_update_mode = 0;
+	}
+	if (InitFlash())
+		return 1;
 	if (EnterFlashUpdate())
-		return -1;
-
+		return 1;
 	ExitFlashUpdateFirmwareNoChange();
-	msg_cinfo("SUCCESS.\n");
 	return 0;
 }
 
-/* FIXME: the following enable and disable functions are just tempapory
- * solution before the WPCE775x firmware supports reading status register.
- * Should be refined later.
+/*
+ * WPCE775x does not allow direct access to SPI chip from host. This function
+ * will translate SPI commands to valid WPCE775x WCB commands.
  */
-static int enable_wpce775x(struct flashchip *flash)
+int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+			const unsigned char *writearr, unsigned char *readarr)
 {
-	msg_cinfo("INFO: set_range_wpce775x() already set SRP0 bit.\n");
-	msg_cinfo("SUCCESS.\n");
-	return 0;
+	int rc = 0;
+	uint8_t opcode = writearr[0];
+
+	switch(opcode){
+	case JEDEC_RDID:{
+		unsigned char dummy = 0;
+		if (readcnt == 3)
+			ReadId(&readarr[0], &readarr[1], &readarr[2], &dummy);
+		else if (readcnt == 4)
+			ReadId(&readarr[0], &readarr[1], &readarr[2], &readarr[3]);
+		break;
+	}
+	case JEDEC_RDSR:
+		/*
+		 * FIXME: WPCE775x does not support reading status register
+		 * directly. Instead, we rely on the internally-kept value.
+		 * Consequently, this RDSR wrapper does not reflect the genuine
+		 * value of the status register.
+		 */
+		if (initflash_cfg)
+			readarr[0] = initflash_cfg->status_reg_value;
+		else
+			readarr[0] = 0x00;
+		break;
+	case JEDEC_READ:{
+		int blockaddr = (writearr[1] << 16) |
+		                (writearr[2] <<  8) |
+		                 writearr[3];
+		rc = wpce775x_read(blockaddr, readarr, readcnt);
+		break;
+	}
+	case JEDEC_WRSR:
+		wpce775x_spi_write_status_register(writearr[1]);
+		rc = 0;
+		break;
+	case JEDEC_WREN:
+	case JEDEC_EWSR:
+		/* Handled by InitFlash() */
+		rc = 0;
+		break;
+	case JEDEC_SE:
+	case JEDEC_BE_52:
+	case JEDEC_BE_D7:
+	case JEDEC_BE_D8:
+	case JEDEC_CE_60:
+	case JEDEC_CE_C7:{
+		int blockaddr = (writearr[1] << 16) |
+		                (writearr[2] <<  8) |
+		                 writearr[3];
+
+		rc = wpce775x_erase_new(blockaddr, opcode);
+		break;
+	}
+	case JEDEC_BYTE_PROGRAM:{
+		int blockaddr = (writearr[1] << 16) |
+		                (writearr[2] <<  8) |
+		                 writearr[3];
+		int nbytes = writecnt - 4;
+
+		rc = wpce775x_nbyte_program(blockaddr, &writearr[4], nbytes);
+		break;
+	}
+	case JEDEC_REMS:
+	case JEDEC_RES:
+	case JEDEC_WRDI:
+	case JEDEC_AAI_WORD_PROGRAM:
+	default:
+		/* unsupported opcodes */
+		msg_pdbg("unsupported SPI opcode: %02x\n", opcode);
+		rc = 1;
+		break;
+	}
+
+	msg_pdbg("%s: opcode: 0x%02x\n", __func__, opcode);
+	return rc;
 }
-
-static int disable_wpce775x(struct flashchip *flash)
-{
-	struct w25q_status status;
-
-	memset(&status, 0, sizeof(status));
-	msg_cinfo("INFO: Unlock both SRP0 and range bits.\n");
-
-	/* InitFlash (with particular status value), and EnterFlashUpdate() then
-	 * ExitFlashUpdate() immediately. Thus, the flash status register will
-	 * be updated. */
-	if (InitFlash(*(unsigned char*)&status))
-		return -1;
-	if (EnterFlashUpdate())
-		return -1;
-
-	ExitFlashUpdateFirmwareNoChange();
-	msg_cinfo("SUCCESS.\n");
-	return 0;
-}
-
-
-struct wp wp_wpce775x = {
-	.set_range      = set_range_wpce775x,
-	.enable         = enable_wpce775x,
-	.disable        = disable_wpce775x,
-};

@@ -20,7 +20,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include "flash.h"
 #include "programmer.h"
 
@@ -31,7 +30,7 @@
 
 #define PCI_VENDOR_ID_HPT	0x1103
 
-struct pcidev_status ata_hpt[] = {
+const struct pcidev_status ata_hpt[] = {
 	{0x1103, 0x0004, NT, "Highpoint", "HPT366/368/370/370A/372/372N"},
 	{0x1103, 0x0005, NT, "Highpoint", "HPT372A/372N"},
 	{0x1103, 0x0006, NT, "Highpoint", "HPT302/302N"},
@@ -51,7 +50,7 @@ int atahpt_init(void)
 	/* Enable flash access. */
 	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
 	reg32 |= (1 << 24);
-	pci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
+	rpci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
 
 	buses_supported = CHIP_BUSTYPE_PARALLEL;
 
@@ -60,13 +59,7 @@ int atahpt_init(void)
 
 int atahpt_shutdown(void)
 {
-	uint32_t reg32;
-
-	/* Disable flash access again. */
-	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
-	reg32 &= ~(1 << 24);
-	pci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
-
+	/* Flash access is disabled automatically by PCI restore. */
 	pci_cleanup(pacc);
 	release_io_perms();
 	return 0;

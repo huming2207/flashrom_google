@@ -18,10 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include "flash.h"
 #include "programmer.h"
 
@@ -120,7 +118,9 @@ enum chipbustype target_bus;
 
 int internal_init(void)
 {
+#if __FLASHROM_LITTLE_ENDIAN__
 	int ret = 0;
+#endif
 	int force_laptop = 0;
 	char *arg;
 
@@ -258,6 +258,9 @@ int internal_init(void)
 	 */
 	init_superio_ite();
 	it85xx_probe_spi_flash(NULL);
+
+	/* Same for WPCE775x */
+	wpce775x_probe_spi_flash(NULL);
 #endif
 
 	board_flash_enable(lb_vendor, lb_part);
@@ -266,7 +269,7 @@ int internal_init(void)
 	 * The error code might have been a warning only.
 	 * Besides that, we don't check the board enable return code either.
 	 */
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips)
 	return 0;
 #else
 	msg_perr("Your platform is not supported yet for the internal "
@@ -294,6 +297,7 @@ int internal_shutdown(void)
 
 #if defined(__i386__) || defined(__x86_64__)
 	it85xx_shutdown();
+	wpce775x_shutdown();
 #endif
 
 	return 0;

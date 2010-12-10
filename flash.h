@@ -34,6 +34,11 @@
 #endif
 
 struct flashchip;	/* forward declare */
+#define ERROR_PTR ((void*)-1)
+
+/* Error codes */
+#define TIMEOUT_ERROR	-101
+
 typedef unsigned long chipaddr;
 
 #define CHIP_RESTORE_CALLBACK	int (*func) (struct flashchip *flash, uint8_t status)
@@ -85,6 +90,7 @@ extern enum chipbustype target_bus;
 #define FEATURE_LONG_RESET	(0 << 4)
 #define FEATURE_SHORT_RESET	(1 << 4)
 #define FEATURE_EITHER_RESET	FEATURE_LONG_RESET
+#define FEATURE_RESET_MASK	(FEATURE_LONG_RESET | FEATURE_SHORT_RESET)
 #define FEATURE_ADDR_FULL	(0 << 2)
 #define FEATURE_ADDR_MASK	(3 << 2)
 #define FEATURE_ADDR_2AA	(1 << 2)
@@ -137,7 +143,7 @@ struct flashchip {
 
 	int (*printlock) (struct flashchip *flash);
 	int (*unlock) (struct flashchip *flash);
-	int (*write) (struct flashchip *flash, uint8_t *buf);
+	int (*write) (struct flashchip *flash, uint8_t *buf, int start, int len);
 	int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len);
 
 	/* Some flash devices have an additional register space. */
@@ -200,6 +206,7 @@ struct flashchip *probe_flash(struct flashchip *first_flash, int force);
 int read_flash_to_file(struct flashchip *flash, char *filename);
 int min(int a, int b);
 int max(int a, int b);
+void tolower_string(char *str);
 char *extract_param(char **haystack, char *needle, char *delim);
 int check_erased_range(struct flashchip *flash, int start, int len);
 int verify_range(struct flashchip *flash, uint8_t *cmpbuf, int start, int len, char *message);
@@ -207,8 +214,11 @@ int need_erase(uint8_t *have, uint8_t *want, int len, enum write_granularity gra
 char *strcat_realloc(char *dest, const char *src);
 void print_version(void);
 void print_banner(void);
+void list_programmers_linebreak(int startcol, int cols, int paren);
 int selfcheck(void);
 int doit(struct flashchip *flash, int force, char *filename, int read_it, int write_it, int erase_it, int verify_it);
+int read_buf_from_file(unsigned char *buf, unsigned long size, char *filename);
+int write_buf_to_file(unsigned char *buf, unsigned long size, char *filename);
 
 #define OK 0
 #define NT 1    /* Not tested */
@@ -243,12 +253,7 @@ int cli_mfg(int argc, char *argv[]);
 /* layout.c */
 int read_romlayout(char *name);
 int find_romentry(char *name);
-int handle_romentries(uint8_t *buffer, struct flashchip *flash);
-int in_valid_romentry(const chipaddr addr);
-int do_romentries(uint8_t *buffer, struct flashchip *flash,
-                  int (*do_action)(struct flashchip *flash,
-                                   uint8_t *buf,
-                                   const chipaddr addr, size_t len));
+int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
 
 /* spi.c */
 struct spi_command {

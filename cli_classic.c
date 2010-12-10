@@ -23,7 +23,6 @@
 
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
@@ -34,11 +33,6 @@
 
 static void cli_classic_usage(const char *name)
 {
-	const char *pname;
-	int pnamelen;
-	int remaining = 0;
-	enum programmer p;
-
 	printf("Usage: flashrom [-n] [-V] [-f] [-h|-R|-L|"
 #if CONFIG_PRINT_WIKI == 1
 	         "-z|"
@@ -84,32 +78,9 @@ static void cli_classic_usage(const char *name)
 	         "in wiki syntax\n"
 #endif
 	       "   -p | --programmer <name>[:<param>] specify the programmer "
-	         "device");
+	         "device\n");
 
-	for (p = 0; p < PROGRAMMER_INVALID; p++) {
-		pname = programmer_table[p].name;
-		pnamelen = strlen(pname);
-		if (remaining - pnamelen - 2 < 0) {
-			printf("\n                                     ");
-			remaining = 43;
-		} else {
-			printf(" ");
-			remaining--;
-		}
-		if (p == 0) {
-			printf("(");
-			remaining--;
-		}
-		printf("%s", pname);
-		remaining -= pnamelen;
-		if (p < PROGRAMMER_INVALID - 1) {
-			printf(",");
-			remaining--;
-		} else {
-			printf(")\n");
-		}
-	}
-
+	list_programmers_linebreak(37, 80, 1);
 	printf("\nYou can specify one of -h, -R, -L, "
 #if CONFIG_PRINT_WIKI == 1
 	         "-z, "
@@ -456,5 +427,10 @@ int cli_classic(int argc, char *argv[])
 	if (write_it && !dont_verify_it)
 		verify_it = 1;
 
+	/* FIXME: We should issue an unconditional chip reset here. This can be
+	 * done once we have a .reset function in struct flashchip.
+	 * Give the chip time to settle.
+	 */
+	programmer_delay(100000);
 	return doit(flash, force, filename, read_it, write_it, erase_it, verify_it);
 }

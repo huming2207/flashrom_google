@@ -92,6 +92,25 @@ void data_polling_jedec(chipaddr dst, uint8_t data)
 		msg_cdbg("%s: excessive loops, i=0x%x\n", __func__, i);
 }
 
+static int getaddrmask(struct flashchip *flash)
+{
+	switch (flash->feature_bits & FEATURE_ADDR_MASK) {
+	case FEATURE_ADDR_FULL:
+		return MASK_FULL;
+		break;
+	case FEATURE_ADDR_2AA:
+		return MASK_2AA;
+		break;
+	case FEATURE_ADDR_AAA:
+		return MASK_AAA;
+		break;
+	default:
+		msg_cerr("%s called with unknown mask\n", __func__);
+		return 0;
+		break;
+	}
+}
+
 static void start_program_jedec_common(struct flashchip *flash, unsigned int mask)
 {
 	chipaddr bios = flash->virtual_memory;
@@ -123,6 +142,26 @@ static int probe_jedec_common(struct flashchip *flash, unsigned int mask)
 		return 0;
 	}
 
+	/* Earlier probes might have been too fast for the chip to enter ID
+	 * mode completely. Allow the chip to finish this before seeing a
+	 * reset command.
+	 */
+	if (probe_timing_enter)
+		programmer_delay(probe_timing_enter);
+	/* Reset chip to a clean slate */
+	if ((flash->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
+	{
+		chip_writeb(0xAA, bios + (0x5555 & mask));
+		if (probe_timing_exit)
+			programmer_delay(10);
+		chip_writeb(0x55, bios + (0x2AAA & mask));
+		if (probe_timing_exit)
+			programmer_delay(10);
+	}
+	chip_writeb(0xF0, bios + (0x5555 & mask));
+	if (probe_timing_exit)
+		programmer_delay(probe_timing_exit);
+
 	/* Issue JEDEC Product ID Entry command */
 	chip_writeb(0xAA, bios + (0x5555 & mask));
 	if (probe_timing_enter)
@@ -153,7 +192,7 @@ static int probe_jedec_common(struct flashchip *flash, unsigned int mask)
 	}
 
 	/* Issue JEDEC Product ID Exit command */
-	if ((flash->feature_bits & FEATURE_SHORT_RESET) == FEATURE_LONG_RESET)
+	if ((flash->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
 	{
 		chip_writeb(0xAA, bios + (0x5555 & mask));
 		if (probe_timing_exit)
@@ -317,14 +356,18 @@ retry:
 	return failed;
 }
 
-int write_sector_jedec_common(struct flashchip *flash, uint8_t *src,
-		       chipaddr dst, unsigned int page_size, unsigned int mask)
+/* chunksize is 1 */
+int write_jedec_1(struct flashchip *flash, uint8_t *src, int start, int len)
 {
 	int i, failed = 0;
+	chipaddr dst = flash->virtual_memory + start;
 	chipaddr olddst;
+	int mask;
+
+	mask = getaddrmask(flash);
 
 	olddst = dst;
-	for (i = 0; i < page_size; i++) {
+	for (i = 0; i < len; i++) {
 		if (write_byte_program_jedec_common(flash, src, dst, mask))
 			failed = 1;
 		dst++, src++;
@@ -335,14 +378,16 @@ int write_sector_jedec_common(struct flashchip *flash, uint8_t *src,
 	return failed;
 }
 
-static int write_page_write_jedec_common(struct flashchip *flash, uint8_t *src,
-			   int start, int page_size, unsigned int mask)
+int write_page_write_jedec_common(struct flashchip *flash, uint8_t *src, int start, int page_size)
 {
 	int i, tried = 0, failed;
 	uint8_t *s = src;
 	chipaddr bios = flash->virtual_memory;
 	chipaddr dst = bios + start;
 	chipaddr d = dst;
+	int mask;
+
+	mask = getaddrmask(flash);
 
 retry:
 	/* Issue JEDEC Start Program command */
@@ -374,79 +419,43 @@ retry:
 	return failed;
 }
 
-static int getaddrmask(struct flashchip *flash)
+/* chunksize is page_size */
+/*
+ * Write a part of the flash chip.
+ * FIXME: Use the chunk code from Michael Karcher instead.
+ * This function is a slightly modified copy of spi_write_chunked.
+ * Each page is written separately in chunks with a maximum size of chunksize.
+ */
+int write_jedec(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
-	switch (flash->feature_bits & FEATURE_ADDR_MASK) {
-	case FEATURE_ADDR_FULL:
-		return MASK_FULL;
-		break;
-	case FEATURE_ADDR_2AA:
-		return MASK_2AA;
-		break;
-	case FEATURE_ADDR_AAA:
-		return MASK_AAA;
-		break;
-	default:
-		msg_cerr("%s called with unknown mask\n", __func__);
-		return 0;
-		break;
-	}
-}
-
-int write_jedec(struct flashchip *flash, uint8_t *buf)
-{
-	int mask;
-	int i, failed = 0;
-	int total_size = flash->total_size * 1024;
+	int i, starthere, lenhere;
+	/* FIXME: page_size is the wrong variable. We need max_writechunk_size
+	 * in struct flashchip to do this properly. All chips using
+	 * write_jedec have page_size set to max_writechunk_size, so
+	 * we're OK for now.
+	 */
 	int page_size = flash->page_size;
 
-	mask = getaddrmask(flash);
+	/* Warning: This loop has a very unusual condition and body.
+	 * The loop needs to go through each page with at least one affected
+	 * byte. The lowest page number is (start / page_size) since that
+	 * division rounds down. The highest page number we want is the page
+	 * where the last byte of the range lives. That last byte has the
+	 * address (start + len - 1), thus the highest page number is
+	 * (start + len - 1) / page_size. Since we want to include that last
+	 * page as well, the loop condition uses <=.
+	 */
+	for (i = start / page_size; i <= (start + len - 1) / page_size; i++) {
+		/* Byte position of the first byte in the range in this page. */
+		/* starthere is an offset to the base address of the chip. */
+		starthere = max(start, i * page_size);
+		/* Length of bytes in the range in this page. */
+		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 
-	if (erase_chip_jedec(flash)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	
-	msg_cinfo("Programming page: ");
-	for (i = 0; i < total_size / page_size; i++) {
-		msg_cinfo("%04d at address: 0x%08x", i, i * page_size);
-		if (write_page_write_jedec_common(flash, buf + i * page_size,
-					   i * page_size, page_size, mask))
-			failed = 1;
-		msg_cinfo("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	}
-	msg_cinfo("DONE!\n");
-
-	return failed;
-}
-
-int write_jedec_1(struct flashchip *flash, uint8_t * buf)
-{
-	int i;
-	chipaddr bios = flash->virtual_memory;
-	chipaddr dst = bios;
-	int mask;
-
-	mask = getaddrmask(flash);
-
-	programmer_delay(10);
-	if (erase_flash(flash)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
+		if (write_page_write_jedec_common(flash, buf + starthere - start, starthere, lenhere))
+			return 1;
 	}
 
-	msg_cinfo("Programming page: ");
-	for (i = 0; i < flash->total_size; i++) {
-		if ((i & 0x3) == 0)
-			msg_cinfo("address: 0x%08lx", (unsigned long)i * 1024);
-
-                write_sector_jedec_common(flash, buf + i * 1024, dst + i * 1024, 1024, mask);
-
-		if ((i & 0x3) == 0)
-			msg_cinfo("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	}
-
-	msg_cinfo("DONE!\n");
 	return 0;
 }
 

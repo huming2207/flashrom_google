@@ -530,7 +530,7 @@ void spi_prettyprint_status_register(struct flashchip *flash)
 		    ((flash->model_id & 0xff00) == 0x2500))
 			spi_prettyprint_status_register_st_m25p(status);
 		break;
-	case MX_ID:
+	case MACRONIX_ID:
 		if ((flash->model_id & 0xff00) == 0x2000)
 			spi_prettyprint_status_register_st_m25p(status);
 		break;
@@ -862,6 +862,7 @@ int spi_write_status_enable(void)
 static int spi_write_status_register_ewsr(struct flashchip *flash, int status)
 {
 	int result;
+	int i = 0;
 	struct spi_command cmds[] = {
 	{
 	/* WRSR requires either EWSR or WREN depending on chip type. */
@@ -885,15 +886,31 @@ static int spi_write_status_register_ewsr(struct flashchip *flash, int status)
 	if (result) {
 		msg_cerr("%s failed during command execution\n",
 			__func__);
+		/* No point in waiting for the command to complete if execution
+		 * failed.
+		 */
+		return result;
 	}
-	/* WRSR performs a self-timed erase before the changes take effect. */
+	/* WRSR performs a self-timed erase before the changes take effect.
+	 * This may take 50-85 ms in most cases, and some chips apparently
+	 * allow running RDSR only once. Therefore pick an initial delay of
+	 * 100 ms, then wait in 10 ms steps until a total of 5 s have elapsed.
+	 */
 	programmer_delay(100 * 1000);
-	return result;
+	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP) {
+		if (++i > 490) {
+			msg_cerr("Error: WIP bit after WRSR never cleared\n");
+			return TIMEOUT_ERROR;
+		}
+		programmer_delay(10 * 1000);
+	}
+	return 0;
 }
 
 static int spi_write_status_register_wren(struct flashchip *flash, int status)
 {
 	int result;
+	int i = 0;
 	struct spi_command cmds[] = {
 	{
 	/* WRSR requires either EWSR or WREN depending on chip type. */
@@ -917,10 +934,25 @@ static int spi_write_status_register_wren(struct flashchip *flash, int status)
 	if (result) {
 		msg_cerr("%s failed during command execution\n",
 			__func__);
+		/* No point in waiting for the command to complete if execution
+		 * failed.
+		 */
+		return result;
 	}
-	/* WRSR performs a self-timed erase before the changes take effect. */
+	/* WRSR performs a self-timed erase before the changes take effect.
+	 * This may take 50-85 ms in most cases, and some chips apparently
+	 * allow running RDSR only once. Therefore pick an initial delay of
+	 * 100 ms, then wait in 10 ms steps until a total of 5 s have elapsed.
+	 */
 	programmer_delay(100 * 1000);
-	return result;
+	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP) {
+		if (++i > 490) {
+			msg_cerr("Error: WIP bit after WRSR never cleared\n");
+			return TIMEOUT_ERROR;
+		}
+		programmer_delay(10 * 1000);
+	}
+	return 0;
 }
 
 int spi_write_status_register(struct flashchip *flash, int status)
@@ -1263,10 +1295,6 @@ int spi_write_chunked(struct flashchip *flash, uint8_t *buf, int start, int len,
 		/* Byte position of the first byte in the range in this page. */
 		/* starthere is an offset to the base address of the chip. */
 		starthere = max(start, i * page_size);
-		if (!in_valid_romentry(starthere)) {
-			msg_cdbg("0x%06x skipped, ", starthere);
-			continue;
-		}
 		/* Length of bytes in the range in this page. */
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 		for (j = 0; j < lenhere; j += chunksize) {
@@ -1291,12 +1319,12 @@ int spi_write_chunked(struct flashchip *flash, uint8_t *buf, int start, int len,
  * (e.g. due to size constraints in IT87* for over 512 kB)
  */
 /* real chunksize is 1, logical chunksize is 1 */
-int spi_chip_write_1_new(struct flashchip *flash, uint8_t *buf, int start, int len)
+int spi_chip_write_1(struct flashchip *flash, uint8_t *buf, int start, int len)
 {
 	int i, result = 0;
 
 	for (i = start; i < start + len; i++) {
-		result = spi_byte_program(i, buf[i]);
+		result = spi_byte_program(i, buf[i - start]);
 		if (result)
 			return 1;
 		while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
@@ -1304,19 +1332,6 @@ int spi_chip_write_1_new(struct flashchip *flash, uint8_t *buf, int start, int l
 	}
 
 	return 0;
-}
-
-int spi_chip_write_1(struct flashchip *flash, uint8_t *buf)
-{
-	/* Erase first */
-	msg_cinfo("Erasing flash before programming... ");
-	if (erase_flash(flash)) {
-		msg_cerr("ERASE FAILED!\n");
-		return -1;
-	}
-	msg_cinfo("done.\n");
-
-	return spi_chip_write_1_new(flash, buf, 0, flash->total_size * 1024);
 }
 
 int spi_aai_write(struct flashchip *flash, uint8_t *buf, int start, int len)
@@ -1358,7 +1373,7 @@ int spi_aai_write(struct flashchip *flash, uint8_t *buf, int start, int len)
 	case SPI_CONTROLLER_WBSIO:
 		msg_perr("%s: impossible with this SPI controller,"
 				" degrading to byte program\n", __func__);
-		return spi_chip_write_1_new(flash, buf, start, len);
+		return spi_chip_write_1(flash, buf, start, len);
 #endif
 #endif
 	default:
@@ -1368,18 +1383,32 @@ int spi_aai_write(struct flashchip *flash, uint8_t *buf, int start, int len)
 	/* The even start address and even length requirements can be either
 	 * honored outside this function, or we can call spi_byte_program
 	 * for the first and/or last byte and use AAI for the rest.
+	 * FIXME: Move this to generic code.
 	 */
 	/* The data sheet requires a start address with the low bit cleared. */
 	if (start % 2) {
 		msg_cerr("%s: start address not even! Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
-		return SPI_GENERIC_ERROR;
+		if (spi_chip_write_1(flash, buf, start, start % 2))
+			return SPI_GENERIC_ERROR;
+		pos += start % 2;
+		cmds[1].writearr = (const unsigned char[]){
+					JEDEC_AAI_WORD_PROGRAM,
+					(pos >> 16) & 0xff,
+					(pos >> 8) & 0xff,
+					(pos & 0xff),
+					buf[pos - start],
+					buf[pos - start + 1]
+				};
+		/* Do not return an error for now. */
+		//return SPI_GENERIC_ERROR;
 	}
 	/* The data sheet requires total AAI write length to be even. */
 	if (len % 2) {
 		msg_cerr("%s: total write length not even! Please report a "
 			 "bug at flashrom@flashrom.org\n", __func__);
-		return SPI_GENERIC_ERROR;
+		/* Do not return an error for now. */
+		//return SPI_GENERIC_ERROR;
 	}
 
 
@@ -1398,15 +1427,26 @@ int spi_aai_write(struct flashchip *flash, uint8_t *buf, int start, int len)
 	/* We already wrote 2 bytes in the multicommand step. */
 	pos += 2;
 
-	while (pos < start + len) {
-		cmd[1] = buf[pos++];
-		cmd[2] = buf[pos++];
+	/* Are there at least two more bytes to write? */
+	while (pos < start + len - 1) {
+		cmd[1] = buf[pos++ - start];
+		cmd[2] = buf[pos++ - start];
 		spi_send_command(JEDEC_AAI_WORD_PROGRAM_CONT_OUTSIZE, 0, cmd, NULL);
 		while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
 			programmer_delay(10);
 	}
 
-	/* Use WRDI to exit AAI mode. */
+	/* Use WRDI to exit AAI mode. This needs to be done before issuing any
+	 * other non-AAI command.
+	 */
 	spi_write_disable();
+
+	/* Write remaining byte (if any). */
+	if (pos < start + len) {
+		if (spi_chip_write_1(flash, buf + pos - start, pos, pos % 2))
+			return SPI_GENERIC_ERROR;
+		pos += pos % 2;
+	}
+
 	return 0;
 }
