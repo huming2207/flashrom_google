@@ -563,6 +563,7 @@ int cli_mfg(int argc, char *argv[])
 	if (wp_status) {
 		if (flash->wp && flash->wp->wp_status)
 			rc = flash->wp->wp_status(flash);
+		goto cli_mfg_silent_exit;
 	}
 	
 	if (read_it || write_it || erase_it || verify_it)
