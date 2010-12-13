@@ -452,8 +452,8 @@ int cli_mfg(int argc, char *argv[])
 		for (i = 0; i < ARRAY_SIZE(flashes) && flashes[i]; i++)
 			printf(" %s", flashes[i]->name);
 		printf("\nPlease specify which chip to use with the -c <chipname> option.\n");
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	} else if (!flashes[0]) {
 		printf("No EEPROM/flash device found.\n");
 		if (!force || !chip_to_probe) {
@@ -471,8 +471,8 @@ int cli_mfg(int argc, char *argv[])
 			return read_flash_to_file(flashes[0], filename);
 		}
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	flash = flashes[0];
@@ -484,8 +484,8 @@ int cli_mfg(int argc, char *argv[])
 	    (!force)) {
 		fprintf(stderr, "Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
-		programmer_shutdown();
-		return 1;
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	if (!(read_it | write_it | verify_it | erase_it |
@@ -493,21 +493,21 @@ int cli_mfg(int argc, char *argv[])
 	      wp_status)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(0);
+		rc = 0;
+		goto cli_mfg_silent_exit;
 	}
 
 	if (set_wp_enable && set_wp_disable) {
 		printf("Error: --wp-enable and --wp-disable are mutually exclusive\n");
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	if (!filename && (read_it | write_it | verify_it)) {
 		printf("Error: No filename specified.\n");
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	/* Always verify write operations unless -n is used. */
@@ -527,23 +527,23 @@ int cli_mfg(int argc, char *argv[])
 
 		if ((argc - optind) != 2) {
 			printf("Error: invalid number of arguments\n");
-			programmer_shutdown();
-			exit(1);
+			rc = 1;
+			goto cli_mfg_silent_exit;
 		}
 
 		/* FIXME: add some error checking */
 		start = strtoul(argv[optind], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
 			printf("Error: value \"%s\" invalid\n", argv[optind]);
-			programmer_shutdown();
-			exit(1);
+			rc = 1;
+			goto cli_mfg_silent_exit;
 		}
 
 		len = strtoul(argv[optind + 1], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
 			printf("Error: value \"%s\" invalid\n", argv[optind + 1]);
-			programmer_shutdown();
-			exit(1);
+			rc = 1;
+			goto cli_mfg_silent_exit;
 		}
 
 		if (flash->wp && flash->wp->set_range)
@@ -557,7 +557,7 @@ int cli_mfg(int argc, char *argv[])
 	
 	if (get_size) {
 		printf("%d\n", flash->total_size * 1024);
-		rc = 0;
+		goto cli_mfg_silent_exit;
 	}
 
 	if (wp_status) {
@@ -569,7 +569,8 @@ int cli_mfg(int argc, char *argv[])
 		rc = doit(flash, force, filename,
 		          read_it, write_it, erase_it, verify_it);
 
-	programmer_shutdown();	/* must be done after chip_restore() */
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
+cli_mfg_silent_exit:
+	programmer_shutdown();	/* must be done after chip_restore() */
 	return rc;
 }
