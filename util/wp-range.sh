@@ -49,7 +49,7 @@ echo "old start: ${old_start}, old length: ${old_len}" >> ${LOGFILE}
 # to choose new values. If this is the case, we'll extend the range to the
 # next 64K block.
 if [ $((${old_start} == ${NEW_WP_RANGE_START})) -ne 1 ] && [ $((${old_len} == ${NEW_WP_RANGE_LEN})) -ne 1 ] ; then
-	NEW_WP_RANGE_LEN=$((${NEW_WP_RANGE_LEN} + 0x10000}))
+	NEW_WP_RANGE_LEN=$((${NEW_WP_RANGE_LEN} + 0x10000))
 fi
 
 # Try to set new range values
