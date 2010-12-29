@@ -257,10 +257,14 @@ int internal_init(void)
 	 * IT87* Parallel write enable.
 	 */
 	init_superio_ite();
-	it85xx_probe_spi_flash(NULL);
 
-	/* Same for WPCE775x */
-	wpce775x_probe_spi_flash(NULL);
+	/* probe for programmers that bridge LPC <--> SPI */
+	if (target_bus == CHIP_BUSTYPE_LPC ||
+	    target_bus == CHIP_BUSTYPE_FWH) {
+		it85xx_probe_spi_flash(NULL);
+		wpce775x_probe_spi_flash(NULL);
+	}
+
 #endif
 
 	board_flash_enable(lb_vendor, lb_part);
@@ -296,8 +300,11 @@ int internal_shutdown(void)
 	release_io_perms();
 
 #if defined(__i386__) || defined(__x86_64__)
-	it85xx_shutdown();
-	wpce775x_shutdown();
+	if (target_bus == CHIP_BUSTYPE_LPC ||
+	    target_bus == CHIP_BUSTYPE_FWH) {
+		it85xx_shutdown();
+		wpce775x_shutdown();
+	}
 #endif
 
 	return 0;
