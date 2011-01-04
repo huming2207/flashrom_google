@@ -32,7 +32,7 @@ char *mainboard_part = NULL;
 #endif
 static int romimages = 0;
 
-#define MAX_ROMLAYOUT	32
+#define MAX_ROMLAYOUT	64
 
 typedef struct {
 	unsigned int start;
