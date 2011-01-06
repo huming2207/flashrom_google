@@ -1230,3 +1230,48 @@ int chipset_flash_enable(void)
 
 	return ret;
 }
+
+int get_target_bus_from_chipset(enum chipbustype *target_bus)
+{
+	int i;
+	struct pci_dev *dev = 0;
+	uint32_t tmp, gcs;
+	void *rcrb;
+	int ret = -1;  /* not found */
+
+	for (i = 0; chipset_enables[i].vendor_name != NULL; i++) {
+		dev = pci_dev_find(chipset_enables[i].vendor_id,
+				   chipset_enables[i].device_id);
+		if (!dev)
+			continue;
+
+		/* Get physical address of Root Complex Register Block */
+		tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+		msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
+
+		/* Map RCBA to virtual memory */
+		rcrb = physmap("ICH RCRB", tmp, 0x4000);
+
+		/* Set BBS (Boot BIOS Straps) field of GCS register. */
+		gcs = mmio_readl(rcrb + 0x3410);
+		switch ((gcs & 0xc00) >> 10) {
+		case 0x1:
+			*target_bus = CHIP_BUSTYPE_SPI;
+			break;
+		case 0x3:
+			*target_bus = CHIP_BUSTYPE_LPC;
+			break;
+		default:
+			*target_bus = CHIP_BUSTYPE_UNKNOWN;
+			ret = -2;  /* unknown bus type. */
+			break;
+		}
+
+		ret = 0;
+		break;
+		/* For unexpected second device, the chipset_flash_enable()
+		   has shown the warning message. */
+	}
+
+	return ret;
+}

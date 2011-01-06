@@ -123,6 +123,7 @@ int internal_init(void)
 #endif
 	int force_laptop = 0;
 	char *arg;
+	int probe_target_bus_later = 0;
 
 	arg = extract_programmer_param("boardenable");
 	if (arg && !strcmp(arg,"force")) {
@@ -185,6 +186,9 @@ int internal_init(void)
 		}
 
 		free(arg);
+	} else {
+		/* The pacc must be initialized before access pci devices. */
+		probe_target_bus_later = 1;
 	}
 
 	get_io_perms();
@@ -208,6 +212,15 @@ int internal_init(void)
 	coreboot_init();
 
 	dmi_init();
+
+	if (probe_target_bus_later) {
+		/* read the target bus value from register. */
+		if (get_target_bus_from_chipset(&target_bus)) {
+			msg_perr("Cannot get target bus from %s programmer.\n",
+			         programmer_table[programmer].name);
+			return 1;
+		}
+	}
 
 	/* Probe for the Super I/O chip and fill global struct superio. */
 	probe_superio();
