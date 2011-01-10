@@ -1231,7 +1231,7 @@ int chipset_flash_enable(void)
 	return ret;
 }
 
-int get_target_bus_from_chipset(enum chipbustype *target_bus)
+int get_target_bus_from_chipset(enum chipbustype *bus)
 {
 	int i;
 	struct pci_dev *dev = 0;
@@ -1256,13 +1256,13 @@ int get_target_bus_from_chipset(enum chipbustype *target_bus)
 		gcs = mmio_readl(rcrb + 0x3410);
 		switch ((gcs & 0xc00) >> 10) {
 		case 0x1:
-			*target_bus = CHIP_BUSTYPE_SPI;
+			*bus = CHIP_BUSTYPE_SPI;
 			break;
 		case 0x3:
-			*target_bus = CHIP_BUSTYPE_LPC;
+			*bus = CHIP_BUSTYPE_LPC;
 			break;
 		default:
-			*target_bus = CHIP_BUSTYPE_UNKNOWN;
+			*bus = CHIP_BUSTYPE_UNKNOWN;
 			ret = -2;  /* unknown bus type. */
 			break;
 		}
