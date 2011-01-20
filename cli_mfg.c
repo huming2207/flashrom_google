@@ -29,10 +29,13 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <errno.h>
+#include "big_lock.h"
 #include "flash.h"
 #include "flashchips.h"
 #include "programmer.h"
 #include "writeprotect.h"
+
+#define LOCK_TIMEOUT_SECS	30
 
 void cli_mfg_usage(const char *name)
 {
@@ -428,6 +431,14 @@ int cli_mfg(int argc, char *argv[])
 		flash = NULL;
 	}
 
+	/* try to get lock before doing any work that touches hardware */
+	msg_gdbg("Acquiring lock (timeout=%d sec)...\n", LOCK_TIMEOUT_SECS);
+	if (acquire_big_lock(LOCK_TIMEOUT_SECS) < 0) {
+		msg_gerr("Could not acquire lock.\n");
+		exit(1);
+	}
+	msg_gdbg("Lock acquired.\n");
+
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
@@ -435,7 +446,8 @@ int cli_mfg(int argc, char *argv[])
 		 programmer_table[programmer].name);
 	if (programmer_init(pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
-		exit(1);
+		rc = 1;
+		goto cli_mfg_release_lock_exit;
 	}
 
 	/* FIXME: Delay calibration should happen in programmer code. */
@@ -464,8 +476,8 @@ int cli_mfg(int argc, char *argv[])
 			flashes[0] = probe_flash(flashchips, 1);
 			if (!flashes[0]) {
 				printf("Probing for flash chip '%s' failed.\n", chip_to_probe);
-				programmer_shutdown();
-				exit(1);
+				rc = 1;
+				goto cli_mfg_silent_exit;
 			}
 			printf("Please note that forced reads most likely contain garbage.\n");
 			return read_flash_to_file(flashes[0], filename);
@@ -573,5 +585,7 @@ int cli_mfg(int argc, char *argv[])
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 cli_mfg_silent_exit:
 	programmer_shutdown();	/* must be done after chip_restore() */
+cli_mfg_release_lock_exit:
+	release_big_lock();
 	return rc;
 }
