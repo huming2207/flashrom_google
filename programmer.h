@@ -503,6 +503,7 @@ enum spi_controller {
 	SPI_CONTROLLER_ICH9,
 	SPI_CONTROLLER_IT85XX,
 	SPI_CONTROLLER_IT87XX,
+	SPI_CONTROLLER_MEC1308,
 	SPI_CONTROLLER_SB600,
 	SPI_CONTROLLER_VIA,
 	SPI_CONTROLLER_WBSIO,
@@ -578,6 +579,18 @@ int it8716f_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *writearr, unsigned char *readarr);
 int it8716f_spi_chip_read(struct flashchip *flash, uint8_t *buf, int start, int len);
 int it8716f_spi_chip_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
+
+/* mec1308.c */
+struct superio probe_superio_mec1308(void);
+int mec1308_shutdown(void);
+int mec1308_probe_spi_flash(const char *name);
+int mec1308_spi_read(struct flashchip *flash,
+                     uint8_t * buf, int start, int len);
+int mec1308_spi_write_256(struct flashchip *flash,
+                          uint8_t *buf, int start, int len);
+int mec1308_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+                             const unsigned char *writearr,
+                             unsigned char *readarr);
 
 /* sb600spi.c */
 #if CONFIG_INTERNAL == 1

@@ -69,6 +69,13 @@ const struct spi_programmer spi_programmer[] = {
 		.write_256 = it8716f_spi_chip_write_256,
 	},
 
+	{ /* SPI_CONTROLLER_MEC1308 */
+		.command = mec1308_spi_send_command,
+		.multicommand = default_spi_send_multicommand,
+		.read = mec1308_spi_read,
+		.write_256 = mec1308_spi_write_256,
+	},
+
 	{ /* SPI_CONTROLLER_SB600 */
 		.command = sb600_spi_send_command,
 		.multicommand = default_spi_send_multicommand,

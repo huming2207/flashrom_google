@@ -276,6 +276,7 @@ int internal_init(void)
 	    target_bus == CHIP_BUSTYPE_FWH) {
 		it85xx_probe_spi_flash(NULL);
 		wpce775x_probe_spi_flash(NULL);
+		mec1308_probe_spi_flash(NULL);
 	}
 
 #endif
@@ -317,6 +318,7 @@ int internal_shutdown(void)
 	    target_bus == CHIP_BUSTYPE_FWH) {
 		it85xx_shutdown();
 		wpce775x_shutdown();
+		mec1308_shutdown();
 	}
 #endif
 
