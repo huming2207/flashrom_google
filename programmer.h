@@ -76,6 +76,9 @@ enum programmer {
 #if CONFIG_NICINTEL_SPI == 1
 	PROGRAMMER_NICINTEL_SPI,
 #endif
+#if CONFIG_OGP_SPI == 1
+	PROGRAMMER_OGP_SPI,
+#endif
 	PROGRAMMER_INVALID /* This must always be the last entry. */
 };
 
@@ -120,6 +123,9 @@ enum bitbang_spi_master_type {
 #if defined(__i386__) || defined(__x86_64__)
 	BITBANG_SPI_MASTER_MCP,
 #endif
+#endif
+#if CONFIG_OGP_SPI == 1
+	BITBANG_SPI_MASTER_OGP,
 #endif
 };
 
@@ -215,13 +221,13 @@ uint32_t pcidev_init(uint16_t vendor_id, uint32_t bar, const struct pcidev_statu
 /* rpci_write_* are reversible writes. The original PCI config space register
  * contents will be restored on shutdown.
  */
-int rpci_write_byte(struct pci_dev *dev, int reg, u8 data);
-int rpci_write_word(struct pci_dev *dev, int reg, u16 data);
-int rpci_write_long(struct pci_dev *dev, int reg, u32 data);
+int rpci_write_byte(struct pci_dev *dev, int reg, uint8_t data);
+int rpci_write_word(struct pci_dev *dev, int reg, uint16_t data);
+int rpci_write_long(struct pci_dev *dev, int reg, uint32_t data);
 #endif
 
 /* print.c */
-#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL_SPI >= 1
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI >= 1
 void print_supported_pcidevs(const struct pcidev_status *devs);
 #endif
 
@@ -405,6 +411,13 @@ void nicintel_spi_chip_writeb(uint8_t val, chipaddr addr);
 extern const struct pcidev_status nics_intel_spi[];
 #endif
 
+/* ogp_spi.c */
+#if CONFIG_OGP_SPI == 1
+int ogp_spi_init(void);
+int ogp_spi_shutdown(void);
+extern const struct pcidev_status ogp_spi[];
+#endif
+
 /* satasii.c */
 #if CONFIG_SATASII == 1
 int satasii_init(void);
@@ -528,6 +541,9 @@ enum spi_controller {
 #endif
 #if CONFIG_NICINTEL_SPI == 1
 	SPI_CONTROLLER_NICINTEL,
+#endif
+#if CONFIG_OGP_SPI == 1
+	SPI_CONTROLLER_OGP,
 #endif
 	SPI_CONTROLLER_INVALID /* This must always be the last entry. */
 };

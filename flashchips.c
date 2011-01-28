@@ -156,7 +156,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -182,7 +182,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -234,7 +234,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -257,10 +257,10 @@ struct flashchip flashchips[] = {
 		.model_id	= AMD_AM29LV080B,
 		.total_size	= 1024,
 		.page_size	= 64 * 1024,
-		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
+		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET, /* datasheet specifies address as don't care */
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -899,7 +899,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -930,7 +930,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_OK_PR,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -961,7 +961,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -1478,7 +1478,8 @@ struct flashchip flashchips[] = {
 		.model_id	= ATMEL_AT26DF081A,
 		.total_size	= 1024,
 		.page_size	= 256,
-		.tested		= TEST_OK_PR,
+		.feature_bits	= FEATURE_WRSR_WREN,
+		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -1500,7 +1501,7 @@ struct flashchip flashchips[] = {
 				.block_erase = spi_block_erase_c7,
 			}
 		},
-		.unlock		= spi_disable_blockprotect,
+		.unlock		= spi_disable_blockprotect_at25df,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
 	},
@@ -3819,7 +3820,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -3851,7 +3852,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -3883,7 +3884,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -3914,7 +3915,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_OK_PR,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -3971,7 +3972,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_SHORT_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine don't use probe_timing (mx29f002.c) */
+		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
 			{
@@ -4768,6 +4769,32 @@ struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Spansion",
+		.name		= "S25FL004A",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL004A,
+		.total_size	= 512,
+		.page_size	= 256,
+		.tested		= TEST_UNTESTED,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 8} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {512 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+	},
+
+	{
+		.vendor		= "Spansion",
 		.name		= "S25FL008A",
 		.bustype	= CHIP_BUSTYPE_SPI,
 		.manufacture_id	= SPANSION_ID,
@@ -4819,6 +4846,87 @@ struct flashchip flashchips[] = {
 	},
 
 	{
+		.vendor		= "Spansion",
+		.name		= "S25FL032A",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL032A,
+		.total_size	= 4096,
+		.page_size	= 256,
+		.tested		= TEST_UNTESTED,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 64} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {4 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+	},
+
+	{
+		.vendor		= "Spansion",
+		.name		= "S25FL064A",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL064A,
+		.total_size	= 8192,
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 128} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {8 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+	},
+
+	{
+		.vendor		= "SST",
+		.name		= "SST25VF010.REMS",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= SST_ID,
+		.model_id	= SST_SST25VF010_REMS,
+		.total_size	= 128,
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rems,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {4 * 1024, 32} },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {32 * 1024, 4} },
+				.block_erase = spi_block_erase_52,
+			}, {
+				.eraseblocks = { {128 * 1024, 1} },
+				.block_erase = spi_block_erase_60,
+			},
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_1,
+		.read		= spi_chip_read,
+	},
+
+	{
 		.vendor		= "SST",
 		.name		= "SST25VF016B",
 		.bustype	= CHIP_BUSTYPE_SPI,
@@ -4826,7 +4934,7 @@ struct flashchip flashchips[] = {
 		.model_id	= SST_SST25VF016B,
 		.total_size	= 2048,
 		.page_size	= 256,
-		.tested		= TEST_OK_PRE,
+		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -6292,7 +6400,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_EITHER_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_IGNORED, /* routine doesn't use probe_timing (am29f040b.c) */
+		.probe_timing	= TIMING_ZERO, /* datasheet specifies no timing */
 		.block_erasers	=
 		{
 			{
@@ -7010,7 +7118,7 @@ struct flashchip flashchips[] = {
 		.total_size	= 1024,
 		.page_size	= 256,
 		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_OK_PRE,
+		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -7495,13 +7603,14 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
+		.printlock	= printlock_w39v040a,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
 
 	{
 		.vendor		= "Winbond",
-		.name		= "W39V040(F)B",
+		.name		= "W39V040B",
 		.bustype	= CHIP_BUSTYPE_LPC,
 		.manufacture_id	= WINBOND_ID,
 		.model_id	= WINBOND_W39V040B,
@@ -7521,13 +7630,14 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
+		.printlock	= printlock_w39v040b,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
 
 	{
 		.vendor		= "Winbond",
-		.name		= "W39V040(F)C",
+		.name		= "W39V040C",
 		.bustype	= CHIP_BUSTYPE_LPC,
 		.manufacture_id	= WINBOND_ID,
 		.model_id	= WINBOND_W39V040C,
@@ -7536,7 +7646,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_EITHER_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME,
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -7577,8 +7687,63 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
-		.printlock	= printlock_sst_fwhub,
+		.printlock	= printlock_w39v040fa,
 		.unlock		= unlock_sst_fwhub,
+		.write		= write_jedec_1,
+		.read		= read_memmapped,
+	},
+
+	{
+		.vendor		= "Winbond",
+		.name		= "W39V040FB",
+		.bustype	= CHIP_BUSTYPE_FWH,
+		.manufacture_id	= WINBOND_ID,
+		.model_id	= WINBOND_W39V040B,
+		.total_size	= 512,
+		.page_size	= 64 * 1024,
+		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
+		.tested		= TEST_OK_PRE,
+		.probe		= probe_jedec,
+		.probe_timing	= 10, 
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 8} },
+				.block_erase = erase_sector_jedec,
+			}, {
+				.eraseblocks = { {512 * 1024, 1} },
+				.block_erase = erase_chip_block_jedec,
+			}
+		},
+		.printlock	= printlock_w39v040fb,
+		.unlock		= unlock_w39v040fb,
+		.write		= write_jedec_1,
+		.read		= read_memmapped,
+	},
+
+	{
+		.vendor		= "Winbond",
+		.name		= "W39V040FC",
+		.bustype	= CHIP_BUSTYPE_FWH,
+		.manufacture_id	= WINBOND_ID,
+		.model_id	= WINBOND_W39V040C,
+		.total_size	= 512,
+		.page_size	= 64 * 1024,
+		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
+		.tested		= TEST_UNTESTED,
+		.probe		= probe_jedec,
+		.probe_timing	= 10,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 8} },
+				.block_erase = erase_sector_jedec,
+			}, {
+				.eraseblocks = { {512 * 1024, 1} },
+				.block_erase = erase_chip_block_jedec,
+			}
+		},
+		.printlock	= printlock_w39v040fc,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
@@ -7605,6 +7770,7 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
+		.printlock	= printlock_w39v080a,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
@@ -7736,7 +7902,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME,
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -7747,7 +7913,8 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
-		.unlock		= unlock_winbond_fwhub,
+		.printlock	= printlock_w39v080fa,
+		.unlock		= unlock_w39v080fa,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
@@ -7763,7 +7930,7 @@ struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME,
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -7774,7 +7941,7 @@ struct flashchip flashchips[] = {
 				.block_erase = erase_chip_block_jedec,
 			}
 		},
-		.unlock		= unlock_winbond_fwhub,
+		.printlock	= printlock_w39v080fa_dual,
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},

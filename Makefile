@@ -82,7 +82,7 @@ override CONFIG_FT2232_SPI = no
 endif
 endif
 
-CHIP_OBJS = jedec.o stm50flw0x0x.o w39v040c.o w39v080fa.o w29ee011.o \
+CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 	sst28sf040.o m29f400bt.o 82802ab.o pm49fl00x.o \
 	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
 	wpce775x.o mec1308.o writeprotect.o
@@ -147,6 +147,9 @@ CONFIG_NICNATSEMI ?= no
 # Always enable SPI on Intel NICs for now.
 CONFIG_NICINTEL_SPI ?= yes
 
+# Always enable SPI on OGP cards for now.
+CONFIG_OGP_SPI ?= yes
+
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= yes
 
@@ -166,7 +169,11 @@ else
 ifeq ($(CONFIG_NICINTEL_SPI), yes)
 override CONFIG_BITBANG_SPI = yes
 else
+ifeq ($(CONFIG_OGP_SPI), yes)
+override CONFIG_BITBANG_SPI = yes
+else
 CONFIG_BITBANG_SPI ?= no
+endif
 endif
 endif
 endif
@@ -256,6 +263,12 @@ endif
 ifeq ($(CONFIG_NICINTEL_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_NICINTEL_SPI=1'
 PROGRAMMER_OBJS += nicintel_spi.o
+NEED_PCI := yes
+endif
+
+ifeq ($(CONFIG_OGP_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_OGP_SPI=1'
+PROGRAMMER_OBJS += ogp_spi.o
 NEED_PCI := yes
 endif
 

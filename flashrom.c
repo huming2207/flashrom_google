@@ -38,7 +38,7 @@
 #include "flashchips.h"
 #include "programmer.h"
 
-const char * const flashrom_version = FLASHROM_VERSION;
+const char flashrom_version[] = FLASHROM_VERSION;
 char *chip_to_probe = NULL;
 int verbose = 0;
 
@@ -52,7 +52,7 @@ enum programmer programmer = PROGRAMMER_DUMMY;
  * if more than one of them is selected. If only one is selected, it is clear
  * that the user wants that one to become the default.
  */
-#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG+CONFIG_RAYER_SPI+CONFIG_NICINTEL_SPI > 1
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG+CONFIG_RAYER_SPI+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI > 1
 #error Please enable either CONFIG_DUMMY or CONFIG_INTERNAL or disable support for all programmers except one.
 #endif
 enum programmer programmer =
@@ -95,6 +95,9 @@ enum programmer programmer =
 #endif
 #if CONFIG_NICINTEL_SPI == 1
 	PROGRAMMER_NICINTEL_SPI
+#endif
+#if CONFIG_OGP_SPI == 1
+	PROGRAMMER_OGP_SPI
 #endif
 ;
 #endif
@@ -439,6 +442,25 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
+#if CONFIG_OGP_SPI == 1
+	{
+		.name = "ogp_spi",
+		.init = ogp_spi_init,
+		.shutdown = ogp_spi_shutdown,
+		.map_flash_region = fallback_map,
+		.unmap_flash_region = fallback_unmap,
+		.chip_readb = noop_chip_readb,
+		.chip_readw = fallback_chip_readw,
+		.chip_readl = fallback_chip_readl,
+		.chip_readn = fallback_chip_readn,
+		.chip_writeb = noop_chip_writeb,
+		.chip_writew = fallback_chip_writew,
+		.chip_writel = fallback_chip_writel,
+		.chip_writen = fallback_chip_writen,
+		.delay = internal_delay,
+	},
+#endif
+
 	{}, /* This entry corresponds to PROGRAMMER_INVALID. */
 };
 
@@ -449,6 +471,7 @@ struct chip_restore_func_data {
 	struct flashchip *flash;
 	uint8_t status;
 } static chip_restore_fn[CHIP_RESTORE_MAXFN];
+
 
 #define SHUTDOWN_MAXFN 32
 static int shutdown_fn_count = 0;
@@ -944,13 +967,11 @@ static int get_next_write(uint8_t *have, uint8_t *want, int len,
 				/* First location where have and want
 				 * do not differ anymore.
 				 */
-				first_len = i * stride - rel_start;
 				break;
 			}
 		}
 	}
-	/* Did the loop terminate without setting first_len? */
-	if (need_write && ! first_len)
+	if (need_write)
 		first_len = min(i * stride - rel_start, len);
 	*first_start += rel_start;
 	return first_len;
@@ -1145,6 +1166,7 @@ struct flashchip *probe_flash(struct flashchip *first_flash, int force)
 {
 	struct flashchip *flash;
 	unsigned long base = 0;
+	char location[64];
 	uint32_t size;
 	enum chipbustype buses_common;
 	char *tmp;
@@ -1196,13 +1218,23 @@ notfound:
 	if (!flash || !flash->name)
 		return NULL;
 
-	msg_cdbg("%s chip \"%s %s\" (%d KB, %s) at physical address 0x%lx.\n",
+	if (programmer_table[programmer].map_flash_region == physmap) {
+		snprintf(location, sizeof(location), "at physical address 0x%lx", base);
+	} else { 
+		snprintf(location, sizeof(location), "on %s", programmer_table[programmer].name);
+	}
+
+	msg_cinfo("%s chip \"%s %s\" (%d KB, %s) %s.\n",
 	       force ? "Assuming" : "Found",
 	       flash->vendor, flash->name, flash->total_size,
-	       flashbuses_to_text(flash->bustype), base);
+	       flashbuses_to_text(flash->bustype), location);
 
-	if (flash->printlock)
-		flash->printlock(flash);
+	/* Flash registers will not be mapped if the chip was forced. Lock info
+	 * may be stored in registers, so avoid lock info printing.
+	 */
+	if (!force)
+		if (flash->printlock)
+			flash->printlock(flash);
 
 	return flash;
 }
@@ -1287,8 +1319,8 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 
 	msg_cinfo("Reading flash... ");
 	if (!buf) {
-		msg_cinfo("FAILED.\n");
 		msg_gerr("Memory allocation failed!\n");
+		msg_cinfo("FAILED.\n");
 		return 1;
 	}
 	if (!flash->read) {
@@ -1470,57 +1502,83 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 	return 0;
 }
 
+static int check_block_eraser(struct flashchip *flash, int k, int log)
+{
+	struct block_eraser eraser = flash->block_erasers[k];
+
+	if (!eraser.block_erase && !eraser.eraseblocks[0].count) {
+		if (log)
+			msg_cdbg("not defined. ");
+		return 1;
+	}
+	if (!eraser.block_erase && eraser.eraseblocks[0].count) {
+		if (log)
+			msg_cdbg("eraseblock layout is known, but matching "
+				"block erase function is not implemented. ");
+		return 1;
+	}
+	if (eraser.block_erase && !eraser.eraseblocks[0].count) {
+		if (log)
+			msg_cdbg("block erase function found, but "
+				"eraseblock layout is not defined. ");
+		return 1;
+	}
+	return 0;
+}
+
 int erase_and_write_flash(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
-	int k, ret = 0, found = 0;
+	int k, ret = 0;
 	uint8_t *curcontents;
 	unsigned long size = flash->total_size * 1024;
+	int usable_erasefunctions = 0;
+
+	for (k = 0; k < NUM_ERASEFUNCTIONS; k++)
+		if (!check_block_eraser(flash, k, 0))
+			usable_erasefunctions++;
+	msg_cinfo("Erasing and writing flash chip... ");
+	if (!usable_erasefunctions) {
+		msg_cerr("ERROR: flashrom has no erase function for this flash "
+			 "chip.\n");
+		return 1;
+	}
 
 	curcontents = (uint8_t *) malloc(size);
 	/* Copy oldcontents to curcontents to avoid clobbering oldcontents. */
 	memcpy(curcontents, oldcontents, size);
 
-	msg_cdbg("Erasing and writing flash chip... ");
 	for (k = 0; k < NUM_ERASEFUNCTIONS; k++) {
-		struct block_eraser eraser = flash->block_erasers[k];
-
 		msg_cdbg("Looking at blockwise erase function %i... ", k);
-		if (!eraser.block_erase && !eraser.eraseblocks[0].count) {
-			msg_cdbg("not defined. "
-				"Looking for another erase function.\n");
+		if (check_block_eraser(flash, k, 1) && usable_erasefunctions) {
+			msg_cdbg("Looking for another erase function.\n");
 			continue;
 		}
-		if (!eraser.block_erase && eraser.eraseblocks[0].count) {
-			msg_cdbg("eraseblock layout is known, but no "
-				"matching block erase function found. "
-				"Looking for another erase function.\n");
-			continue;
-		}
-		if (eraser.block_erase && !eraser.eraseblocks[0].count) {
-			msg_cdbg("block erase function found, but "
-				"eraseblock layout is unknown. "
-				"Looking for another erase function.\n");
-			continue;
-		}
-		found = 1;
+		usable_erasefunctions--;
 		msg_cdbg("trying... ");
 		ret = walk_eraseregions(flash, k, &erase_and_write_block_helper, curcontents, newcontents);
 		msg_cdbg("\n");
 		/* If everything is OK, don't try another erase function. */
 		if (!ret)
 			break;
-		/* FIXME: Reread the whole chip here so we know the current
-		 * chip contents? curcontents might be up to date, but this
-		 * code is only reached if something failed, and then we don't
-		 * know exactly what failed, and how.
+		/* Write/erase failed, so try to find out what the current chip
+		 * contents are. If no usable erase functions remain, we could
+		 * abort the loop instead of continuing, the effect is the same.
+		 * The only difference is whether the reason for other unusable
+		 * functions is printed or not. If in doubt, verbosity wins.
 		 */
+		if (!usable_erasefunctions)
+			continue;
+		if (flash->read(flash, curcontents, 0, size)) {
+			/* Now we are truly screwed. Read failed as well. */
+			msg_cerr("Can't read anymore!\n");
+			/* We have no idea about the flash chip contents, so
+			 * retrying with another erase function is pointless.
+			 */
+			break;
+		}
 	}
 	/* Free the scratchpad. */
 	free(curcontents);
-	if (!found) {
-		msg_cerr("ERROR: flashrom has no erase function for this flash chip.\n");
-		return 1;
-	}
 
 	if (ret) {
 		msg_cerr("FAILED!\n");
@@ -1921,6 +1979,11 @@ out:
 	free(newcontents);
 out_nofree:
 	chip_restore();	/* must be done before programmer_shutdown() */
-
+	/*
+	 * programmer_shutdown() call is moved to cli_mfg() in chromium os
+	 * tree. This is because some operations, such as write protection,
+	 * requires programmer_shutdown() but does not call doit().
+	 */
+//	programmer_shutdown();
 	return ret;
 }
