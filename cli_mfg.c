@@ -431,13 +431,15 @@ int cli_mfg(int argc, char *argv[])
 		flash = NULL;
 	}
 
-	/* try to get lock before doing any work that touches hardware */
+#if USE_BIG_LOCK == 1
+	/* get lock before doing any work that touches hardware */
 	msg_gdbg("Acquiring lock (timeout=%d sec)...\n", LOCK_TIMEOUT_SECS);
 	if (acquire_big_lock(LOCK_TIMEOUT_SECS) < 0) {
 		msg_gerr("Could not acquire lock.\n");
 		exit(1);
 	}
 	msg_gdbg("Lock acquired.\n");
+#endif
 
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
@@ -586,6 +588,8 @@ int cli_mfg(int argc, char *argv[])
 cli_mfg_silent_exit:
 	programmer_shutdown();	/* must be done after chip_restore() */
 cli_mfg_release_lock_exit:
+#if USE_BIG_LOCK == 1
 	release_big_lock();
+#endif
 	return rc;
 }

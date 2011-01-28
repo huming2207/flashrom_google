@@ -87,7 +87,13 @@ CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
 	wpce775x.o mec1308.o writeprotect.o
 
-LIB_OBJS = layout.o csem.o ipc_lock.o big_lock.o
+LIB_OBJS = layout.o
+
+LOCK_OBJS = csem.o ipc_lock.o big_lock.o
+ifeq ($(shell ./util/use_big_lock.sh), 0)
+LIB_OBJS += $(LOCK_OBJS)
+FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
+endif
 
 CLI_OBJS = flashrom.o cli_classic.o cli_mfg.o cli_output.o print.o
 
