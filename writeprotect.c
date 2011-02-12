@@ -702,7 +702,23 @@ static int w25_disable_writeprotect(struct flashchip *flash)
 	return ret;
 }
 
+static int w25_list_ranges(struct flashchip *flash)
+{
+	struct w25q_range *w25q_ranges;
+	int i, num_entries;
+
+	if (w25_range_table(flash, &w25q_ranges, &num_entries)) return -1;
+	for (i = 0; i < num_entries; i++) {
+		msg_cinfo("start: 0x%06x, length: 0x%06x\n",
+		          w25q_ranges[i].range.start,
+		          w25q_ranges[i].range.len);
+	}
+
+	return 0;
+}
+
 struct wp wp_w25 = {
+	.list_ranges	= w25_list_ranges,
 	.set_range	= w25_set_range,
 	.enable		= w25_enable_writeprotect,
 	.disable	= w25_disable_writeprotect,

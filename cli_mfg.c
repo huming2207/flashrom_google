@@ -123,8 +123,7 @@ void cli_mfg_usage(const char *name)
 	printf("   --wp-range <start> <length>       set write protect range\n");
 	printf("   --wp-enable                       enable write protection\n");
 	printf("   --wp-disable                      disable write protection\n");
-//	printf("   --bp-list                         list block protection"
-//	       "address ranges\n");
+	printf("   --wp-list                         list write protection ranges\n");
 
 	printf("\nYou can specify one of -h, -R, -L, "
 #if CONFIG_PRINT_WIKI == 1
@@ -148,7 +147,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
 	LONGOPT_WP_DISABLE,
-//	LONGOPT_BLOCKPROTECT_LIST,
+	LONGOPT_WP_LIST,
 };
 
 int cli_mfg(int argc, char *argv[])
@@ -163,7 +162,7 @@ int cli_mfg(int argc, char *argv[])
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0, wp_status = 0;
+	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
 	int dont_verify_it = 0, list_supported = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
@@ -195,7 +194,7 @@ int cli_mfg(int argc, char *argv[])
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
-//		{"bp-list", 0, 0, LONGOPT_BLOCKPROTECT_LIST},
+		{"wp-list", 0, 0, LONGOPT_WP_LIST},
 		{0, 0, 0, 0}
 	};
 
@@ -372,6 +371,9 @@ int cli_mfg(int argc, char *argv[])
 		case LONGOPT_WP_STATUS:
 			wp_status = 1;
 			break;
+		case LONGOPT_WP_LIST:
+			wp_list = 1;
+			break;
 		case LONGOPT_WP_SET_RANGE:
 			set_wp_range = 1;
 			break;
@@ -504,7 +506,7 @@ int cli_mfg(int argc, char *argv[])
 
 	if (!(read_it | write_it | verify_it | erase_it |
 	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
-	      wp_status)) {
+	      wp_status | wp_list)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
@@ -577,6 +579,13 @@ int cli_mfg(int argc, char *argv[])
 	if (wp_status) {
 		if (flash->wp && flash->wp->wp_status)
 			rc = flash->wp->wp_status(flash);
+		goto cli_mfg_silent_exit;
+	}
+	
+	if (wp_list) {
+		printf("Valid write protection ranges:\n");
+		if (flash->wp && flash->wp->list_ranges)
+			rc = flash->wp->list_ranges(flash);
 		goto cli_mfg_silent_exit;
 	}
 	
