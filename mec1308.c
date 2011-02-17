@@ -213,6 +213,33 @@ static void mbx_clear()
 	mbx_write(MEC1308_MBX_CMD, 0x00);
 }
 
+static int mec1308_exit_passthru_mode(void)
+{
+	uint8_t tmp8;
+	int i;
+
+	/* exit passthru mode */
+	for (i = 0; i < strlen(MEC1308_CMD_PASSTHRU_EXIT); i++) {
+		mbx_write(MEC1308_MBX_DATA_START + i,
+		MEC1308_CMD_PASSTHRU_EXIT[i]);
+	}
+
+	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU)) {
+		msg_pdbg("%s(): exit passthru command timed out\n", __func__);
+		return 1;
+	}
+
+	tmp8 = mbx_read(MEC1308_MBX_DATA_START);
+	if (tmp8 != MEC1308_CMD_PASSTHRU_SUCCESS) {
+		msg_perr("%s(): failed to exit passthru mode, result=%02x\n",
+		         __func__, tmp8);
+		return 1;
+	}
+
+	msg_pdbg("%s(): result=0x%02x\n", __func__, tmp8);
+	return 0;
+}
+
 static int enter_passthru_mode(void)
 {
 	uint8_t tmp8;
@@ -220,8 +247,9 @@ static int enter_passthru_mode(void)
 
 	/*
 	 * Enter passthru mode. If the EC does not successfully enter passthru
-	 * mode the first time, we'll clear the mailbox and issue the passthru
-	 * command up to 3 times or until it arrives in a known state.
+	 * mode the first time, we'll clear the mailbox and issue the "exit
+	 * passthru mode" command sequence up to 3 times or until it arrives in
+	 * a known state.
 	 *
 	 * Note: This workaround was developed experimentally.
 	 */
@@ -244,9 +272,9 @@ static int enter_passthru_mode(void)
 			break;
 
 		msg_pdbg("%s(): command failed, clearing data registers and "
-		         "issuing passthru command...\n", __func__);
+		         "issuing full exit passthru command...\n", __func__);
 		mbx_clear();
-		mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU);
+		mec1308_exit_passthru_mode();
 	}
 
 	if (tmp8 != MEC1308_CMD_PASSTHRU_SUCCESS) {
@@ -275,33 +303,6 @@ static int enter_passthru_mode(void)
 	msg_pdbg("%s(): start passthru mode return code: 0x%02x\n",
 	         __func__, tmp8);
 
-	return 0;
-}
-
-static int mec1308_exit_passthru_mode(void)
-{
-	uint8_t tmp8;
-	int i;
-
-	/* exit passthru mode */
-	for (i = 0; i < strlen(MEC1308_CMD_PASSTHRU_EXIT); i++) {
-		mbx_write(MEC1308_MBX_DATA_START + i,
-		MEC1308_CMD_PASSTHRU_EXIT[i]);
-	}
-
-	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU)) {
-		msg_pdbg("%s(): exit passthru command timed out\n", __func__);
-		return 1;
-	}
-
-	tmp8 = mbx_read(MEC1308_MBX_DATA_START);
-	if (tmp8 != MEC1308_CMD_PASSTHRU_SUCCESS) {
-		msg_perr("%s(): failed to exit passthru mode, result=%02x\n",
-		         __func__, tmp8);
-		return 1;
-	}
-
-	msg_pdbg("%s(): result=0x%02x\n", __func__, tmp8);
 	return 0;
 }
 
