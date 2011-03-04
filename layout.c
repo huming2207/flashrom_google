@@ -39,6 +39,7 @@ typedef struct {
 	unsigned int end;
 	unsigned int included;
 	char name[256];
+	char file[256];  /* file[0]=='\0' means not specified. */
 } romlayout_t;
 
 static romlayout_t rom_entries[MAX_ROMLAYOUT];
@@ -178,6 +179,7 @@ int read_romlayout(char *name)
 		rom_entries[romimages].start = strtol(tstr1, (char **)NULL, 16);
 		rom_entries[romimages].end = strtol(tstr2, (char **)NULL, 16);
 		rom_entries[romimages].included = 0;
+		strcpy(rom_entries[romimages].file, "");
 		romimages++;
 	}
 
@@ -196,15 +198,24 @@ int read_romlayout(char *name)
 int find_romentry(char *name)
 {
 	int i;
+	char *file = NULL;
 
 	if (!romimages)
 		return -1;
 
-	msg_gdbg("Looking for \"%s\"... ", name);
+	/* -i <image>[:<file>] */
+	if (strtok(name, ":")) {
+		file = strtok(NULL, "");
+	}
+	msg_gdbg("Looking for \"%s\" (file=\"%s\")... ",
+	         name, file ? file : "<not specified>");
 
 	for (i = 0; i < romimages; i++) {
 		if (!strcmp(rom_entries[i].name, name)) {
 			rom_entries[i].included = 1;
+			snprintf(rom_entries[i].file,
+			         sizeof(rom_entries[i].file),
+			         "%s", file ? file : "");
 			msg_gdbg("found.\n");
 			return i;
 		}
@@ -239,6 +250,32 @@ int find_next_included_romentry(unsigned int start)
 	return best_entry;
 }
 
+static int read_content_from_file(int entry, uint8_t *newcontents) {
+	char *file;
+	FILE *fp;
+	int len;
+
+	/* If file name is specified for this partition, read file
+	 * content to overwrite. */
+	file = rom_entries[entry].file;
+	len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	if (file[0]) {
+		int numbytes;
+		if ((fp = fopen(file, "rb")) == NULL) {
+			perror(file);
+			return -1;
+		}
+		numbytes = fread(newcontents + rom_entries[entry].start,
+		                 1, len, fp);
+		fclose(fp);
+		if (numbytes == -1) {
+			perror(file);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
 	unsigned int start = 0;
@@ -254,6 +291,7 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	 * The union of all included romentries is used from the new image.
 	 */
 	while (start < size) {
+
 		entry = find_next_included_romentry(start);
 		/* No more romentries for remaining region? */
 		if (entry < 0) {
@@ -261,9 +299,14 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 			       size - start);
 			break;
 		}
+
+		/* For non-included region, copy from old content. */
 		if (rom_entries[entry].start > start)
 			memcpy(newcontents + start, oldcontents + start,
 			       rom_entries[entry].start - start);
+		/* For included region, copy from file if specified. */
+		if (read_content_from_file(entry, newcontents) < 0) return -1;
+
 		/* Skip to location after current romentry. */
 		start = rom_entries[entry].end + 1;
 		/* Catch overflow. */
@@ -272,4 +315,73 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	}
 			
 	return 0;
+}
+
+static int write_content_to_file(int entry, uint8_t *buf) {
+	char *file;
+	FILE *fp;
+	int len = rom_entries[entry].end - rom_entries[entry].start + 1;
+
+	file = rom_entries[entry].file;
+	if (file[0]) {  /* save to file if name is specified. */
+		int numbytes;
+		if ((fp = fopen(file, "wb")) == NULL) {
+			perror(file);
+			return -1;
+		}
+		numbytes = fwrite(buf + rom_entries[entry].start, 1, len, fp);
+		fclose(fp);
+		if (numbytes != len) {
+			perror(file);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int handle_partial_read(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len)) {
+
+	unsigned int start = 0;
+	int entry;
+	unsigned int size = flash->total_size * 1024;
+	int count = 0;
+
+	/* If no layout file was specified or the layout file was empty, assume
+	 * that the user wants to flash the complete new image.
+	 */
+	if (!romimages)
+		return 0;
+	/* Walk through the table and write content to file for those included
+	 * partition. */
+	while (start < size) {
+		int len;
+
+		entry = find_next_included_romentry(start);
+		/* No more romentries for remaining region? */
+		if (entry < 0) {
+			break;
+		}
+		++count;
+
+		/* read content from flash. */
+		len = rom_entries[entry].end - rom_entries[entry].start + 1;
+		if (read(flash, buf + rom_entries[entry].start,
+		         rom_entries[entry].start, len)) {
+			perror("flash partial read failed.");
+			return -1;
+		}
+		/* If file is specified, write this partition to file. */
+		if (write_content_to_file(entry, buf) < 0) return -1;
+
+		/* Skip to location after current romentry. */
+		start = rom_entries[entry].end + 1;
+		/* Catch overflow. */
+		if (!start)
+			break;
+	}
+
+	return count;
 }

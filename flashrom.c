@@ -1316,6 +1316,7 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 	unsigned long size = flash->total_size * 1024;
 	unsigned char *buf = calloc(size, sizeof(char));
 	int ret = 0;
+	int i;
 
 	msg_cinfo("Reading flash... ");
 	if (!buf) {
@@ -1323,12 +1324,27 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 		msg_cinfo("FAILED.\n");
 		return 1;
 	}
+
+	/* To support partial read, fill buffer to all 0xFF at beginning to make
+	 * debug easier. */
+	memset(buf, 0xFF, size);
+
 	if (!flash->read) {
 		msg_cerr("No read function available for this flash chip.\n");
 		ret = 1;
 		goto out_free;
 	}
-	if (flash->read(flash, buf, 0, size)) {
+
+	/* First try to handle partial read case, rather than read the whole
+	 * flash, which is slow. */
+	ret = handle_partial_read(flash, buf, flash->read);
+	if (ret < 0) {
+		msg_cerr("Partial read operation failed!\n");
+		ret = 1;
+		goto out_free;
+	} else if (ret > 0) {
+		/* Partial read has been handled, pass the whole flash read. */
+	} else if (flash->read(flash, buf, 0, size)) {
 		msg_cerr("Read operation failed!\n");
 		ret = 1;
 		goto out_free;

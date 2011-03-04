@@ -48,9 +48,9 @@ void cli_mfg_usage(const char *name)
 #if CONFIG_PRINT_WIKI == 1
 	         "-z|"
 #endif
-	         "-E|-r <file>|-w <file>|-v <file>]\n"
+	         "-E|-r <file>|-w <file>|-v <file>] [-i <image>[:<file>]]\n"
 	       "       [-c <chipname>] [-m [<vendor>:]<part>] [-l <file>]\n"
-	       "       [-i <image>] [-p <programmername>[:<parameters>]]\n",
+	       "       [-p <programmername>[:<parameters>]]\n",
 	       name);
 
 	printf("Please note that the command line interface for flashrom has "
@@ -82,8 +82,10 @@ void cli_mfg_usage(const char *name)
 	       "   -n | --noverify                   don't auto-verify\n"
 	       "   -l | --layout <file>              read ROM layout from "
 	         "<file>\n"
-	       "   -i | --image <name>               only flash image <name> "
-	         "from flash layout\n"
+	       "   -i | --image <name>[:<file>]      only access image <name> "
+	         "from flash layout.\n"
+	       "                                     the content are included "
+	         "in <file> if specified.\n"
 	       "   -L | --list-supported             print supported devices\n"
 #if CONFIG_PRINT_WIKI == 1
 	       "   -z | --list-supported-wiki        print supported devices "

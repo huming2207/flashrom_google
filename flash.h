@@ -254,6 +254,13 @@ int cli_mfg(int argc, char *argv[]);
 int read_romlayout(char *name);
 int find_romentry(char *name);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
+int handle_partial_read(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len));
+    /* RETURN: the number of partitions that have beenpartial read.
+    *         ==0 means no partition is specified.
+    *         < 0 means writing file error. */
 
 /* spi.c */
 struct spi_command {
