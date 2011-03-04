@@ -1316,7 +1316,6 @@ int read_flash_to_file(struct flashchip *flash, char *filename)
 	unsigned long size = flash->total_size * 1024;
 	unsigned char *buf = calloc(size, sizeof(char));
 	int ret = 0;
-	int i;
 
 	msg_cinfo("Reading flash... ");
 	if (!buf) {
