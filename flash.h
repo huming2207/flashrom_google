@@ -252,7 +252,8 @@ int cli_mfg(int argc, char *argv[]);
 
 /* layout.c */
 int read_romlayout(char *name);
-int find_romentry(char *name);
+int register_include_arg(char *name);
+int process_include_args(void);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
 int handle_partial_read(
     struct flashchip *flash,

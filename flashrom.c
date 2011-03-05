@@ -1897,6 +1897,13 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 	if (flash->unlock)
 		flash->unlock(flash);
 
+	/* mark entries included using -i argument as "included" if they are
+	   found in the master rom_entries list */
+	if (process_include_args() < 0) {
+		ret = 1;
+		goto out_nofree;
+	}
+
 	if (read_it) {
 		ret = read_flash_to_file(flash, filename);
 		goto out_nofree;

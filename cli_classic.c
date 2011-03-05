@@ -229,7 +229,8 @@ int cli_classic(int argc, char *argv[])
 			break;
 		case 'i':
 			tempstr = strdup(optarg);
-			find_romentry(tempstr);
+			if (register_include_arg(tempstr) < 0)
+				exit(1);
 			break;
 		case 'L':
 			if (++operation_specified > 1) {

@@ -42,6 +42,12 @@ typedef struct {
 	char file[256];  /* file[0]=='\0' means not specified. */
 } romlayout_t;
 
+/*
+ * include_args lists arguments specified at the command line with -i. They
+ * must be processed at some point so that desired regions are marked as
+ * "included" in the master rom_entries list.
+ */
+static char *include_args[MAX_ROMLAYOUT];
 static romlayout_t rom_entries[MAX_ROMLAYOUT];
 
 #if CONFIG_INTERNAL == 1 /* FIXME: Move the whole block to cbtable.c? */
@@ -195,7 +201,22 @@ int read_romlayout(char *name)
 }
 #endif
 
-int find_romentry(char *name)
+/* register an include argument (-i) for later processing */
+int register_include_arg(char *name)
+{
+	static int i = 0;
+
+	if (i >= MAX_ROMLAYOUT) {
+		msg_gerr("too many regions included\n");
+		return -1;
+	}
+
+	include_args[i] = name;
+	i++;
+	return i;
+}
+
+static int find_romentry(char *name)
 {
 	int i;
 	char *file = NULL;
@@ -223,6 +244,32 @@ int find_romentry(char *name)
 	msg_gdbg("not found.\n");	// Not found. Error.
 
 	return -1;
+}
+
+/*
+ * process_include_args - process -i arguments
+ *
+ * returns 0 to indicate success, <0 to indicate failure
+ */
+int process_include_args() {
+	int i;
+
+	if (!romimages)
+		return 0;
+
+	for (i = 0; i < MAX_ROMLAYOUT; i++) {
+		if (include_args[i]) {
+			if (find_romentry(include_args[i]) < 0) {
+				msg_gerr("Invalid entry specified: %s\n",
+				         include_args[i]);
+				return -1;
+			}
+		} else {
+			break;
+		}
+	}
+
+	return 0;
 }
 
 int find_next_included_romentry(unsigned int start)
@@ -287,6 +334,7 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	 */
 	if (!romimages)
 		return 0;
+
 	/* Non-included romentries are ignored.
 	 * The union of all included romentries is used from the new image.
 	 */
@@ -354,6 +402,7 @@ int handle_partial_read(
 	 */
 	if (!romimages)
 		return 0;
+
 	/* Walk through the table and write content to file for those included
 	 * partition. */
 	while (start < size) {
