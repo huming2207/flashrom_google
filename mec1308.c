@@ -230,13 +230,13 @@ static int mec1308_exit_passthru_mode(void)
 	}
 
 	tmp8 = mbx_read(MEC1308_MBX_DATA_START);
-	if (tmp8 != MEC1308_CMD_PASSTHRU_SUCCESS) {
-		msg_perr("%s(): failed to exit passthru mode, result=%02x\n",
-		         __func__, tmp8);
-		return 1;
+	msg_pdbg("%s: result: 0x%02x ", __func__, tmp8);
+	if (tmp8 == MEC1308_CMD_PASSTHRU_SUCCESS) {
+		msg_pdbg("(exited passthru mode)\n");
+	} else if (tmp8 == MEC1308_CMD_PASSTHRU_FAIL) {
+		msg_pdbg("(failed to exit passthru mode)\n");
 	}
 
-	msg_pdbg("%s(): result=0x%02x\n", __func__, tmp8);
 	return 0;
 }
 
@@ -353,8 +353,12 @@ int mec1308_probe_spi_flash(const char *name)
 	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE);
 	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_DISABLE);
 
-	/* Enter SPI Pass-Thru Mode after commands which do not require access
-	   to SPI ROM are complete. */
+	/*
+	 * Enter SPI Pass-Thru Mode after commands which do not require access
+	 * to SPI ROM are complete. We'll start by doing the exit_passthru_mode
+	 * sequence, which is benign if the EC is already in passthru mode.
+	 */
+	mec1308_exit_passthru_mode();
 	if (enter_passthru_mode())
 		return 1;
 
