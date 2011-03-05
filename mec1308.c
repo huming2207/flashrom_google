@@ -348,6 +348,13 @@ int mec1308_probe_spi_flash(const char *name)
 	/* Exit Super I/O config mode */
 	mec1308_sio_exit(sio_port);
 
+	/* Now that we can read the mailbox, we will wait for any remaining
+	 * command to finish.*/
+	if (mbx_wait() != 0) {
+		msg_perr("%s: mailbox is not available\n", __func__);
+		return 1;
+	}
+
 	/* Further setup -- disable SMI and ACPI.
 	   FIXME: is there an ordering dependency? */
 	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE);
