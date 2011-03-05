@@ -175,7 +175,7 @@ static uint8_t mbx_read(uint8_t idx)
 static int mbx_wait(void)
 {
 	int i;
-	int max_attempts = 1000;
+	int max_attempts = 10000;
 	int rc = 0;
 
 	for (i = 0; mbx_read(MEC1308_MBX_CMD); i++) {
