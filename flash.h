@@ -252,6 +252,7 @@ int cli_mfg(int argc, char *argv[]);
 
 /* layout.c */
 int read_romlayout(char *name);
+int add_fmap_entries(struct flashchip *flash);
 int register_include_arg(char *name);
 int process_include_args(void);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);

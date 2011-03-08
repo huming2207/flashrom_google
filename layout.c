@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2005-2008 coresystems GmbH
  * (Written by Stefan Reinauer <stepan@coresystems.de> for coresystems GmbH)
+ * Portions (C) 2010 Google Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +25,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include "flash.h"
+#include "fmap.h"
 #include "programmer.h"
 
 #if CONFIG_INTERNAL == 1
@@ -201,6 +203,65 @@ int read_romlayout(char *name)
 }
 #endif
 
+/* returns the number of entries added, or <0 to indicate error */
+int add_fmap_entries(struct flashchip *flash)
+{
+	int i, fmap_size;
+	uint8_t *buf = NULL;
+	struct fmap *fmap;
+
+	fmap_size = fmap_find(flash, &buf);
+	if (fmap_size == 0) {
+		msg_gdbg("%s: no fmap present\n", __func__);
+		return 0;
+	} else if (fmap_size < 0) {
+		msg_gdbg("%s: error reading fmap\n", __func__);
+		return -1;
+	} else {
+		fmap = (struct fmap *)(buf);
+	}
+
+	for (i = 0; i < fmap->nareas; i++) {
+		if (romimages >= MAX_ROMLAYOUT) {
+			msg_gerr("ROM image contains too many regions\n");
+			free(buf);
+			return -1;
+		}
+		rom_entries[romimages].start = fmap->areas[i].offset;
+
+		/*
+		 * Flashrom rom entries use absolute addresses. So for non-zero
+		 * length entries, we need to subtract 1 from offset + size to
+		 * determine the end address.
+		 */
+		rom_entries[romimages].end = fmap->areas[i].offset +
+		                             fmap->areas[i].size;
+		if (fmap->areas[i].size)
+			rom_entries[romimages].end--;
+
+		memset(rom_entries[romimages].name, 0,
+		       sizeof(rom_entries[romimages].name));
+		memcpy(rom_entries[romimages].name, fmap->areas[i].name,
+		       min(sizeof(rom_entries[romimages].name),
+		           sizeof(fmap->areas[i].name)));
+
+		rom_entries[romimages].included = 0;
+		strcpy(rom_entries[romimages].file, "");
+
+		msg_gdbg("added fmap region \"%s\" (file=\"%s\") as %sincluded,"
+			 " offset: 0x%08x, size: 0x%08x\n",
+			  rom_entries[romimages].name,
+			  rom_entries[romimages].file,
+			  rom_entries[romimages].included ? "" : "not ",
+			  rom_entries[romimages].start,
+			  rom_entries[romimages].end);
+		romimages++;
+	}
+
+	free(buf);
+	return fmap->nareas;
+}
+
 /* register an include argument (-i) for later processing */
 int register_include_arg(char *name)
 {
@@ -329,10 +390,10 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	int entry;
 	unsigned int size = flash->total_size * 1024;
 
-	/* If no layout file was specified or the layout file was empty, assume
-	 * that the user wants to flash the complete new image.
+	/* If no regions were specified for inclusion, assume
+	 * that the user wants to write the complete new image.
 	 */
-	if (!romimages)
+	if (!include_args[0])
 		return 0;
 
 	/* Non-included romentries are ignored.
@@ -397,10 +458,10 @@ int handle_partial_read(
 	unsigned int size = flash->total_size * 1024;
 	int count = 0;
 
-	/* If no layout file was specified or the layout file was empty, assume
-	 * that the user wants to flash the complete new image.
+	/* If no regions were specified for inclusion, assume
+	 * that the user wants to read the complete image.
 	 */
-	if (!romimages)
+	if (!include_args[0])
 		return 0;
 
 	/* Walk through the table and write content to file for those included
