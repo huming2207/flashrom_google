@@ -1224,10 +1224,10 @@ notfound:
 		snprintf(location, sizeof(location), "on %s", programmer_table[programmer].name);
 	}
 
-	msg_cinfo("%s chip \"%s %s\" (%d KB, %s) %s.\n",
-	       force ? "Assuming" : "Found",
-	       flash->vendor, flash->name, flash->total_size,
-	       flashbuses_to_text(flash->bustype), location);
+	msg_cdbg("%s chip \"%s %s\" (%d KB, %s) %s.\n",
+	         force ? "Assuming" : "Found",
+	         flash->vendor, flash->name, flash->total_size,
+	         flashbuses_to_text(flash->bustype), location);
 
 	/* Flash registers will not be mapped if the chip was forced. Lock info
 	 * may be stored in registers, so avoid lock info printing.
