@@ -44,33 +44,34 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 {
 	unsigned long int offset = 0;
 	uint64_t sig, tmp64;
-	int i, fmap_found = 0;
-	/* Note: keep the strides sorted in largest to smallest order for
-	   efficient operation below. Strides should all be powers of 2. */
-	unsigned int strides[] = { 64 * 1024, 4 * 1024, 64 };
 	struct fmap fmap;
-	int fmap_size;
+	int fmap_size, fmap_found = 0, stride;
 
 	memcpy(&sig, FMAP_SIGNATURE, strlen(FMAP_SIGNATURE));
 
 	/*
-	 * Find FMAP signature within image. The alignment requirements
-	 * increased over time due to speed concerns, so we'll use an array to
-	 * represent the strides we wish to attempt to use.
-	 *
 	 * For efficient operation, we start with the largest stride possible
 	 * and then decrease the stride on each iteration. We will check for a
 	 * remainder when modding the offset with the previous stride. This
 	 * makes it so that each offset is only checked once.
+	 *
+	 * At some point, programmer transaction overhead becomes greater than
+	 * simply copying everything into RAM and checking one byte at a time.
+	 * At some arbitrary point, we'll stop being clever and use brute
+	 * force instead by copying the while ROM into RAM and searching one
+	 * byte at a time.
+	 *
+	 * In practice, the flash map is usually stored in a write-protected
+	 * section of flash which is often at the top of ROM where the boot
+	 * vector on x86 resides. Because of this, we will search from top
+	 * to bottom.
 	 */
-	for (i = 0; i < ARRAY_SIZE(strides); i++) {
-		for (offset = flash->total_size * 1024 - strides[i];
+	for (stride = (flash->total_size * 1024) / 2; stride >= 16; stride /= 2) {
+		for (offset = flash->total_size * 1024 - stride;
 		     offset > 0;
-		     offset -= strides[i]) {
-			if (i > 0) {
-				if (offset % strides[i-1] == 0)
+		     offset -= stride) {
+			if (offset % (stride * 2) == 0)
 					continue;
-			}
 
 			if (flash->read(flash, (uint8_t *)&tmp64,
 			                offset, sizeof(tmp64))) {
@@ -86,6 +87,27 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 		}
 		if (fmap_found)
 			break;
+	}
+
+	/* brute force */
+	/* FIXME: This results in the entire ROM being read twice -- once here
+	 * and again in doit(). The performance penalty needs to be dealt
+	 * with before going upstream.
+	 */
+	if (!fmap_found) {
+		uint8_t *image = malloc(flash->total_size * 1024);
+
+		msg_gdbg("using brute force method to find fmap\n");
+		flash->read(flash, image, 0, flash->total_size * 1024);
+		for (offset = flash->total_size * 1024 - sizeof(sig);
+		     offset > 0;
+		     offset--) {
+			if (!memcmp(&image[offset], &sig, sizeof(sig))) {
+				fmap_found = 1;
+				break;
+			}
+		}
+		free(image);
 	}
 
 	if (!fmap_found)
