@@ -34,11 +34,66 @@
  * This is ported from the flashmap utility: http://flashmap.googlecode.com
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "flash.h"
 #include "fmap.h"
+
+/* invoke crossystem and parse the returned string.
+ * returns 0xFFFFFFFF if failed to get the value. */
+#define CROSSYSTEM_FAIL (0xFFFFFFFF)
+static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
+	char cmd[] = "crossystem fmap_base";
+	FILE *fp;
+	int n;
+	char buf[16];
+	unsigned long fmap_base;
+	unsigned long from_top;
+
+	if (!(fp = popen(cmd, "r"))) {
+		return CROSSYSTEM_FAIL;
+	}
+	n = fread(buf, 1, sizeof(buf) - 1, fp);
+	fclose(fp);
+	if (n < 0) {
+		return CROSSYSTEM_FAIL;
+	}
+	buf[n] = '\0';
+	if (strlen(buf) == 0) {
+		return CROSSYSTEM_FAIL;
+	}
+
+	/* fmap_base is the absolute address in CPU address space.
+	 * The top of BIOS address aligns to the last byte of address space,
+	 * 0xFFFFFFFF. So we have to shift it to the address related to
+	 * start of BIOS.
+	 *
+	 *  CPU address                  flash address
+	 *      space                    p     space
+	 *  0xFFFFFFFF   +-------+  ---  +-------+  0x400000
+	 *               |       |   ^   |       | ^
+	 *               |  4MB  |   |   |       | | from_top
+	 *               |       |   v   |       | v
+	 *  fmap_base--> | -fmap | ------|--fmap-|-- the offset we need.
+	 *       ^       |       |       |       |
+	 *       |       +-------+-------+-------+  0x000000
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *  0x00000000   +-------+
+	 *
+	 */
+	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
+	from_top = 0xFFFFFFFF - fmap_base + 1;
+	if (from_top > flash->total_size * 1024) {
+		/* Invalid fmap_base value for this chip, like EC's flash. */
+		return CROSSYSTEM_FAIL;
+	}
+	return flash->total_size * 1024 - from_top;
+}
 
 extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 {
@@ -48,6 +103,19 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	int fmap_size, fmap_found = 0, stride;
 
 	memcpy(&sig, FMAP_SIGNATURE, strlen(FMAP_SIGNATURE));
+
+	offset = get_crossystem_fmap_base(flash);
+	if (CROSSYSTEM_FAIL != offset) {
+		if (flash->read(flash, (uint8_t *)&tmp64,
+		                offset, sizeof(tmp64))) {
+			msg_gdbg("failed to read flash at "
+			         "offset 0x%lx\n", offset);
+			return -1;
+		}
+		if (!memcmp(&tmp64, &sig, sizeof(sig))) {
+			fmap_found = 1;
+		}
+	}
 
 	/*
 	 * For efficient operation, we start with the largest stride possible
@@ -66,7 +134,12 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	 * vector on x86 resides. Because of this, we will search from top
 	 * to bottom.
 	 */
-	for (stride = (flash->total_size * 1024) / 2; stride >= 16; stride /= 2) {
+	for (stride = (flash->total_size * 1024) / 2;
+	     stride >= 16;
+	     stride /= 2) {
+		if (fmap_found)
+			break;
+
 		for (offset = flash->total_size * 1024 - stride;
 		     offset > 0;
 		     offset -= stride) {
@@ -85,8 +158,6 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 				break;
 			}
 		}
-		if (fmap_found)
-			break;
 	}
 
 	/* brute force */
