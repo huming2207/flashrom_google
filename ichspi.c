@@ -570,13 +570,18 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 	/* write it */
 	REGWRITE16(ICH7_REG_SPIC, temp16);
 
-	/* wait for cycle complete */
-	timeout = 100 * 1000 * 60;	// 60s is a looong timeout.
+	/* Original timeout is 60 minutes, which is too excessive.
+	 * Reduce to 30 secs for chip full erase (around 10 secs).
+	 * We also exit the loop if the error bit is set.
+	 */
+	timeout = 100 * 1000 * 30;
 	while (((REGREAD16(ICH7_REG_SPIS) & SPIS_CDS) == 0) && --timeout) {
 		programmer_delay(10);
+		if (REGREAD16(ICH7_REG_SPIS) & SPIS_FCERR)
+			break;  /* Transaction error */
 	}
 	if (!timeout) {
-		msg_perr("timeout\n");
+		msg_perr("ICH7 CDS timeout\n");
 	}
 
 	/* FIXME: make sure we do not needlessly cause transaction errors. */
