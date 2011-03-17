@@ -159,8 +159,8 @@ void it85xx_enter_scratch_rom()
 	int ret;
 	int tries;
 
-	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0) return;
+	msg_pdbg("%s():%d is running ...\n", __FUNCTION__, __LINE__);
 
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
