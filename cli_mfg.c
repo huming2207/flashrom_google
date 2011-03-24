@@ -449,8 +449,6 @@ int cli_mfg(int argc, char *argv[])
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
-	msg_pdbg("Initializing %s programmer\n",
-		 programmer_table[programmer].name);
 	if (programmer_init(pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
 		rc = 1;
