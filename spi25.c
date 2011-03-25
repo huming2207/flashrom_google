@@ -773,7 +773,7 @@ int spi_block_erase_d7(struct flashchip *flash, unsigned int addr, unsigned int 
 /* Sector size is usually 4k, though Macronix eliteflash has 64k */
 int spi_block_erase_20(struct flashchip *flash, unsigned int addr, unsigned int blocklen)
 {
-	int result, retries;
+	int result;
 	struct spi_command cmds[] = {
 	{
 		.writecnt	= JEDEC_WREN_OUTSIZE,
@@ -797,12 +797,7 @@ int spi_block_erase_20(struct flashchip *flash, unsigned int addr, unsigned int 
 		.readarr	= NULL,
 	}};
 
-	retries = 5;
-	do {
-		result = spi_send_multicommand(cmds);
-		if (result)
-			programmer_delay(10 * 1000);
-	} while (result && retries--);
+	result = spi_send_multicommand(cmds);
 
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
