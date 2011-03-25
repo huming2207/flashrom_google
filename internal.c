@@ -316,6 +316,7 @@ int internal_init(void)
 	}
 
 #if __FLASHROM_LITTLE_ENDIAN__
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips__)
 	/* try to enable it. Failure IS an option, since not all motherboards
 	 * really need this to be done, etc., etc.
 	 */
@@ -324,6 +325,7 @@ int internal_init(void)
 		msg_perr("WARNING: No chipset found. Flash detection "
 			 "will most likely fail.\n");
 	}
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 	/* Probe unconditionally for IT87* LPC->SPI translation and for
