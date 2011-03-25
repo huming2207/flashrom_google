@@ -18,8 +18,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
+
 #include "flash.h"
 #include "programmer.h"
 
@@ -116,6 +119,50 @@ void probe_superio(void)
 int is_laptop = 0;
 enum chipbustype target_bus;
 
+#if defined(__i386__) || defined(__x86_64__)
+#define BUFSIZE 256
+static char buffer[BUFSIZE];
+
+static void
+pci_error(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_perr("pcilib: %s\n", buffer);
+
+	/* libpci requires us to exit. TODO cleanup? */
+	exit(1);
+}
+
+static void
+pci_warning(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_pinfo("pcilib: %s\n", buffer);
+}
+
+static void
+pci_debug(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_pdbg("pcilib: %s\n", buffer);
+}
+#endif
+
 int internal_init(void)
 {
 #if __FLASHROM_LITTLE_ENDIAN__
@@ -195,6 +242,10 @@ int internal_init(void)
 
 	/* Initialize PCI access for flash enables */
 	pacc = pci_alloc();	/* Get the pci_access structure */
+	pacc->error = pci_error;
+	pacc->warning = pci_warning;
+	pacc->debug = pci_debug;
+
 	/* Set all options you want -- here we stick with the defaults */
 	pci_init(pacc);		/* Initialize the PCI library */
 	pci_scan_bus(pacc);	/* We want to get the list of devices */
