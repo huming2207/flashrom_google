@@ -117,47 +117,47 @@ SVNDEF := -D'FLASHROM_VERSION="$(VERSION)"'
 CONFIG_INTERNAL ?= yes
 
 # Always enable serprog for now. Needs to be disabled on Windows.
-CONFIG_SERPROG ?= yes
+CONFIG_SERPROG ?= no
 
 # RayeR SPIPGM hardware support
-CONFIG_RAYER_SPI ?= yes
+CONFIG_RAYER_SPI ?= no
 
 # Always enable 3Com NICs for now.
-CONFIG_NIC3COM ?= yes
+CONFIG_NIC3COM ?= no
 
 # Enable NVIDIA graphics cards. Note: write and erase do not work properly.
-CONFIG_GFXNVIDIA ?= yes
+CONFIG_GFXNVIDIA ?= no
 
 # Always enable SiI SATA controllers for now.
-CONFIG_SATASII ?= yes
+CONFIG_SATASII ?= no
 
 # Highpoint (HPT) ATA/RAID controller support.
 # IMPORTANT: This code is not yet working!
 CONFIG_ATAHPT ?= no
 
 # Always enable FT2232 SPI dongles for now.
-CONFIG_FT2232_SPI ?= yes
+CONFIG_FT2232_SPI ?= no
 
 # Always enable dummy tracing for now.
 CONFIG_DUMMY ?= yes
 
 # Always enable Dr. Kaiser for now.
-CONFIG_DRKAISER ?= yes
+CONFIG_DRKAISER ?= no
 
 # Always enable Realtek NICs for now.
-CONFIG_NICREALTEK ?= yes
+CONFIG_NICREALTEK ?= no
 
 # Disable National Semiconductor NICs until support is complete and tested.
 CONFIG_NICNATSEMI ?= no
 
 # Always enable SPI on Intel NICs for now.
-CONFIG_NICINTEL_SPI ?= yes
+CONFIG_NICINTEL_SPI ?= no
 
 # Always enable SPI on OGP cards for now.
-CONFIG_OGP_SPI ?= yes
+CONFIG_OGP_SPI ?= no
 
 # Always enable Bus Pirate SPI for now.
-CONFIG_BUSPIRATE_SPI ?= yes
+CONFIG_BUSPIRATE_SPI ?= no
 
 # Disable Dediprog SF100 until support is complete and tested.
 CONFIG_DEDIPROG ?= no
