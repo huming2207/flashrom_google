@@ -326,6 +326,10 @@ int libpayload_wrmsr(int addr, msr_t msr);
 
 /* PCI port I/O is not yet implemented on MIPS. */
 
+#elif defined(__arm__)
+
+/* Non memory mapped I/O is not supported on ARM. */
+
 #else
 
 #error Unknown architecture, please check if it supports PCI port IO.

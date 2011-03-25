@@ -277,6 +277,13 @@ int internal_init(void)
 
 	/* Probe for the Super I/O chip and fill global struct superio. */
 	probe_superio();
+
+#elif defined(__arm__)
+	/* We look at the cbtable first to see if we need a
+	 * mainboard specific flash enable sequence.
+	 */
+	coreboot_init();
+
 #else
 	/* FIXME: Enable cbtable searching on all non-x86 platforms supported
 	 *        by coreboot.
@@ -340,7 +347,7 @@ int internal_init(void)
 	 * The error code might have been a warning only.
 	 * Besides that, we don't check the board enable return code either.
 	 */
-#if defined(__i386__) || defined(__x86_64__) || defined (__mips)
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
 	return 0;
 #else
 	msg_perr("Your platform is not supported yet for the internal "
