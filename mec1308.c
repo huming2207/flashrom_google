@@ -32,6 +32,7 @@
  * EVEN IF GOOGLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
 
+#if defined(__i386__) || defined(__x86_64__)
 #include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
@@ -441,3 +442,4 @@ int mec1308_spi_send_command(unsigned int writecnt,
 
 	return 0;
 }
+#endif

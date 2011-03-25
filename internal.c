@@ -240,6 +240,7 @@ int internal_init(void)
 
 	get_io_perms();
 
+#if defined(__i386__) || defined(__x86_64__)
 	/* Initialize PCI access for flash enables */
 	pacc = pci_alloc();	/* Get the pci_access structure */
 	pacc->error = pci_error;
@@ -249,6 +250,7 @@ int internal_init(void)
 	/* Set all options you want -- here we stick with the defaults */
 	pci_init(pacc);		/* Initialize the PCI library */
 	pci_scan_bus(pacc);	/* We want to get the list of devices */
+#endif
 
 	if (processor_flash_enable()) {
 		msg_perr("Processor detection/init failed.\n"

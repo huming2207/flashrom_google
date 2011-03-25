@@ -38,6 +38,7 @@
  * http://sourceforge.net/projects/nuvflashupdate/
  */
 
+#if defined(__i386__) || defined(__x86_64__)
 #include <assert.h>
 #include <string.h>
 #include <sys/time.h>
@@ -939,3 +940,4 @@ int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	msg_pdbg("%s: opcode: 0x%02x\n", __func__, opcode);
 	return rc;
 }
+#endif
