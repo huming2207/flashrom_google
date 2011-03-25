@@ -119,7 +119,7 @@ void probe_superio(void)
 int is_laptop = 0;
 enum chipbustype target_bus;
 
-#if defined(__i386__) || defined(__x86_64__)
+#if NEED_PCI == 1
 #define BUFSIZE 256
 static char buffer[BUFSIZE];
 
