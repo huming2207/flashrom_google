@@ -136,7 +136,7 @@ CONFIG_SATASII ?= no
 CONFIG_ATAHPT ?= no
 
 # Always enable FT2232 SPI dongles for now.
-CONFIG_FT2232_SPI ?= no
+CONFIG_FT2232_SPI ?= yes
 
 # Always enable dummy tracing for now.
 CONFIG_DUMMY ?= yes
