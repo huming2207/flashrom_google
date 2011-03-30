@@ -836,6 +836,29 @@ int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int
 	return spi_write_chunked(flash, buf, start, len, flash->page_size);
 }
 
+int wpce775x_spi_read_status_register(unsigned int readcnt, uint8_t *readarr)
+{
+	int ret = 0;
+	int i;
+
+	assert_ec_is_free();
+	msg_pdbg("%s(): reading status register.\n", __func__);
+
+	wcb->code = 0x30;  /* JEDEC_RDSR */
+	if (blocked_exec()) {
+		ret = 1;
+	}
+	msg_pdbg("%s(): WCB code=0x%02x field[]= ", __func__, wcb->code);
+	for (i = 0; i < readcnt; ++i) {
+		readarr[i] = wcb->field[i];
+		msg_pdbg("%02x ", wcb->field[i]);
+	}
+	msg_pdbg("\n");
+	initflash_cfg->status_reg_value = readarr[0];
+
+	return ret;
+}
+
 int wpce775x_spi_write_status_register(uint8_t val)
 {
 	assert_ec_is_free();
@@ -877,16 +900,7 @@ int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		break;
 	}
 	case JEDEC_RDSR:
-		/*
-		 * FIXME: WPCE775x does not support reading status register
-		 * directly. Instead, we rely on the internally-kept value.
-		 * Consequently, this RDSR wrapper does not reflect the genuine
-		 * value of the status register.
-		 */
-		if (initflash_cfg)
-			readarr[0] = initflash_cfg->status_reg_value;
-		else
-			readarr[0] = 0x00;
+		rc = wpce775x_spi_read_status_register(readcnt, readarr);
 		break;
 	case JEDEC_READ:{
 		int blockaddr = (writearr[1] << 16) |
