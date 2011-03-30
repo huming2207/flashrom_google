@@ -838,15 +838,30 @@ int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int
 
 int wpce775x_spi_read_status_register(unsigned int readcnt, uint8_t *readarr)
 {
+	uint8_t before[2];
 	int ret = 0;
 	int i;
 
 	assert_ec_is_free();
 	msg_pdbg("%s(): reading status register.\n", __func__);
 
+	/* We need to detect if EC firmware support this 0x30 command.
+	 * 1. write a non-sense value to field[0] and field[1].
+	 * 2. execute command 0x30.
+	 * 3. if field[0] is NOT changed, that means 0x30 is not supported,
+	 *                use initflash_cfg->status_reg_value instead.
+	 *    else, 0x30 works and returns field[].
+	 */
+	wcb->field[0] = ~initflash_cfg->status_reg_value;
+	wcb->field[1] = 0xfc;  /* set reserved bits to 1s */
+	/* save original values */
+	for (i = 0; i < ARRAY_SIZE(before); i++)
+		before[i] = wcb->field[i];
+
 	wcb->code = 0x30;  /* JEDEC_RDSR */
 	if (blocked_exec()) {
 		ret = 1;
+		msg_perr("%s(): blocked_exec() returns error.\n", __func__);
 	}
 	msg_pdbg("%s(): WCB code=0x%02x field[]= ", __func__, wcb->code);
 	for (i = 0; i < readcnt; ++i) {
@@ -854,7 +869,20 @@ int wpce775x_spi_read_status_register(unsigned int readcnt, uint8_t *readarr)
 		msg_pdbg("%02x ", wcb->field[i]);
 	}
 	msg_pdbg("\n");
-	initflash_cfg->status_reg_value = readarr[0];
+
+	/* FIXME: not sure EC returns 1 or 2 bytes for command 0x30,
+	 *        now we check field[0] only.
+	 *        Shall check field[1] if EC always returns 2 bytes. */
+	if (wcb->field[0] == before[0]) {
+		/* field is not changed, 0x30 command doesn't work. */
+		readarr[0] = initflash_cfg->status_reg_value;
+		readarr[1] = 0;  /* TODO: if second status register exists */
+		msg_pdbg("%s(): command 0x30 seems NOT working.\n", __func__);
+	} else {
+		/* 0x30 command seems working! */
+		initflash_cfg->status_reg_value = readarr[0];
+		msg_pdbg("%s(): command 0x30 seems working.\n", __func__);
+	}
 
 	return ret;
 }
