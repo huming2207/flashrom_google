@@ -523,6 +523,9 @@ enum spi_controller {
 	SPI_CONTROLLER_MCP6X_BITBANG,
 	SPI_CONTROLLER_WPCE775X,
 #endif
+#if defined(__arm__)
+	SPI_CONTROLLER_TEGRA2,
+#endif
 #endif
 #if CONFIG_FT2232_SPI == 1
 	SPI_CONTROLLER_FT2232,
@@ -659,5 +662,16 @@ extern fdtype sp_fd;
 int serialport_shutdown(void);
 int serialport_write(unsigned char *buf, unsigned int writecnt);
 int serialport_read(unsigned char *buf, unsigned int readcnt);
+
+
+/* tegra2_spi.c */
+#if CONFIG_INTERNAL == 1
+int tegra2_spi_init(void);
+void tegra2_spi_shutdown(void*);
+int tegra2_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+		      const unsigned char *writearr, unsigned char *readarr);
+int tegra2_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
+int tegra2_spi_write(struct flashchip *flash, uint8_t *buf, int start, int len);
+#endif
 
 #endif				/* !__PROGRAMMER_H__ */

@@ -81,6 +81,48 @@ static int is_loongson(void)
 }
 #endif
 
+#if defined(__arm__)
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+/* Returns true if the /proc/cpuinfo contains a line: "CPU part *: *0xc09".
+ * TODO: need to extend in future for same SPI controller in chip family.
+ */
+static int is_tegra2(void)
+{
+	FILE *cpuinfo;
+	uint32_t impl = 0, architecture = 0, variant = 0, part = 0;
+	const char *name = "CPU part";
+	const char *value = "0xc09";
+	int ret = 0;
+
+	cpuinfo = fopen("/proc/cpuinfo", "rb");
+	if (!cpuinfo)
+		return 0;
+	while (!feof(cpuinfo)) {
+		char line[512], *ptr;
+		if (fgets(line, sizeof(line), cpuinfo) == NULL)
+			break;
+		ptr = line;
+		while (*ptr && isspace((unsigned char)*ptr))
+			ptr++;
+		if (strncmp(ptr, name, strlen(name)) == 0)
+			ptr += strlen(name);
+		while (*ptr && isspace((unsigned char)*ptr))
+			ptr++;
+		if (*ptr != ':')
+			continue;
+		ptr++;
+		while (*ptr && isspace((unsigned char)*ptr))
+			ptr++;
+		ret = (strncmp(ptr, value, strlen(value)) == 0);
+	}
+	fclose(cpuinfo);
+	return ret;
+}
+#endif
+
 int processor_flash_enable(void)
 {
 	/* FIXME: detect loongson on FreeBSD and OpenBSD as well.  */
@@ -88,6 +130,12 @@ int processor_flash_enable(void)
 	if (is_loongson()) {
 		flashbase = 0x1fc00000;
 		return 0;
+	}
+#endif
+#if defined (__arm__)
+	if (is_tegra2()) {
+		msg_pdbg("Detected NVIDIA Tegra 2.\n");
+		return tegra2_spi_init();
 	}
 #endif
 	/* Not implemented yet. Oh well. */

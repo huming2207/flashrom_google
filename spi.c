@@ -112,6 +112,14 @@ const struct spi_programmer spi_programmer[] = {
 	},
 
 #endif
+#if defined(__arm__)
+	{ /* SPI_CONTROLLER_TEGRA2 */
+		.command = tegra2_spi_send_command,
+		.multicommand = default_spi_send_multicommand,
+		.read = tegra2_spi_read,
+		.write_256 = tegra2_spi_write,
+	},
+#endif
 #endif
 
 #if CONFIG_FT2232_SPI == 1
