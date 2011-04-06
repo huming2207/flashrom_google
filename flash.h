@@ -250,6 +250,9 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 int cli_classic(int argc, char *argv[]);
 int cli_mfg(int argc, char *argv[]);
 
+/* cli_mfg.c */
+extern int set_ignore_fmap;
+
 /* layout.c */
 int read_romlayout(char *name);
 int add_fmap_entries(struct flashchip *flash);

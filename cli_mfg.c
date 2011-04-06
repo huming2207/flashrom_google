@@ -37,6 +37,9 @@
 
 #define LOCK_TIMEOUT_SECS	30
 
+/* This variable is shared with doit() in flashrom.c */
+int set_ignore_fmap = 0;
+
 void cli_mfg_usage(const char *name)
 {
 	const char *pname;
@@ -93,6 +96,8 @@ void cli_mfg_usage(const char *name)
 #endif
 	       "   -p | --programmer <name>[:<param>] specify the programmer "
 	         "device"
+	       "   --ignore-fmap                     don't try to parse the "
+	         "fmap structure on the flash\n"
 		 );
 
 	for (p = 0; p < PROGRAMMER_INVALID; p++) {
@@ -150,6 +155,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_WP_ENABLE,
 	LONGOPT_WP_DISABLE,
 	LONGOPT_WP_LIST,
+	LONGOPT_IGNORE_FMAP,
 };
 
 int cli_mfg(int argc, char *argv[])
@@ -197,6 +203,7 @@ int cli_mfg(int argc, char *argv[])
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
 		{"wp-list", 0, 0, LONGOPT_WP_LIST},
+		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
 		{0, 0, 0, 0}
 	};
 
@@ -385,6 +392,9 @@ int cli_mfg(int argc, char *argv[])
 			break;
 		case LONGOPT_WP_DISABLE:
 			set_wp_disable = 1;
+			break;
+		case LONGOPT_IGNORE_FMAP:
+			set_ignore_fmap = 1;
 			break;
 		default:
 			cli_mfg_abort_usage(argv[0]);

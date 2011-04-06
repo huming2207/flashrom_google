@@ -1898,7 +1898,7 @@ int doit(struct flashchip *flash, int force, char *filename, int read_it, int wr
 		flash->unlock(flash);
 
 	/* add entries for regions specified in flashmap */
-	if (add_fmap_entries(flash) < 0) {
+	if (!set_ignore_fmap && add_fmap_entries(flash) < 0) {
 		ret = 1;
 		goto out_nofree;
 	}
