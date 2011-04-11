@@ -37,6 +37,9 @@
 #define GENERIC_MANUF_ID	0xffff	/* Check if there is a vendor ID */
 #define GENERIC_DEVICE_ID	0xffff	/* Only match the vendor ID */
 
+#define VARIABLE_SIZE_MANUF_ID 0x3eaf
+#define VARIABLE_SIZE_DEVICE_ID 0x10af
+
 #define ALLIANCE_ID		0x52	/* Alliance Semiconductor */
 #define ALLIANCE_AS29F002B	0x34
 #define ALLIANCE_AS29F002T	0xB0

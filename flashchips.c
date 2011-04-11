@@ -8075,6 +8075,30 @@ struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Generic",
+		.name		= "Variable Size SPI chip",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= VARIABLE_SIZE_MANUF_ID,
+		.model_id	= VARIABLE_SIZE_DEVICE_ID,
+		.total_size	= 64,  /* This size is set temporarily */
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_variable_size,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {4 * 1024, 16} },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {64 * 1024, 1} },
+				.block_erase = spi_block_erase_d8,
+			}
+		},
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+	},
+
+	{
+		.vendor		= "Generic",
 		.name		= "unknown SPI chip (RDID)",
 		.bustype	= CHIP_BUSTYPE_SPI,
 		.manufacture_id	= GENERIC_MANUF_ID,
