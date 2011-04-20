@@ -447,11 +447,11 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	if (target_bus == CHIP_BUSTYPE_LPC) {
 		msg_pdbg("Setting BBS to LPC\n");
 		gcs = (gcs & ~0xc00) | (0x3 << 10);
-		rmmio_writel(gcs, rcrb + 0x3410);
+		mmio_writel(gcs, rcrb + 0x3410);
 	} else if (target_bus == CHIP_BUSTYPE_SPI) {
 		msg_pdbg("Setting BBS to SPI\n");
 		gcs = (gcs & ~0xc00) | (0x1 << 10);
-		rmmio_writel(gcs, rcrb + 0x3410);
+		mmio_writel(gcs, rcrb + 0x3410);
 	}
 
 	msg_pdbg("GCS = 0x%x: ", gcs);
