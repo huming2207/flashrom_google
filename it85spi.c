@@ -260,6 +260,12 @@ void it85xx_exit_scratch_rom()
 	}
 }
 
+static void it85xx_shutdown(void *data)
+{
+	msg_pdbg("%s():%d\n", __func__, __LINE__);
+	it85xx_exit_scratch_rom();
+}
+
 int it85xx_spi_common_init(void)
 {
 	chipaddr base;
@@ -267,6 +273,9 @@ int it85xx_spi_common_init(void)
 	msg_pdbg("%s():%d superio.vendor=0x%02x\n", __func__, __LINE__,
 	         superio.vendor);
 	if (superio.vendor != SUPERIO_VENDOR_ITE)
+		return 1;
+
+	if (register_shutdown(it85xx_shutdown, NULL))
 		return 1;
 
 #ifdef LPC_IO
@@ -300,7 +309,6 @@ int it85xx_spi_common_init(void)
 
 	/* Set this as spi controller. */
 	spi_controller = SPI_CONTROLLER_IT85XX;
-
 	return 0;
 }
 
@@ -340,13 +348,6 @@ int it85xx_probe_spi_flash(const char *name)
 		buses_supported |= CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
 	}
 	return ret;
-}
-
-int it85xx_shutdown(void)
-{
-	msg_pdbg("%s():%d\n", __func__, __LINE__);
-	it85xx_exit_scratch_rom();
-	return 0;
 }
 
 /* According to ITE 8502 document, the procedure to follow mode is following:
