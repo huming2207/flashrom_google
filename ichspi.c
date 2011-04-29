@@ -382,16 +382,16 @@ int program_opcodes(OPCODES * op)
 	switch (spi_controller) {
 	case SPI_CONTROLLER_ICH7:
 	case SPI_CONTROLLER_VIA:
-		REGWRITE16(ICH7_REG_PREOP, preop);
-		REGWRITE16(ICH7_REG_OPTYPE, optype);
-		REGWRITE32(ICH7_REG_OPMENU, opmenu[0]);
-		REGWRITE32(ICH7_REG_OPMENU + 4, opmenu[1]);
+		rmmio_writew(preop, ich_spibar + ICH7_REG_PREOP);
+		rmmio_writew(optype, ich_spibar + ICH7_REG_OPTYPE);
+		rmmio_writel(opmenu[0], ich_spibar + ICH7_REG_OPMENU);
+		rmmio_writel(opmenu[1], ich_spibar + ICH7_REG_OPMENU + 4);
 		break;
 	case SPI_CONTROLLER_ICH9:
-		REGWRITE16(ICH9_REG_PREOP, preop);
-		REGWRITE16(ICH9_REG_OPTYPE, optype);
-		REGWRITE32(ICH9_REG_OPMENU, opmenu[0]);
-		REGWRITE32(ICH9_REG_OPMENU + 4, opmenu[1]);
+		rmmio_writew(preop, ich_spibar + ICH9_REG_PREOP);
+		rmmio_writew(optype, ich_spibar + ICH9_REG_OPTYPE);
+		rmmio_writel(opmenu[0], ich_spibar + ICH9_REG_OPMENU);
+		rmmio_writel(opmenu[1], ich_spibar + ICH9_REG_OPMENU + 4);
 		break;
 	default:
 		msg_perr("%s: unsupported chipset\n", __func__);
@@ -417,9 +417,12 @@ void ich_set_bbar(uint32_t minaddr)
 			msg_pdbg("Reserved bits in BBAR not zero: 0x%04x",
 				 ichspi_bbar);
 		ichspi_bbar |= minaddr;
-		mmio_writel(ichspi_bbar, ich_spibar + 0x50);
+		rmmio_writel(ichspi_bbar, ich_spibar + 0x50);
 		ichspi_bbar = mmio_readl(ich_spibar + 0x50);
-		/* We don't have any option except complaining. */
+		/* We don't have any option except complaining. And if the write
+		 * failed, the restore will fail as well, so no problem there.
+		 */
+
 		if (ichspi_bbar != minaddr)
 			msg_perr("Setting BBAR failed!\n");
 		break;
@@ -429,9 +432,12 @@ void ich_set_bbar(uint32_t minaddr)
 			msg_pdbg("Reserved bits in BBAR not zero: 0x%04x",
 				 ichspi_bbar);
 		ichspi_bbar |= minaddr;
-		mmio_writel(ichspi_bbar, ich_spibar + 0xA0);
+		rmmio_writel(ichspi_bbar, ich_spibar + 0xA0);
 		ichspi_bbar = mmio_readl(ich_spibar + 0xA0);
-		/* We don't have any option except complaining. */
+		/* We don't have any option except complaining. And if the write
+		 * failed, the restore will fail as well, so no problem there.
+		 */
+
 		if (ichspi_bbar != minaddr)
 			msg_perr("Setting BBAR failed!\n");
 		break;
