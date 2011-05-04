@@ -33,6 +33,9 @@
 #undef max
 #endif
 
+/* Are timers broken? */
+extern int broken_timer;
+
 struct flashchip;	/* forward declare */
 #define ERROR_PTR ((void*)-1)
 
