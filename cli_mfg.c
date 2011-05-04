@@ -95,7 +95,9 @@ void cli_mfg_usage(const char *name)
 	         "in wiki syntax\n"
 #endif
 	       "   -p | --programmer <name>[:<param>] specify the programmer "
-	         "device"
+ 	         "device\n"
+	       "   -b | --broken-timers              assume system timers are "
+	         "broken\n"
 	       "   --ignore-fmap                     don't try to parse the "
 	         "fmap structure on the flash\n"
 		 );
@@ -179,7 +181,7 @@ int cli_mfg(int argc, char *argv[])
 	int i;
 	int rc = 0;
 
-	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzh";
+	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhb";
 	static struct option long_options[] = {
 		{"read", 1, 0, 'r'},
 		{"write", 1, 0, 'w'},
@@ -203,6 +205,7 @@ int cli_mfg(int argc, char *argv[])
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
 		{"wp-list", 0, 0, LONGOPT_WP_LIST},
+		{"broken-timers", 0, 0, 'b' },
 		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
 		{0, 0, 0, 0}
 	};
@@ -395,6 +398,9 @@ int cli_mfg(int argc, char *argv[])
 			break;
 		case LONGOPT_IGNORE_FMAP:
 			set_ignore_fmap = 1;
+			break;
+		case 'b':
+			broken_timer = 1;
 			break;
 		default:
 			cli_mfg_abort_usage(argv[0]);
