@@ -235,6 +235,9 @@ int cli_mfg(int argc, char *argv[])
 			}
 			filename = strdup(optarg);
 			read_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'w':
 			if (++operation_specified > 1) {
@@ -244,6 +247,9 @@ int cli_mfg(int argc, char *argv[])
 			}
 			filename = strdup(optarg);
 			write_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'v':
 			//FIXME: gracefully handle superfluous -v
@@ -259,6 +265,9 @@ int cli_mfg(int argc, char *argv[])
 			}
 			filename = strdup(optarg);
 			verify_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'n':
 			if (verify_it) {
@@ -281,6 +290,9 @@ int cli_mfg(int argc, char *argv[])
 				cli_mfg_abort_usage(argv[0]);
 			}
 			erase_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'm':
 #if CONFIG_INTERNAL == 1
