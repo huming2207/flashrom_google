@@ -617,7 +617,14 @@ int cli_mfg(int argc, char *argv[])
 			rc = flash->wp->list_ranges(flash);
 		goto cli_mfg_silent_exit;
 	}
-	
+
+	/* If the user doesn't specify any -i argument, then we can skip the
+	 * fmap parsing to speed up. */
+	if (get_num_include_args() == 0) {
+		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
+		set_ignore_fmap = 1;
+	}
+
 	if (read_it || write_it || erase_it || verify_it)
 		rc = doit(flash, force, filename,
 		          read_it, write_it, erase_it, verify_it);

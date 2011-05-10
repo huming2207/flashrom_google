@@ -50,6 +50,7 @@ typedef struct {
  * "included" in the master rom_entries list.
  */
 static char *include_args[MAX_ROMLAYOUT];
+static int num_include_args = 0;  /* the number of valid entries. */
 static romlayout_t rom_entries[MAX_ROMLAYOUT];
 
 #if CONFIG_INTERNAL == 1 /* FIXME: Move the whole block to cbtable.c? */
@@ -262,19 +263,21 @@ int add_fmap_entries(struct flashchip *flash)
 	return fmap->nareas;
 }
 
+int get_num_include_args(void) {
+  return num_include_args;
+}
+
 /* register an include argument (-i) for later processing */
 int register_include_arg(char *name)
 {
-	static int i = 0;
-
-	if (i >= MAX_ROMLAYOUT) {
+	if (num_include_args >= MAX_ROMLAYOUT) {
 		msg_gerr("too many regions included\n");
 		return -1;
 	}
 
-	include_args[i] = name;
-	i++;
-	return i;
+	include_args[num_include_args] = name;
+	num_include_args++;
+	return num_include_args;
 }
 
 static int find_romentry(char *name)
@@ -318,7 +321,7 @@ int process_include_args() {
 	if (!romimages)
 		return 0;
 
-	for (i = 0; i < MAX_ROMLAYOUT; i++) {
+	for (i = 0; i < num_include_args; i++) {
 		if (include_args[i]) {
 			if (find_romentry(include_args[i]) < 0) {
 				msg_gerr("Invalid entry specified: %s\n",
@@ -393,7 +396,7 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to write the complete new image.
 	 */
-	if (!include_args[0])
+	if (num_include_args == 0)
 		return 0;
 
 	/* Non-included romentries are ignored.
@@ -461,7 +464,7 @@ int handle_partial_read(
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to read the complete image.
 	 */
-	if (!include_args[0])
+	if (num_include_args == 0)
 		return 0;
 
 	/* Walk through the table and write content to file for those included
