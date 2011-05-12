@@ -124,6 +124,7 @@ const struct programmer_entry programmer_table[] = {
 	{
 		.name			= "internal",
 		.init			= internal_init,
+		/* called implicitly using shutdown callback */
 		.shutdown		= internal_shutdown,
 		.map_flash_region	= physmap,
 		.unmap_flash_region	= physunmap,
@@ -484,6 +485,8 @@ struct shutdown_func_data {
  */
 static int may_register_shutdown = 0;
 
+static int programmer_shutdown_done = 0;
+
 /* Register a function to be executed on programmer shutdown.
  * The advantage over atexit() is that you can supply a void pointer which will
  * be used as parameter to the registered function upon programmer shutdown.
@@ -577,6 +580,14 @@ int chip_restore()
 
 int programmer_shutdown(void)
 {
+	if (programmer_shutdown_done) {
+		msg_gdbg("%s: shutdown has already been done\n", __func__);
+		return -1;
+	}
+
+	msg_gdbg("%s: carrying out %d shutdown callbacks\n",
+	         __func__, shutdown_fn_count);
+
 	/* Registering shutdown functions is no longer allowed. */
 	may_register_shutdown = 0;
 	while (shutdown_fn_count > 0) {

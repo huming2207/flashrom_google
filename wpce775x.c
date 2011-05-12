@@ -540,6 +540,30 @@ int ExitFlashUpdateFirmwareChanged(void) {
 	return ExitFlashUpdate(0x21);
 }
 
+static void wpce775x_shutdown(void *data)
+{
+	if (spi_controller != SPI_CONTROLLER_WPCE775X)
+		return;
+
+	msg_pdbg("%s(): firmware %s\n", __func__,
+		 firmware_changed ? "changed" : "not changed");
+
+	msg_pdbg("%s: in_flash_update_mode: %d\n", __func__, in_flash_update_mode);
+	if (in_flash_update_mode) {
+		if (firmware_changed)
+			ExitFlashUpdateFirmwareChanged();
+		else
+			ExitFlashUpdateFirmwareNoChange();
+
+		in_flash_update_mode = 0;
+	}
+
+	if (initflash_cfg)
+		free(initflash_cfg);
+	else
+		msg_perr("%s(): No initflash_cfg to free?!?\n", __func__);
+}
+
 int wpce775x_spi_common_init(void)
 {
 	uint16_t sio_port;
@@ -592,39 +616,15 @@ int wpce775x_spi_common_init(void)
 	/* TODO: set fwh_idsel of chipset.
 	         Currently, we employ "-p internal:fwh_idsel=0x0000223e". */
 
+	if (register_shutdown(wpce775x_shutdown, NULL))
+		return 1;
+
 	/* Enter flash update mode unconditionally. This is required even
 	   for reading. */
 	if (EnterFlashUpdate()) return 1;
 
 	spi_controller = SPI_CONTROLLER_WPCE775X;
 	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
-	return 0;
-
-}
-
-int wpce775x_shutdown(void)
-{
-	if (spi_controller != SPI_CONTROLLER_WPCE775X)
-		return 0;
-
-	msg_pdbg("%s(): firmware %s\n", __func__,
-		 firmware_changed ? "changed" : "not changed");
-
-	msg_pdbg("%s: in_flash_update_mode: %d\n", __func__, in_flash_update_mode);
-	if (in_flash_update_mode) {
-		if (firmware_changed)
-			ExitFlashUpdateFirmwareChanged();
-		else
-			ExitFlashUpdateFirmwareNoChange();
-
-		in_flash_update_mode = 0;
-	}
-
-	if (initflash_cfg)
-		free(initflash_cfg);
-	else
-		msg_perr("%s(): No initflash_cfg to free?!?\n", __func__);
-
 	return 0;
 }
 

@@ -375,15 +375,6 @@ int internal_shutdown(void)
 {
 	release_io_perms();
 
-#if defined(__i386__) || defined(__x86_64__)
-	if (target_bus == CHIP_BUSTYPE_LPC ||
-	    target_bus == CHIP_BUSTYPE_FWH) {
-		it85xx_shutdown();
-		wpce775x_shutdown();
-		mec1308_shutdown();
-	}
-#endif
-
 	return 0;
 }
 #endif

@@ -307,6 +307,21 @@ static int enter_passthru_mode(void)
 	return 0;
 }
 
+static void mec1308_shutdown(void *data)
+{
+	if (spi_controller != SPI_CONTROLLER_MEC1308)
+		return;
+
+	/* Exit passthru mode before performing commands which do not affect
+	   the SPI ROM */
+	mec1308_exit_passthru_mode();
+
+	/* Re-enable SMI and ACPI.
+	   FIXME: is there an ordering dependency? */
+	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_ENABLE);
+	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_ENABLE);
+}
+
 /* Called by internal_init() */
 int mec1308_probe_spi_flash(const char *name)
 {
@@ -361,33 +376,20 @@ int mec1308_probe_spi_flash(const char *name)
 	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE);
 	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_DISABLE);
 
+	if (register_shutdown(mec1308_shutdown, NULL))
+		return 1;
+
 	/*
 	 * Enter SPI Pass-Thru Mode after commands which do not require access
 	 * to SPI ROM are complete. We'll start by doing the exit_passthru_mode
 	 * sequence, which is benign if the EC is already in passthru mode.
 	 */
 	mec1308_exit_passthru_mode();
+
 	if (enter_passthru_mode())
 		return 1;
 
 	msg_pdbg("%s(): successfully initialized mec1308\n", __func__);
-	return 0;
-}
-
-int mec1308_shutdown(void)
-{
-	if (spi_controller != SPI_CONTROLLER_MEC1308)
-		return 0;
-
-	/* Exit passthru mode before performing commands which do not affect
-	   the SPI ROM */
-	mec1308_exit_passthru_mode();
-
-	/* Re-enable SMI and ACPI.
-	   FIXME: is there an ordering dependency? */
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_ENABLE);
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_ENABLE);
-
 	return 0;
 }
 

@@ -583,7 +583,6 @@ int ich_spi_send_multicommand(struct spi_command *cmds);
 /* it85spi.c */
 struct superio probe_superio_ite85xx(void);
 int it85xx_spi_init(void);
-int it85xx_shutdown(void);
 int it85xx_probe_spi_flash(const char *name);
 int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *writearr, unsigned char *readarr);
@@ -601,7 +600,6 @@ int it8716f_spi_chip_write_256(struct flashchip *flash, uint8_t *buf, int start,
 
 /* mec1308.c */
 struct superio probe_superio_mec1308(void);
-int mec1308_shutdown(void);
 int mec1308_probe_spi_flash(const char *name);
 int mec1308_spi_read(struct flashchip *flash,
                      uint8_t * buf, int start, int len);
@@ -645,7 +643,6 @@ typedef int fdtype;
 
 /* wpce775x.c */
 struct superio probe_superio_wpce775x(void);
-int wpce775x_shutdown(void);
 int wpce775x_probe_spi_flash(const char *name);
 int wpce775x_spi_read(struct flashchip *flash,
                       uint8_t * buf, int start, int len);
