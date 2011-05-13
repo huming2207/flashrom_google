@@ -904,7 +904,6 @@ int wpce775x_spi_write_status_register(uint8_t val)
 		return 1;
 	if (EnterFlashUpdate())
 		return 1;
-	ExitFlashUpdateFirmwareNoChange();
 	return 0;
 }
 
