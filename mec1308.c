@@ -196,6 +196,11 @@ static int mbx_write(uint8_t idx, uint8_t data)
 {
 	int rc = 0;
 
+	if (idx == MEC1308_MBX_CMD && mbx_wait()) {
+		msg_perr("%s: command register not clear\n", __func__);
+		return 1;
+	}
+
 	OUTB(idx, mbx_idx);
 	OUTB(data, mbx_data);
 
@@ -318,8 +323,10 @@ static void mec1308_shutdown(void *data)
 
 	/* Re-enable SMI and ACPI.
 	   FIXME: is there an ordering dependency? */
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_ENABLE);
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_ENABLE);
+	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_ENABLE))
+		msg_pdbg("%s: unable to re-enable SMI\n", __func__);
+	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_ENABLE))
+		msg_pdbg("%s: unable to re-enable ACPI\n", __func__);
 }
 
 /* Called by internal_init() */
@@ -373,8 +380,15 @@ int mec1308_probe_spi_flash(const char *name)
 
 	/* Further setup -- disable SMI and ACPI.
 	   FIXME: is there an ordering dependency? */
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE);
-	mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_DISABLE);
+	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE)) {
+		msg_pdbg("%s: unable to disable ACPI\n", __func__);
+		return 1;
+	}
+
+	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_DISABLE)) {
+		msg_pdbg("%s: unable to disable SMI\n", __func__);
+		return 1;
+	}
 
 	if (register_shutdown(mec1308_shutdown, NULL))
 		return 1;
@@ -424,24 +438,31 @@ int mec1308_spi_send_command(unsigned int writecnt,
                              const unsigned char *writearr,
                              unsigned char *readarr)
 {
-	int i;
+	int i, rc = 0;
 
 	if (mec1308_chip_select())
 		return 1;
 
 	for (i = 0; i < writecnt; i++) {
-		mbx_write(MEC1308_MBX_DATA_START, writearr[i]);
-		mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_SEND);
+		if (mbx_write(MEC1308_MBX_DATA_START, writearr[i]) ||
+		    mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_SEND)) {
+			msg_pdbg("%s: failed to issue send command\n",__func__);
+			rc = 1;
+			goto mec1308_spi_send_command_exit;
+		}
 	}
 
 	for (i = 0; i < readcnt; i++) {
-		mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_READ);
+		if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_READ)) {
+			msg_pdbg("%s: failed to issue read command\n",__func__);
+			rc = 1;
+			goto mec1308_spi_send_command_exit;
+		}
 		readarr[i] = mbx_read(MEC1308_MBX_DATA_START);
 	}
 
-	if (mec1308_chip_deselect())
-		return 1;
-
-	return 0;
+mec1308_spi_send_command_exit:
+	rc |= mec1308_chip_deselect();
+	return rc;
 }
 #endif
