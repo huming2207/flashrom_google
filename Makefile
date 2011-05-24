@@ -160,7 +160,7 @@ CONFIG_OGP_SPI ?= no
 CONFIG_BUSPIRATE_SPI ?= no
 
 # Disable Dediprog SF100 until support is complete and tested.
-CONFIG_DEDIPROG ?= no
+CONFIG_DEDIPROG ?= yes
 
 # Disable wiki printing by default. It is only useful if you have wiki access.
 CONFIG_PRINT_WIKI ?= no
