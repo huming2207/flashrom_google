@@ -233,7 +233,12 @@
 #define EON_EN25B64		0x2017	/* Same as P64 */
 #define EON_EN25B64T		0x46
 #define EON_EN25B64B		0x36
-#define EON_EN25D16		0x3015
+#define EON_EN25Q40		0x3013
+#define EON_EN25Q80		0x3014
+#define EON_EN25D16		0x3015	/* Same as Q16 */
+#define EON_EN25Q32		0x3016
+#define EON_EN25Q64		0x3017
+#define EON_EN25Q128		0x3018
 #define EON_EN25F05		0x3110
 #define EON_EN25F10		0x3111
 #define EON_EN25F20		0x3112
