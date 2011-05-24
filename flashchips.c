@@ -2562,8 +2562,6 @@ struct flashchip flashchips[] = {
 	},
 
 	{
-		/* Note: EN25Q16 is an evil twin which shares the model ID
-		   but has different write protection capabilities */
 		.vendor		= "Eon",
 		.name		= "EN25D16",
 		.bustype	= CHIP_BUSTYPE_SPI,
@@ -2571,7 +2569,6 @@ struct flashchip flashchips[] = {
 		.model_id	= EON_EN25D16,
 		.total_size	= 2048,
 		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
@@ -2837,176 +2834,6 @@ struct flashchip flashchips[] = {
 		.unlock		= spi_disable_blockprotect,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
-	},
-
-	{
-		.vendor		= "Eon",
-		.name		= "EN25Q40",
-		.bustype	= CHIP_BUSTYPE_SPI,
-		.manufacture_id	= EON_ID_NOPREFIX,
-		.model_id	= EON_EN25Q40,
-		.total_size	= 512,
-		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
-		.probe		= probe_spi_rdid,
-		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-			{
-				.eraseblocks = { {4 * 1024, 128} },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 8} },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {512 * 1024, 1} },
-				.block_erase = spi_block_erase_60,
-			}, {
-				.eraseblocks = { {512 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
-		.wp		= &wp_w25,
-	},
-
-	{
-		.vendor		= "Eon",
-		.name		= "EN25Q80(A)",
-		.bustype	= CHIP_BUSTYPE_SPI,
-		.manufacture_id	= EON_ID_NOPREFIX,
-		.model_id	= EON_EN25Q80,
-		.total_size	= 1024,
-		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
-		.probe		= probe_spi_rdid,
-		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-			{
-				.eraseblocks = { {4 * 1024, 256} },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 16} },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {1024 * 1024, 1} },
-				.block_erase = spi_block_erase_60,
-			}, {
-				.eraseblocks = { {1024 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
-		.wp		= &wp_w25,
-	},
-
-	{
-		.vendor		= "Eon",
-		.name		= "EN25Q32(A)(B)",
-		.bustype	= CHIP_BUSTYPE_SPI,
-		.manufacture_id	= EON_ID_NOPREFIX,
-		.model_id	= EON_EN25Q32,
-		.total_size	= 4096,
-		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
-		.probe		= probe_spi_rdid,
-		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-			{
-				.eraseblocks = { {4 * 1024, 1024} },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 64} },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {4 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_60,
-			}, {
-				.eraseblocks = { {4 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
-		.wp		= &wp_w25,
-	},
-
-	{
-		.vendor		= "Eon",
-		.name		= "EN25Q64",
-		.bustype	= CHIP_BUSTYPE_SPI,
-		.manufacture_id	= EON_ID_NOPREFIX,
-		.model_id	= EON_EN25Q64,
-		.total_size	= 8192,
-		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
-		.probe		= probe_spi_rdid,
-		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-			{
-				.eraseblocks = { {4 * 1024, 2048} },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 128} },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {8 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_60,
-			}, {
-				.eraseblocks = { {8 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
-		.wp		= &wp_w25,
-	},
-
-	{
-		.vendor		= "Eon",
-		.name		= "EN25Q128",
-		.bustype	= CHIP_BUSTYPE_SPI,
-		.manufacture_id	= EON_ID_NOPREFIX,
-		.model_id	= EON_EN25Q128,
-		.total_size	= 16384,
-		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
-		.probe		= probe_spi_rdid,
-		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-			{
-				.eraseblocks = { {4 * 1024, 4096} },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 256} },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {16 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_60,
-			}, {
-				.eraseblocks = { {16 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
-		.wp		= &wp_w25,
 	},
 
 	{
