@@ -562,7 +562,7 @@ int cli_mfg(int argc, char *argv[])
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
 		if (flash->wp && flash->wp->disable)
-			rc = flash->wp->disable(flash);
+			rc |= flash->wp->disable(flash);
 	}
 
 	/* Note: set_wp_range must happen before set_wp_enable */
@@ -592,12 +592,12 @@ int cli_mfg(int argc, char *argv[])
 		}
 
 		if (flash->wp && flash->wp->set_range)
-			rc = flash->wp->set_range(flash, start, len);
+			rc |= flash->wp->set_range(flash, start, len);
 	}
 	
 	if (!rc && set_wp_enable) {
 		if (flash->wp && flash->wp->enable)
-			rc = flash->wp->enable(flash);
+			rc |= flash->wp->enable(flash);
 	}
 	
 	if (get_size) {
@@ -607,14 +607,14 @@ int cli_mfg(int argc, char *argv[])
 
 	if (wp_status) {
 		if (flash->wp && flash->wp->wp_status)
-			rc = flash->wp->wp_status(flash);
+			rc |= flash->wp->wp_status(flash);
 		goto cli_mfg_silent_exit;
 	}
 	
 	if (wp_list) {
 		printf("Valid write protection ranges:\n");
 		if (flash->wp && flash->wp->list_ranges)
-			rc = flash->wp->list_ranges(flash);
+			rc |= flash->wp->list_ranges(flash);
 		goto cli_mfg_silent_exit;
 	}
 
