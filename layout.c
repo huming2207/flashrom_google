@@ -318,11 +318,16 @@ static int find_romentry(char *name)
 int process_include_args() {
 	int i;
 
-	if (!romimages)
-		return 0;
-
 	for (i = 0; i < num_include_args; i++) {
 		if (include_args[i]) {
+			/* User has specified the area name, but no layout file
+			 * is loaded, and no fmap is stored in BIOS.
+			 * Return error. */
+			if (!romimages) {
+				msg_gerr("No layout info is available.\n");
+				return -1;
+			}
+
 			if (find_romentry(include_args[i]) < 0) {
 				msg_gerr("Invalid entry specified: %s\n",
 				         include_args[i]);
