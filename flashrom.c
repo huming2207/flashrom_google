@@ -454,6 +454,15 @@ const struct programmer_entry programmer_table[] = {
 	{}, /* This entry corresponds to PROGRAMMER_INVALID. */
 };
 
+#define CHIP_RESTORE_MAXFN 4
+static int chip_restore_fn_count = 0;
+struct chip_restore_func_data {
+	CHIP_RESTORE_CALLBACK;
+	struct flashchip *flash;
+	uint8_t status;
+} static chip_restore_fn[CHIP_RESTORE_MAXFN];
+
+
 #define SHUTDOWN_MAXFN 32
 static int shutdown_fn_count = 0;
 struct shutdown_func_data {
@@ -494,6 +503,23 @@ int register_shutdown(int (*function) (void *data), void *data)
 	return 0;
 }
 
+//int register_chip_restore(int (*function) (void *data), void *data)
+int register_chip_restore(CHIP_RESTORE_CALLBACK,
+                          struct flashchip *flash, uint8_t status)
+{
+	if (chip_restore_fn_count >= CHIP_RESTORE_MAXFN) {
+		msg_perr("Tried to register more than %i chip restore"
+		         " functions.\n", CHIP_RESTORE_MAXFN);
+		return 1;
+	}
+	chip_restore_fn[chip_restore_fn_count].func = func;	/* from macro */
+	chip_restore_fn[chip_restore_fn_count].flash = flash;
+	chip_restore_fn[chip_restore_fn_count].status = status;
+	chip_restore_fn_count++;
+
+	return 0;
+}
+
 int programmer_init(char *param)
 {
 	int ret;
@@ -523,6 +549,19 @@ int programmer_init(char *param)
 		/* Do not error out here, the init itself was successful. */
 	}
 	return ret;
+}
+
+int chip_restore()
+{
+	int rc = 0;
+
+	while (chip_restore_fn_count > 0) {
+		int i = --chip_restore_fn_count;
+		rc |= chip_restore_fn[i].func(chip_restore_fn[i].flash,
+		                              chip_restore_fn[i].status);
+	}
+
+	return rc;
 }
 
 int programmer_shutdown(void)
@@ -1201,7 +1240,7 @@ notfound:
 		snprintf(location, sizeof(location), "on %s", programmer_table[programmer].name);
 
 	tmp = flashbuses_to_text(flash->bustype);
-	msg_cinfo("%s chip \"%s %s\" (%d kB, %s) %s.\n",
+	msg_cdbg("%s chip \"%s %s\" (%d kB, %s) %s.\n",
 		  force ? "Assuming" : "Found", fill_flash->vendor,
 		  fill_flash->name, fill_flash->total_size, tmp, location);
 	free(tmp);
@@ -1301,12 +1340,27 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 		msg_cinfo("FAILED.\n");
 		return 1;
 	}
+
+	/* To support partial read, fill buffer to all 0xFF at beginning to make
+	 * debug easier. */
+	memset(buf, 0xFF, size);
+
 	if (!flash->read) {
 		msg_cerr("No read function available for this flash chip.\n");
 		ret = 1;
 		goto out_free;
 	}
-	if (flash->read(flash, buf, 0, size)) {
+
+	/* First try to handle partial read case, rather than read the whole
+	 * flash, which is slow. */
+	ret = handle_partial_read(flash, buf, flash->read);
+	if (ret < 0) {
+		msg_cerr("Partial read operation failed!\n");
+		ret = 1;
+		goto out_free;
+	} else if (ret > 0) {
+		/* Partial read has been handled, pass the whole flash read. */
+	} else if (flash->read(flash, buf, 0, size)) {
 		msg_cerr("Read operation failed!\n");
 		ret = 1;
 		goto out_free;
@@ -1315,7 +1369,10 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 	ret = write_buf_to_file(buf, size, filename);
 out_free:
 	free(buf);
-	msg_cinfo("%s.\n", ret ? "FAILED" : "done");
+	if (ret)
+		msg_cerr("FAILED.");
+	else
+		msg_cdbg("done.");
 	return ret;
 }
 
@@ -1553,7 +1610,7 @@ int erase_and_write_flash(struct flashchip *flash, uint8_t *oldcontents, uint8_t
 	if (ret) {
 		msg_cerr("FAILED!\n");
 	} else {
-		msg_cinfo("Done.\n");
+		msg_cdbg("SUCCESS.\n");
 	}
 	return ret;
 }
@@ -1637,51 +1694,53 @@ void list_programmers_linebreak(int startcol, int cols, int paren)
 
 void print_sysinfo(void)
 {
+	/* send to stderr for chromium os */
 #if HAVE_UTSNAME == 1
 	struct utsname osinfo;
 	uname(&osinfo);
 
-	msg_ginfo(" on %s %s (%s)", osinfo.sysname, osinfo.release,
+	msg_gerr(" on %s %s (%s)", osinfo.sysname, osinfo.release,
 		  osinfo.machine);
 #else
-	msg_ginfo(" on unknown machine");
+	msg_gerr(" on unknown machine");
 #endif
-	msg_ginfo(", built with");
+	msg_gerr(", built with");
 #if NEED_PCI == 1
 #ifdef PCILIB_VERSION
-	msg_ginfo(" libpci %s,", PCILIB_VERSION);
+	msg_gerr(" libpci %s,", PCILIB_VERSION);
 #else
-	msg_ginfo(" unknown PCI library,");
+	msg_gerr(" unknown PCI library,");
 #endif
 #endif
 #ifdef __clang__
-	msg_ginfo(" LLVM Clang");
+	msg_gerr(" LLVM Clang");
 #ifdef __clang_version__
-	msg_ginfo(" %s,", __clang_version__);
+	msg_gerr(" %s,", __clang_version__);
 #else
-	msg_ginfo(" unknown version (before r102686),");
+	msg_gerr(" unknown version (before r102686),");
 #endif
 #elif defined(__GNUC__)
-	msg_ginfo(" GCC");
+	msg_gerr(" GCC");
 #ifdef __VERSION__
-	msg_ginfo(" %s,", __VERSION__);
+	msg_gerr(" %s,", __VERSION__);
 #else
-	msg_ginfo(" unknown version,");
+	msg_gerr(" unknown version,");
 #endif
 #else
-	msg_ginfo(" unknown compiler,");
+	msg_gerr(" unknown compiler,");
 #endif
 #if defined (__FLASHROM_LITTLE_ENDIAN__)
-	msg_ginfo(" little endian");
+	msg_gerr(" little endian");
 #else
-	msg_ginfo(" big endian");
+	msg_gerr(" big endian");
 #endif
-	msg_ginfo("\n");
+	msg_gerr("\n");
 }
 
 void print_version(void)
 {
-	msg_ginfo("flashrom v%s", flashrom_version);
+	/* send to stderr for chromium os */
+	msg_gerr("flashrom v%s", flashrom_version);
 	print_sysinfo();
 }
 
@@ -1741,36 +1800,36 @@ int selfcheck(void)
 void check_chip_supported(const struct flashchip *flash)
 {
 	if (TEST_OK_MASK != (flash->tested & TEST_OK_MASK)) {
-		msg_cinfo("===\n");
+		msg_cdbg("===\n");
 		if (flash->tested & TEST_BAD_MASK) {
-			msg_cinfo("This flash part has status NOT WORKING for operations:");
+			msg_cdbg("This flash part has status NOT WORKING for operations:");
 			if (flash->tested & TEST_BAD_PROBE)
-				msg_cinfo(" PROBE");
+				msg_cdbg(" PROBE");
 			if (flash->tested & TEST_BAD_READ)
-				msg_cinfo(" READ");
+				msg_cdbg(" READ");
 			if (flash->tested & TEST_BAD_ERASE)
-				msg_cinfo(" ERASE");
+				msg_cdbg(" ERASE");
 			if (flash->tested & TEST_BAD_WRITE)
-				msg_cinfo(" WRITE");
-			msg_cinfo("\n");
+				msg_cdbg(" WRITE");
+			msg_cdbg("\n");
 		}
 		if ((!(flash->tested & TEST_BAD_PROBE) && !(flash->tested & TEST_OK_PROBE)) ||
 		    (!(flash->tested & TEST_BAD_READ) && !(flash->tested & TEST_OK_READ)) ||
 		    (!(flash->tested & TEST_BAD_ERASE) && !(flash->tested & TEST_OK_ERASE)) ||
 		    (!(flash->tested & TEST_BAD_WRITE) && !(flash->tested & TEST_OK_WRITE))) {
-			msg_cinfo("This flash part has status UNTESTED for operations:");
+			msg_cdbg("This flash part has status UNTESTED for operations:");
 			if (!(flash->tested & TEST_BAD_PROBE) && !(flash->tested & TEST_OK_PROBE))
-				msg_cinfo(" PROBE");
+				msg_cdbg(" PROBE");
 			if (!(flash->tested & TEST_BAD_READ) && !(flash->tested & TEST_OK_READ))
-				msg_cinfo(" READ");
+				msg_cdbg(" READ");
 			if (!(flash->tested & TEST_BAD_ERASE) && !(flash->tested & TEST_OK_ERASE))
-				msg_cinfo(" ERASE");
+				msg_cdbg(" ERASE");
 			if (!(flash->tested & TEST_BAD_WRITE) && !(flash->tested & TEST_OK_WRITE))
-				msg_cinfo(" WRITE");
-			msg_cinfo("\n");
+				msg_cdbg(" WRITE");
+			msg_cdbg("\n");
 		}
 		/* FIXME: This message is designed towards CLI users. */
-		msg_cinfo("The test status of this chip may have been updated "
+		msg_cdbg("The test status of this chip may have been updated "
 			    "in the latest development\n"
 			  "version of flashrom. If you are running the latest "
 			    "development version,\n"
@@ -1789,7 +1848,10 @@ void check_chip_supported(const struct flashchip *flash)
 
 int main(int argc, char *argv[])
 {
-	return cli_classic(argc, argv);
+	/* FIXME: this should eventually be a build option controlled
+	   via a USE flag */
+//	return cli_classic(argc, argv);
+	return cli_mfg(argc, argv);
 }
 
 /* FIXME: This function signature needs to be improved once doit() has a better
@@ -1874,6 +1936,19 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	 */
 	if (flash->unlock)
 		flash->unlock(flash);
+
+	/* add entries for regions specified in flashmap */
+	if (!set_ignore_fmap && add_fmap_entries(flash) < 0) {
+		ret = 1;
+		goto out_nofree;
+	}
+
+	/* mark entries included using -i argument as "included" if they are
+	   found in the master rom_entries list */
+	if (process_include_args() < 0) {
+		ret = 1;
+		goto out_nofree;
+	}
 
 	if (read_it) {
 		ret = read_flash_to_file(flash, filename);
@@ -1973,6 +2048,12 @@ out:
 	free(oldcontents);
 	free(newcontents);
 out_nofree:
-	programmer_shutdown();
+	chip_restore();	/* must be done before programmer_shutdown() */
+	/*
+	 * programmer_shutdown() call is moved to cli_mfg() in chromium os
+	 * tree. This is because some operations, such as write protection,
+	 * requires programmer_shutdown() but does not call doit().
+	 */
+//	programmer_shutdown();
 	return ret;
 }

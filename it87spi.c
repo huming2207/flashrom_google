@@ -220,7 +220,7 @@ int init_superio_ite(void)
 			 * which can go wrong if the EC firmware does not
 			 * implement the interface we want.
 			 */
-			//it85xx_spi_init(superios[i]);
+			it85xx_spi_init(superios[i]);
 			break;
 		case 0x8705:
 			ret |= it8705f_write_enable(superios[i].port);

@@ -144,4 +144,7 @@ int probe_w29ee011(struct flashchip *flash);
 int erase_sector_stm50flw0x0x(struct flashchip *flash, unsigned int block, unsigned int blocksize);
 int unlock_stm50flw0x0x(struct flashchip *flash);
 
+/* dummyflasher.c */
+int probe_variable_size(struct flashchip *flash);
+
 #endif /* !__CHIPDRIVERS_H__ */

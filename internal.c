@@ -18,8 +18,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include "flash.h"
 #include "programmer.h"
 
@@ -132,6 +134,51 @@ static int internal_shutdown(void *data)
 	release_io_perms();
 	return 0;
 }
+enum chipbustype target_bus;
+
+#if NEED_PCI == 1
+#define BUFSIZE 256
+static char buffer[BUFSIZE];
+
+static void
+pci_error(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_perr("pcilib: %s\n", buffer);
+
+	/* libpci requires us to exit. TODO cleanup? */
+	exit(1);
+}
+
+static void
+pci_warning(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_pinfo("pcilib: %s\n", buffer);
+}
+
+static void
+pci_debug(char *msg, ...)
+{
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buffer, BUFSIZE, msg, args);
+	va_end(args);
+
+	msg_pdbg("pcilib: %s\n", buffer);
+}
+#endif
 
 int internal_init(void)
 {
@@ -140,6 +187,7 @@ int internal_init(void)
 #endif
 	int force_laptop = 0;
 	char *arg;
+	int probe_target_bus_later = 0;
 
 	arg = extract_programmer_param("boardenable");
 	if (arg && !strcmp(arg,"force")) {
@@ -183,6 +231,30 @@ int internal_init(void)
 	}
 	free(arg);
 
+	arg = extract_programmer_param("bus");
+	if (arg) {
+		if (!strcasecmp(arg,"parallel")) {
+			target_bus = CHIP_BUSTYPE_PARALLEL;
+		} else if (!strcasecmp(arg,"lpc")) {
+			target_bus = CHIP_BUSTYPE_LPC;
+		} else if (!strcasecmp(arg,"fwh")) {
+			target_bus = CHIP_BUSTYPE_FWH;
+		} else if (!strcasecmp(arg,"spi")) {
+			target_bus = CHIP_BUSTYPE_SPI;
+		} else {
+			msg_perr("Supported busses for %s programmer: parallel,"
+			         " lpc, fwh, spi\n",
+				 programmer_table[programmer].name);
+			free(arg);
+			return 1;
+		}
+
+		free(arg);
+	} else {
+		/* The pacc must be initialized before access pci devices. */
+		probe_target_bus_later = 1;
+	}
+
 	get_io_perms();
 	if (register_shutdown(internal_shutdown, NULL))
 		return 1;
@@ -192,11 +264,17 @@ int internal_init(void)
 	 */
 	buses_supported = CHIP_BUSTYPE_NONSPI;
 
+#if defined(__i386__) || defined(__x86_64__)
 	/* Initialize PCI access for flash enables */
 	pacc = pci_alloc();	/* Get the pci_access structure */
+	pacc->error = pci_error;
+	pacc->warning = pci_warning;
+	pacc->debug = pci_debug;
+
 	/* Set all options you want -- here we stick with the defaults */
 	pci_init(pacc);		/* Initialize the PCI library */
 	pci_scan_bus(pacc);	/* We want to get the list of devices */
+#endif
 
 	if (processor_flash_enable()) {
 		msg_perr("Processor detection/init failed.\n"
@@ -212,11 +290,27 @@ int internal_init(void)
 
 	dmi_init();
 
+	if (probe_target_bus_later) {
+		/* read the target bus value from register. */
+		if (get_target_bus_from_chipset(&target_bus)) {
+			msg_perr("Cannot get target bus from %s programmer.\n",
+			         programmer_table[programmer].name);
+			return 1;
+		}
+	}
+
 	/* In case Super I/O probing would cause pretty explosions. */
 	board_handle_before_superio();
 
 	/* Probe for the Super I/O chip and fill global struct superio. */
 	probe_superio();
+
+#elif defined(__arm__)
+	/* We look at the cbtable first to see if we need a
+	 * mainboard specific flash enable sequence.
+	 */
+	coreboot_init();
+
 #else
 	/* FIXME: Enable cbtable searching on all non-x86 platforms supported
 	 *        by coreboot.
@@ -252,6 +346,7 @@ int internal_init(void)
 	}
 
 #if __FLASHROM_LITTLE_ENDIAN__
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips__)
 	/* try to enable it. Failure IS an option, since not all motherboards
 	 * really need this to be done, etc., etc.
 	 */
@@ -260,12 +355,22 @@ int internal_init(void)
 		msg_perr("WARNING: No chipset found. Flash detection "
 			 "will most likely fail.\n");
 	}
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 	/* Probe unconditionally for IT87* LPC->SPI translation and for
 	 * IT87* Parallel write enable.
 	 */
 	init_superio_ite();
+
+	/* probe for programmers that bridge LPC <--> SPI */
+	if (target_bus == CHIP_BUSTYPE_LPC ||
+	    target_bus == CHIP_BUSTYPE_FWH) {
+		/* note: it85xx init done along with it87* init */
+		wpce775x_probe_spi_flash(NULL);
+		mec1308_probe_spi_flash(NULL);
+	}
+
 #endif
 
 	board_flash_enable(lb_vendor, lb_part);
@@ -274,7 +379,7 @@ int internal_init(void)
 	 * The error code might have been a warning only.
 	 * Besides that, we don't check the board enable return code either.
 	 */
-#if defined(__i386__) || defined(__x86_64__) || defined (__mips)
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
 	return 0;
 #else
 	msg_perr("Your platform is not supported yet for the internal "

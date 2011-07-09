@@ -263,7 +263,7 @@ static OPCODES O_ST_M25P = {
 	{
 	 {JEDEC_BYTE_PROGRAM, SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS, 0},	// Write Byte
 	 {JEDEC_READ, SPI_OPCODE_TYPE_READ_WITH_ADDRESS, 0},	// Read Data
-	 {JEDEC_BE_D8, SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS, 0},	// Erase Sector
+	 {JEDEC_SE, SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS, 0},	// Erase Sector
 	 {JEDEC_RDSR, SPI_OPCODE_TYPE_READ_NO_ADDRESS, 0},	// Read Device Status Reg
 	 {JEDEC_REMS, SPI_OPCODE_TYPE_READ_WITH_ADDRESS, 0},	// Read Electronic Manufacturer Signature
 	 {JEDEC_WRSR, SPI_OPCODE_TYPE_WRITE_NO_ADDRESS, 0},	// Write Status Register
@@ -743,10 +743,16 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 	/* write it */
 	REGWRITE16(ICH7_REG_SPIC, temp16);
 
-	/* Wait for Cycle Done Status or Flash Cycle Error. */
+	/* Original timeout is 60 minutes, which is too excessive.
+	 * Reduce to 30 secs for chip full erase (around 10 secs).
+	 * We also exit the loop if the error bit is set.
+	 */
+	timeout = 100 * 1000 * 30;
 	while (((REGREAD16(ICH7_REG_SPIS) & (SPIS_CDS | SPIS_FCERR)) == 0) &&
 	       --timeout) {
 		programmer_delay(10);
+		if (REGREAD16(ICH7_REG_SPIS) & SPIS_FCERR)
+			break;  /* Transaction error */
 	}
 	if (!timeout) {
 		msg_perr("timeout, ICH7_REG_SPIS=0x%04x\n",
@@ -1270,7 +1276,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 				     mmio_readl(ich_spibar + offs), i);
 		}
 		if (mmio_readw(ich_spibar) & (1 << 15)) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+			msg_perr("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
 		ich_init_opcodes();

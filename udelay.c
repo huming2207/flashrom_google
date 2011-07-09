@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2000 Silicon Integrated System Corporation
  * Copyright (C) 2009,2010 Carl-Daniel Hailfinger
+ * Copyright (C) 2011 Google Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,9 +24,14 @@
 
 #include <unistd.h>
 #include <sys/time.h>
+#include <time.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <errno.h>
 #include "flash.h"
+
+/* Are timers broken? */
+int broken_timer = 0;
 
 /* loops per microsecond */
 static unsigned long micro = 1;
@@ -90,7 +96,10 @@ void myusec_calibrate_delay(void)
 	unsigned long timeusec, resolution;
 	int i, tries = 0;
 
-	msg_pinfo("Calibrating delay loop... ");
+	if (!broken_timer)
+		return;
+
+	msg_pdbg("Calibrating delay loop... ");
 	resolution = measure_os_delay_resolution();
 	if (resolution) {
 		msg_pdbg("OS timer resolution is %lu usecs, ", resolution);
@@ -166,17 +175,49 @@ recalibrate:
 	timeusec = measure_delay(resolution * 4);
 	msg_pdbg("%ld myus = %ld us, ", resolution * 4, timeusec);
 
-	msg_pinfo("OK.\n");
+	msg_pdbg("OK.\n");
 }
 
 void internal_delay(int usecs)
 {
-	/* If the delay is >1 s, use usleep because timing does not need to
-	 * be so precise.
+	int ret, done_waiting = 0;
+	unsigned long long nsecs;
+	struct timespec req = { 0, 0 };
+
+	if (broken_timer) {
+		myusec_delay(usecs);
+		return;
+	}
+
+	/* flashrom delays work with a microsecond granularity. However
+	 * usleep has been obsoleted in POSIX.1-2001 and removed from
+	 * POSIX.1-2008 with the suggestion to use nanosleep(2) instead.
 	 */
-	if (usecs > 1000000) {
-		usleep(usecs);
-	} else {
+	nsecs = 1000ULL * usecs;
+	req.tv_sec = nsecs / 1000000000ULL;
+	req.tv_nsec = nsecs % 1000000000ULL;
+
+	while (!done_waiting) {
+		struct timespec rem;
+		ret = nanosleep(&req, &rem);
+		if (ret && (errno == EINTR)) {
+			req = rem;
+			continue;
+		}
+		done_waiting = 1;
+	}
+
+	/* If nanosleep reports problems with copying information from user
+	 * space we fall back to the "broken timer" code.
+	 */
+	if (ret && (errno == EFAULT)) {
+		broken_timer = 1;
+		/* Since we use delays quite early (i.e. during probing)
+		 * we can recalibrate our delay loop interjacently without
+		 * risking data integrity. This will only happen once.
+		 */
+		myusec_calibrate_delay();
+		/* Now, for the sake of it, delay. */
 		myusec_delay(usecs);
 	}
 }

@@ -680,6 +680,7 @@ int spi_block_erase_20(struct flashchip *flash, unsigned int addr, unsigned int 
 	}};
 
 	result = spi_send_multicommand(cmds);
+
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
@@ -926,6 +927,12 @@ int spi_nbyte_program(int addr, uint8_t *bytes, int len)
 	return result;
 }
 
+int spi_restore_status(struct flashchip *flash, uint8_t status)
+{
+	msg_cdbg("restoring chip status (0x%02x)\n", status);
+	return spi_write_status_register(flash, status);
+}
+
 /* A generic brute-force block protection disable works like this:
  * Write 0x00 to the status register. Check if any locks are still set (that
  * part is chip specific). Repeat once.
@@ -939,6 +946,9 @@ int spi_disable_blockprotect(struct flashchip *flash)
 	/* If block protection is disabled, stop here. */
 	if ((status & 0x3c) == 0)
 		return 0;
+
+	/* restore status register content upon exit */
+	register_chip_restore(spi_restore_status, flash, status);
 
 	msg_cdbg("Some block protection in effect, disabling\n");
 	result = spi_write_status_register(flash, status & ~0x3c);

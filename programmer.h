@@ -252,6 +252,7 @@ int board_flash_enable(const char *vendor, const char *part);
 
 /* chipset_enable.c */
 int chipset_flash_enable(void);
+int get_target_bus_from_chipset(enum chipbustype *target_bus);
 
 /* processor_enable.c */
 int processor_flash_enable(void);
@@ -519,9 +520,14 @@ enum spi_controller {
 	SPI_CONTROLLER_ICH9,
 	SPI_CONTROLLER_IT85XX,
 	SPI_CONTROLLER_IT87XX,
+	SPI_CONTROLLER_MEC1308,
 	SPI_CONTROLLER_SB600,
 	SPI_CONTROLLER_VIA,
 	SPI_CONTROLLER_WBSIO,
+	SPI_CONTROLLER_WPCE775X,
+#endif
+#if defined(__arm__)
+	SPI_CONTROLLER_TEGRA2,
 #endif
 #endif
 #if CONFIG_FT2232_SPI == 1
@@ -536,7 +542,7 @@ enum spi_controller {
 #if CONFIG_DEDIPROG == 1
 	SPI_CONTROLLER_DEDIPROG,
 #endif
-#if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__)))
+#if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__) || defined(__arm__)))
 	SPI_CONTROLLER_BITBANG,
 #endif
 };
@@ -585,8 +591,27 @@ int init_superio_ite(void);
 /* mcp6x_spi.c */
 int mcp6x_spi_init(int want_spi);
 
+/* mec1308.c */
+struct superio probe_superio_mec1308(void);
+int mec1308_probe_spi_flash(const char *name);
+int mec1308_spi_read(struct flashchip *flash,
+                     uint8_t * buf, int start, int len);
+int mec1308_spi_write_256(struct flashchip *flash,
+                          uint8_t *buf, int start, int len);
+int mec1308_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+                             const unsigned char *writearr,
+                             unsigned char *readarr);
+
 /* sb600spi.c */
 int sb600_probe_spi(struct pci_dev *dev);
+
+/* tegra2_spi.c */
+int tegra2_spi_init(void);
+int tegra2_spi_shutdown(void *);
+int tegra2_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+		      const unsigned char *writearr, unsigned char *readarr);
+int tegra2_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
+int tegra2_spi_write(struct flashchip *flash, uint8_t *buf, int start, int len);
 
 /* wbsio_spi.c */
 int wbsio_check_for_spi(void);
@@ -607,6 +632,17 @@ typedef HANDLE fdtype;
 #else
 typedef int fdtype;
 #endif
+
+/* wpce775x.c */
+struct superio probe_superio_wpce775x(void);
+int wpce775x_probe_spi_flash(const char *name);
+int wpce775x_spi_read(struct flashchip *flash,
+                      uint8_t * buf, int start, int len);
+int wpce775x_spi_write_256(struct flashchip *flash,
+                           uint8_t *buf, int start, int len);
+int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+			      const unsigned char *writearr,
+			      unsigned char *readarr);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

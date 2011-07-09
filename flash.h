@@ -33,6 +33,10 @@
 #undef max
 #endif
 
+/* Are timers broken? */
+extern int broken_timer;
+
+struct flashchip;	/* forward declare */
 #define ERROR_PTR ((void*)-1)
 
 /* Error codes */
@@ -41,6 +45,9 @@
 typedef unsigned long chipaddr;
 
 int register_shutdown(int (*function) (void *data), void *data);
+#define CHIP_RESTORE_CALLBACK	int (*func) (struct flashchip *flash, uint8_t status)
+
+int register_chip_restore(CHIP_RESTORE_CALLBACK, struct flashchip *flash, uint8_t status);
 void *programmer_map_flash_region(const char *descr, unsigned long phys_addr,
 				  size_t len);
 void programmer_unmap_flash_region(void *virt_addr, size_t len);
@@ -65,6 +72,9 @@ enum chipbustype {
 	CHIP_BUSTYPE_NONSPI	= CHIP_BUSTYPE_PARALLEL | CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH,
 	CHIP_BUSTYPE_UNKNOWN	= CHIP_BUSTYPE_PARALLEL | CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI,
 };
+
+/* used to select bus which target chip resides */
+extern enum chipbustype target_bus;
 
 /*
  * How many different contiguous runs of erase blocks with one size each do
@@ -153,6 +163,8 @@ struct flashchip {
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_memory;
 	chipaddr virtual_registers;
+
+	struct wp *wp;
 };
 
 #define TEST_UNTESTED	0
@@ -249,11 +261,27 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
 /* cli_classic.c */
 int cli_classic(int argc, char *argv[]);
+int cli_mfg(int argc, char *argv[]);
+
+/* cli_mfg.c */
+extern int set_ignore_fmap;
 
 /* layout.c */
 int read_romlayout(char *name);
 int find_romentry(char *name);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
+int add_fmap_entries(struct flashchip *flash);
+int get_num_include_args(void);
+int register_include_arg(char *name);
+int process_include_args(void);
+int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
+int handle_partial_read(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len));
+    /* RETURN: the number of partitions that have beenpartial read.
+    *         ==0 means no partition is specified.
+    *         < 0 means writing file error. */
 
 /* spi.c */
 struct spi_command {

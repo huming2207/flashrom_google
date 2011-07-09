@@ -205,11 +205,17 @@ endif
 CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 	sst28sf040.o m29f400bt.o 82802ab.o pm49fl00x.o \
 	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
-	a25.o at25.o
+	a25.o at25.o writeprotect.o
 
-LIB_OBJS = layout.o
+LIB_OBJS = layout.o fmap.o
 
-CLI_OBJS = flashrom.o cli_classic.o cli_output.o print.o
+LOCK_OBJS = csem.o ipc_lock.o big_lock.o
+ifeq ($(shell ./util/use_big_lock.sh), 0)
+LIB_OBJS += $(LOCK_OBJS)
+FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
+endif
+
+CLI_OBJS = flashrom.o cli_classic.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
@@ -219,10 +225,10 @@ all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
 # of the checked out flashrom files.
 # Note to packagers: Any tree exported with "make export" or "make tarball"
 # will not require subversion. The downloadable snapshots are already exported.
-SVNVERSION := $(shell LC_ALL=C svnversion -cn . 2>/dev/null | sed -e "s/.*://" -e "s/\([0-9]*\).*/\1/" | grep "[0-9]" || LC_ALL=C svn info . 2>/dev/null | awk '/^Revision:/ {print $$2 }' | grep "[0-9]" || LC_ALL=C git svn info . 2>/dev/null | awk '/^Revision:/ {print $$2 }' | grep "[0-9]" || echo unknown)
+SVNVERSION := $(shell ./util/getversion.sh)
 
 RELEASE := 0.9.3
-VERSION := $(RELEASE)-r$(SVNVERSION)
+VERSION := $(RELEASE) $(SVNVERSION)
 RELEASENAME ?= $(VERSION)
 
 SVNDEF := -D'FLASHROM_VERSION="$(VERSION)"'
@@ -231,19 +237,19 @@ SVNDEF := -D'FLASHROM_VERSION="$(VERSION)"'
 CONFIG_INTERNAL ?= yes
 
 # Always enable serprog for now. Needs to be disabled on Windows.
-CONFIG_SERPROG ?= yes
+CONFIG_SERPROG ?= no
 
 # RayeR SPIPGM hardware support
-CONFIG_RAYER_SPI ?= yes
+CONFIG_RAYER_SPI ?= no
 
 # Always enable 3Com NICs for now.
-CONFIG_NIC3COM ?= yes
+CONFIG_NIC3COM ?= no
 
 # Enable NVIDIA graphics cards. Note: write and erase do not work properly.
-CONFIG_GFXNVIDIA ?= yes
+CONFIG_GFXNVIDIA ?= no
 
 # Always enable SiI SATA controllers for now.
-CONFIG_SATASII ?= yes
+CONFIG_SATASII ?= no
 
 # Highpoint (HPT) ATA/RAID controller support.
 # IMPORTANT: This code is not yet working!
@@ -256,25 +262,25 @@ CONFIG_FT2232_SPI ?= yes
 CONFIG_DUMMY ?= yes
 
 # Always enable Dr. Kaiser for now.
-CONFIG_DRKAISER ?= yes
+CONFIG_DRKAISER ?= no
 
 # Always enable Realtek NICs for now.
-CONFIG_NICREALTEK ?= yes
+CONFIG_NICREALTEK ?= no
 
 # Disable National Semiconductor NICs until support is complete and tested.
 CONFIG_NICNATSEMI ?= no
 
 # Always enable Intel NICs for now.
-CONFIG_NICINTEL ?= yes
+CONFIG_NICINTEL ?= no
 
 # Always enable SPI on Intel NICs for now.
-CONFIG_NICINTEL_SPI ?= yes
+CONFIG_NICINTEL_SPI ?= no
 
 # Always enable SPI on OGP cards for now.
-CONFIG_OGP_SPI ?= yes
+CONFIG_OGP_SPI ?= no
 
 # Always enable Bus Pirate SPI for now.
-CONFIG_BUSPIRATE_SPI ?= yes
+CONFIG_BUSPIRATE_SPI ?= no
 
 # Disable Dediprog SF100 until support is complete and tested.
 CONFIG_DEDIPROG ?= no
@@ -308,10 +314,13 @@ ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
 PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o
 ifeq ($(ARCH),"x86")
-PROGRAMMER_OBJS += it87spi.o it85spi.o ichspi.o sb600spi.o wbsio_spi.o mcp6x_spi.o
+PROGRAMMER_OBJS += it87spi.o it85spi.o ichspi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o
 else
+ifeq ($(ARCH),"arm")
+PROGRAMMER_OBJS += tegra2_spi.o
 endif
 NEED_PCI := yes
+endif
 endif
 
 ifeq ($(CONFIG_SERPROG), yes)

@@ -451,7 +451,18 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	/* Map RCBA to virtual memory */
 	rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
+	/* Set BBS (Boot BIOS Straps) field of GCS register. */
 	gcs = mmio_readl(rcrb + 0x3410);
+	if (target_bus == CHIP_BUSTYPE_LPC) {
+		msg_pdbg("Setting BBS to LPC\n");
+		gcs = (gcs & ~0xc00) | (0x3 << 10);
+		rmmio_writel(gcs, rcrb + 0x3410);
+	} else if (target_bus == CHIP_BUSTYPE_SPI) {
+		msg_pdbg("Setting BBS to SPI\n");
+		gcs = (gcs & ~0xc00) | (0x1 << 10);
+		rmmio_writel(gcs, rcrb + 0x3410);
+	}
+
 	msg_pdbg("GCS = 0x%x: ", gcs);
 	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
 		     (gcs & 0x1) ? "en" : "dis");
@@ -1225,7 +1236,7 @@ int chipset_flash_enable(void)
 					chipset_enables[i].device_name);
 			continue;
 		}
-		msg_pinfo("Found chipset \"%s %s\", enabling flash write... ",
+		msg_pdbg("Found chipset \"%s %s\", enabling flash write... ",
 		       chipset_enables[i].vendor_name,
 		       chipset_enables[i].device_name);
 		msg_pdbg("chipset PCI ID is %04x:%04x, ",
@@ -1236,18 +1247,63 @@ int chipset_flash_enable(void)
 					      chipset_enables[i].device_name);
 		if (ret == NOT_DONE_YET) {
 			ret = -2;
-			msg_pinfo("OK - searching further chips.\n");
+			msg_pdbg("OK - searching further chips.\n");
 		} else if (ret < 0)
 			msg_pinfo("FAILED!\n");
 		else if(ret == 0)
-			msg_pinfo("OK.\n");
+			msg_pdbg("OK.\n");
 		else if(ret == ERROR_NONFATAL)
 			msg_pinfo("PROBLEMS, continuing anyway\n");
 	}
 
 	s = flashbuses_to_text(buses_supported);
-	msg_pinfo("This chipset supports the following protocols: %s.\n", s);
+	msg_pdbg("This chipset supports the following protocols: %s.\n", s);
 	free(s);
+
+	return ret;
+}
+
+int get_target_bus_from_chipset(enum chipbustype *bus)
+{
+	int i;
+	struct pci_dev *dev = 0;
+	uint32_t tmp, gcs;
+	void *rcrb;
+	int ret = -1;  /* not found */
+
+	for (i = 0; chipset_enables[i].vendor_name != NULL; i++) {
+		dev = pci_dev_find(chipset_enables[i].vendor_id,
+				   chipset_enables[i].device_id);
+		if (!dev)
+			continue;
+
+		/* Get physical address of Root Complex Register Block */
+		tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+		msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
+
+		/* Map RCBA to virtual memory */
+		rcrb = physmap("ICH RCRB", tmp, 0x4000);
+
+		/* Set BBS (Boot BIOS Straps) field of GCS register. */
+		gcs = mmio_readl(rcrb + 0x3410);
+		switch ((gcs & 0xc00) >> 10) {
+		case 0x1:
+			*bus = CHIP_BUSTYPE_SPI;
+			break;
+		case 0x3:
+			*bus = CHIP_BUSTYPE_LPC;
+			break;
+		default:
+			*bus = CHIP_BUSTYPE_UNKNOWN;
+			ret = -2;  /* unknown bus type. */
+			break;
+		}
+
+		ret = 0;
+		break;
+		/* For unexpected second device, the chipset_flash_enable()
+		   has shown the warning message. */
+	}
 
 	return ret;
 }

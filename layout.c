@@ -24,6 +24,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include "flash.h"
+#include "fmap.h"
 #include "programmer.h"
 
 #if CONFIG_INTERNAL == 1
@@ -32,15 +33,23 @@ char *mainboard_part = NULL;
 #endif
 static int romimages = 0;
 
-#define MAX_ROMLAYOUT	32
+#define MAX_ROMLAYOUT	64
 
 typedef struct {
 	unsigned int start;
 	unsigned int end;
 	unsigned int included;
 	char name[256];
+	char file[256];  /* file[0]=='\0' means not specified. */
 } romlayout_t;
 
+/*
+ * include_args lists arguments specified at the command line with -i. They
+ * must be processed at some point so that desired regions are marked as
+ * "included" in the master rom_entries list.
+ */
+static char *include_args[MAX_ROMLAYOUT];
+static int num_include_args = 0;  /* the number of valid entries. */
 static romlayout_t rom_entries[MAX_ROMLAYOUT];
 
 #if CONFIG_INTERNAL == 1 /* FIXME: Move the whole block to cbtable.c? */
@@ -76,8 +85,8 @@ int show_id(uint8_t *bios, int size, int force)
 	mb_vendor_offset = *(walk - 2);
 	if ((*walk) == 0 || ((*walk) & 0x3ff) != 0 || (*walk) > size ||
 	    mb_part_offset > size || mb_vendor_offset > size) {
-		msg_pinfo("Flash image seems to be a legacy BIOS. "
-		          "Disabling coreboot-related checks.\n");
+		msg_pdbg("Flash image seems to be a legacy BIOS. "
+		         "Disabling coreboot-related checks.\n");
 		return 0;
 	}
 
@@ -85,7 +94,7 @@ int show_id(uint8_t *bios, int size, int force)
 	mb_vendor = (char *)(bios + size - mb_vendor_offset);
 	if (!isprint((unsigned char)*mb_part) ||
 	    !isprint((unsigned char)*mb_vendor)) {
-		msg_pinfo("Flash image seems to have garbage in the ID location."
+		msg_pdbg("Flash image seems to have garbage in the ID location."
 		       " Disabling checks.\n");
 		return 0;
 	}
@@ -103,7 +112,7 @@ int show_id(uint8_t *bios, int size, int force)
 	 * not found. Nor was -m VENDOR:PART specified.
 	 */
 	if (!lb_vendor || !lb_part) {
-		msg_pinfo("Note: If the following flash access fails, "
+		msg_pdbg("Note: If the following flash access fails, "
 		       "try -m <vendor>:<mainboard>.\n");
 		return 0;
 	}
@@ -179,6 +188,7 @@ int read_romlayout(char *name)
 		rom_entries[romimages].start = strtol(tstr1, (char **)NULL, 16);
 		rom_entries[romimages].end = strtol(tstr2, (char **)NULL, 16);
 		rom_entries[romimages].included = 0;
+		strcpy(rom_entries[romimages].file, "");
 		romimages++;
 	}
 
@@ -194,25 +204,141 @@ int read_romlayout(char *name)
 }
 #endif
 
+/* returns the number of entries added, or <0 to indicate error */
+int add_fmap_entries(struct flashchip *flash)
+{
+	int i, fmap_size;
+	uint8_t *buf = NULL;
+	struct fmap *fmap;
+
+	fmap_size = fmap_find(flash, &buf);
+	if (fmap_size == 0) {
+		msg_gdbg("%s: no fmap present\n", __func__);
+		return 0;
+	} else if (fmap_size < 0) {
+		msg_gdbg("%s: error reading fmap\n", __func__);
+		return -1;
+	} else {
+		fmap = (struct fmap *)(buf);
+	}
+
+	for (i = 0; i < fmap->nareas; i++) {
+		if (romimages >= MAX_ROMLAYOUT) {
+			msg_gerr("ROM image contains too many regions\n");
+			free(buf);
+			return -1;
+		}
+		rom_entries[romimages].start = fmap->areas[i].offset;
+
+		/*
+		 * Flashrom rom entries use absolute addresses. So for non-zero
+		 * length entries, we need to subtract 1 from offset + size to
+		 * determine the end address.
+		 */
+		rom_entries[romimages].end = fmap->areas[i].offset +
+		                             fmap->areas[i].size;
+		if (fmap->areas[i].size)
+			rom_entries[romimages].end--;
+
+		memset(rom_entries[romimages].name, 0,
+		       sizeof(rom_entries[romimages].name));
+		memcpy(rom_entries[romimages].name, fmap->areas[i].name,
+		       min(sizeof(rom_entries[romimages].name),
+		           sizeof(fmap->areas[i].name)));
+
+		rom_entries[romimages].included = 0;
+		strcpy(rom_entries[romimages].file, "");
+
+		msg_gdbg("added fmap region \"%s\" (file=\"%s\") as %sincluded,"
+			 " offset: 0x%08x, size: 0x%08x\n",
+			  rom_entries[romimages].name,
+			  rom_entries[romimages].file,
+			  rom_entries[romimages].included ? "" : "not ",
+			  rom_entries[romimages].start,
+			  rom_entries[romimages].end);
+		romimages++;
+	}
+
+	free(buf);
+	return fmap->nareas;
+}
+
+int get_num_include_args(void) {
+  return num_include_args;
+}
+
+/* register an include argument (-i) for later processing */
+int register_include_arg(char *name)
+{
+	if (num_include_args >= MAX_ROMLAYOUT) {
+		msg_gerr("too many regions included\n");
+		return -1;
+	}
+
+	include_args[num_include_args] = name;
+	num_include_args++;
+	return num_include_args;
+}
+
 int find_romentry(char *name)
 {
 	int i;
+	char *file = NULL;
 
 	if (!romimages)
 		return -1;
 
-	msg_ginfo("Looking for \"%s\"... ", name);
+	/* -i <image>[:<file>] */
+	if (strtok(name, ":")) {
+		file = strtok(NULL, "");
+	}
+	msg_gdbg("Looking for \"%s\" (file=\"%s\")... ",
+	         name, file ? file : "<not specified>");
 
 	for (i = 0; i < romimages; i++) {
 		if (!strcmp(rom_entries[i].name, name)) {
 			rom_entries[i].included = 1;
-			msg_ginfo("found.\n");
+			snprintf(rom_entries[i].file,
+			         sizeof(rom_entries[i].file),
+			         "%s", file ? file : "");
+			msg_gdbg("found.\n");
 			return i;
 		}
 	}
-	msg_ginfo("not found.\n");	// Not found. Error.
+	msg_gdbg("not found.\n");	// Not found. Error.
 
 	return -1;
+}
+
+/*
+ * process_include_args - process -i arguments
+ *
+ * returns 0 to indicate success, <0 to indicate failure
+ */
+int process_include_args() {
+	int i;
+
+	for (i = 0; i < num_include_args; i++) {
+		if (include_args[i]) {
+			/* User has specified the area name, but no layout file
+			 * is loaded, and no fmap is stored in BIOS.
+			 * Return error. */
+			if (!romimages) {
+				msg_gerr("No layout info is available.\n");
+				return -1;
+			}
+
+			if (find_romentry(include_args[i]) < 0) {
+				msg_gerr("Invalid entry specified: %s\n",
+				         include_args[i]);
+				return -1;
+			}
+		} else {
+			break;
+		}
+	}
+
+	return 0;
 }
 
 int find_next_included_romentry(unsigned int start)
@@ -240,21 +366,49 @@ int find_next_included_romentry(unsigned int start)
 	return best_entry;
 }
 
+static int read_content_from_file(int entry, uint8_t *newcontents) {
+	char *file;
+	FILE *fp;
+	int len;
+
+	/* If file name is specified for this partition, read file
+	 * content to overwrite. */
+	file = rom_entries[entry].file;
+	len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	if (file[0]) {
+		int numbytes;
+		if ((fp = fopen(file, "rb")) == NULL) {
+			perror(file);
+			return -1;
+		}
+		numbytes = fread(newcontents + rom_entries[entry].start,
+		                 1, len, fp);
+		fclose(fp);
+		if (numbytes == -1) {
+			perror(file);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
 	unsigned int start = 0;
 	int entry;
 	unsigned int size = flash->total_size * 1024;
 
-	/* If no layout file was specified or the layout file was empty, assume
-	 * that the user wants to flash the complete new image.
+	/* If no regions were specified for inclusion, assume
+	 * that the user wants to write the complete new image.
 	 */
-	if (!romimages)
+	if (num_include_args == 0)
 		return 0;
+
 	/* Non-included romentries are ignored.
 	 * The union of all included romentries is used from the new image.
 	 */
 	while (start < size) {
+
 		entry = find_next_included_romentry(start);
 		/* No more romentries for remaining region? */
 		if (entry < 0) {
@@ -262,9 +416,14 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 			       size - start);
 			break;
 		}
+
+		/* For non-included region, copy from old content. */
 		if (rom_entries[entry].start > start)
 			memcpy(newcontents + start, oldcontents + start,
 			       rom_entries[entry].start - start);
+		/* For included region, copy from file if specified. */
+		if (read_content_from_file(entry, newcontents) < 0) return -1;
+
 		/* Skip to location after current romentry. */
 		start = rom_entries[entry].end + 1;
 		/* Catch overflow. */
@@ -273,4 +432,74 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 	}
 			
 	return 0;
+}
+
+static int write_content_to_file(int entry, uint8_t *buf) {
+	char *file;
+	FILE *fp;
+	int len = rom_entries[entry].end - rom_entries[entry].start + 1;
+
+	file = rom_entries[entry].file;
+	if (file[0]) {  /* save to file if name is specified. */
+		int numbytes;
+		if ((fp = fopen(file, "wb")) == NULL) {
+			perror(file);
+			return -1;
+		}
+		numbytes = fwrite(buf + rom_entries[entry].start, 1, len, fp);
+		fclose(fp);
+		if (numbytes != len) {
+			perror(file);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int handle_partial_read(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len)) {
+
+	unsigned int start = 0;
+	int entry;
+	unsigned int size = flash->total_size * 1024;
+	int count = 0;
+
+	/* If no regions were specified for inclusion, assume
+	 * that the user wants to read the complete image.
+	 */
+	if (num_include_args == 0)
+		return 0;
+
+	/* Walk through the table and write content to file for those included
+	 * partition. */
+	while (start < size) {
+		int len;
+
+		entry = find_next_included_romentry(start);
+		/* No more romentries for remaining region? */
+		if (entry < 0) {
+			break;
+		}
+		++count;
+
+		/* read content from flash. */
+		len = rom_entries[entry].end - rom_entries[entry].start + 1;
+		if (read(flash, buf + rom_entries[entry].start,
+		         rom_entries[entry].start, len)) {
+			perror("flash partial read failed.");
+			return -1;
+		}
+		/* If file is specified, write this partition to file. */
+		if (write_content_to_file(entry, buf) < 0) return -1;
+
+		/* Skip to location after current romentry. */
+		start = rom_entries[entry].end + 1;
+		/* Catch overflow. */
+		if (!start)
+			break;
+	}
+
+	return count;
 }

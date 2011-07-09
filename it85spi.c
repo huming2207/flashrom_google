@@ -119,10 +119,9 @@ void it85xx_enter_scratch_rom()
 	int ret;
 	int tries;
 
-	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
+	msg_pspew("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0) return;
 
-#if 0
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
 	 *        we find out the root cause. */
@@ -130,7 +129,6 @@ void it85xx_enter_scratch_rom()
 	if (ret) {
 		msg_perr("Cannot stop powerd.\n");
 	}
-#endif
 
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
@@ -175,9 +173,7 @@ void it85xx_enter_scratch_rom()
 
 void it85xx_exit_scratch_rom()
 {
-#if 0
 	int ret;
-#endif
 	int tries;
 
 	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
@@ -215,7 +211,6 @@ void it85xx_exit_scratch_rom()
 		         __FUNCTION__, __LINE__);
 	}
 
-#if 0
 	/* FIXME: this a workaround for the bug that SMBus signal would
 	 *        interfere the EC firmware update. Should be removed if
 	 *        we find out the root cause. */
@@ -223,7 +218,6 @@ void it85xx_exit_scratch_rom()
 	if (ret) {
 		msg_perr("Cannot start powerd again.\n");
 	}
-#endif
 }
 
 static int it85xx_shutdown(void *data)
@@ -276,41 +270,6 @@ static int it85xx_spi_common_init(struct superio s)
 	return 0;
 }
 
-static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-			const unsigned char *writearr, unsigned char *readarr);
-
-static const struct spi_programmer spi_programmer_it85xx = {
-	.type = SPI_CONTROLLER_IT85XX,
-	.max_data_read = 64,
-	.max_data_write = 64,
-	.command = it85xx_spi_send_command,
-	.multicommand = default_spi_send_multicommand,
-	.read = default_spi_read,
-	.write_256 = default_spi_write_256,
-};
-
-int it85xx_spi_init(struct superio s)
-{
-	int ret;
-
-	if (!(buses_supported & CHIP_BUSTYPE_FWH)) {
-		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
-		return 1;
-	}
-	ret = it85xx_spi_common_init(s);
-	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
-	if (!ret) {
-		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
-		          buses_supported);
-		if (buses_supported & CHIP_BUSTYPE_FWH)
-			msg_pdbg("Overriding chipset SPI with IT85 FWH|SPI.\n");
-		/* Really leave FWH enabled? */
-		/* Set this as spi controller. */
-		register_spi_programmer(&spi_programmer_it85xx);
-	}
-	return ret;
-}
-
 /* According to ITE 8502 document, the procedure to follow mode is following:
  *   1. write 0x00 to LPC/FWH address 0xffff_fexxh (drive CE# high)
  *   2. write data to LPC/FWH address 0xffff_fdxxh (drive CE# low and MOSI
@@ -360,6 +319,38 @@ static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 #endif
 
 	return 0;
+}
+
+static const struct spi_programmer spi_programmer_it85xx = {
+	.type = SPI_CONTROLLER_IT85XX,
+	.max_data_read = 1,
+	.max_data_write = 1,
+	.command = it85xx_spi_send_command,
+	.multicommand = default_spi_send_multicommand,
+	.read = default_spi_read,
+	.write_256 = default_spi_write_256,
+};
+
+int it85xx_spi_init(struct superio s)
+{
+	int ret;
+
+	if (!(buses_supported & CHIP_BUSTYPE_FWH)) {
+		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
+		return 1;
+	}
+	ret = it85xx_spi_common_init(s);
+	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
+	if (!ret) {
+		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
+		          buses_supported);
+		if (buses_supported & CHIP_BUSTYPE_FWH)
+			msg_pdbg("Overriding chipset SPI with IT85 FWH|SPI.\n");
+		/* Really leave FWH enabled? */
+		/* Set this as spi controller. */
+		register_spi_programmer(&spi_programmer_it85xx);
+	}
+	return ret;
 }
 
 #endif

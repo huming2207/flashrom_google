@@ -23,23 +23,38 @@
 
 #include <stdio.h>
 #include <fcntl.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <errno.h>
+#include "big_lock.h"
 #include "flash.h"
 #include "flashchips.h"
 #include "programmer.h"
+#include "writeprotect.h"
 
-static void cli_classic_usage(const char *name)
+#define LOCK_TIMEOUT_SECS	30
+
+/* This variable is shared with doit() in flashrom.c */
+int set_ignore_fmap = 0;
+
+void cli_mfg_usage(const char *name)
 {
-	printf("Usage: flashrom [-n] [-V] [-f] [-h|-R|-L|"
+	const char *pname;
+	int pnamelen;
+	int remaining = 0;
+	enum programmer p;
+
+	printf("Usage: %s [-n] [-V] [-f] [-h|-R|-L|"
 #if CONFIG_PRINT_WIKI == 1
 	         "-z|"
 #endif
-	         "-E|-r <file>|-w <file>|-v <file>]\n"
+	         "-E|-r <file>|-w <file>|-v <file>] [-i <image>[:<file>]]\n"
 	       "       [-c <chipname>] [-m [<vendor>:]<part>] [-l <file>]\n"
-	       "       [-i <image>] [-p <programmername>[:<parameters>]]\n\n");
+	       "       [-p <programmername>[:<parameters>]]\n",
+	       name);
 
 	printf("Please note that the command line interface for flashrom has "
 	         "changed between\n"
@@ -70,15 +85,54 @@ static void cli_classic_usage(const char *name)
 	       "   -n | --noverify                   don't auto-verify\n"
 	       "   -l | --layout <file>              read ROM layout from "
 	         "<file>\n"
-	       "   -i | --image <name>               only flash image <name> "
-	         "from flash layout\n"
+	       "   -i | --image <name>[:<file>]      only access image <name> "
+	         "from flash layout.\n"
+	       "                                     the content are included "
+	         "in <file> if specified.\n"
 	       "   -L | --list-supported             print supported devices\n"
 #if CONFIG_PRINT_WIKI == 1
 	       "   -z | --list-supported-wiki        print supported devices "
 	         "in wiki syntax\n"
 #endif
 	       "   -p | --programmer <name>[:<param>] specify the programmer "
-	         "device\n");
+ 	         "device\n"
+	       "   -b | --broken-timers              assume system timers are "
+	         "broken\n"
+	       "   --ignore-fmap                     don't try to parse the "
+	         "fmap structure on the flash\n"
+		 );
+
+	for (p = 0; p < PROGRAMMER_INVALID; p++) {
+		pname = programmer_table[p].name;
+		pnamelen = strlen(pname);
+		if (remaining - pnamelen - 2 < 0) {
+			printf("\n                                     ");
+			remaining = 43;
+		} else {
+			printf(" ");
+			remaining--;
+		}
+		if (p == 0) {
+			printf("(");
+			remaining--;
+		}
+		printf("%s", pname);
+		remaining -= pnamelen;
+		if (p < PROGRAMMER_INVALID - 1) {
+			printf(",");
+			remaining--;
+		} else {
+			printf(")\n");
+		}
+	}
+
+	printf("Long-options:\n");
+	printf("   --get-size                        get chip size (bytes)\n");
+	printf("   --wp-status                       show write protect status\n");
+	printf("   --wp-range <start> <length>       set write protect range\n");
+	printf("   --wp-enable                       enable write protection\n");
+	printf("   --wp-disable                      disable write protection\n");
+	printf("   --wp-list                         list write protection ranges\n");
 
 	list_programmers_linebreak(37, 80, 1);
 	printf("\nYou can specify one of -h, -R, -L, "
@@ -90,13 +144,24 @@ static void cli_classic_usage(const char *name)
 	         "flash chips.\n\n");
 }
 
-static void cli_classic_abort_usage(void)
+void cli_mfg_abort_usage(const char *name)
 {
-	printf("Please run \"flashrom --help\" for usage info.\n");
+	printf("Please run \"%s --help\" for usage info.\n", name);
 	exit(1);
 }
 
-int cli_classic(int argc, char *argv[])
+enum LONGOPT_RETURN_VALUES {
+	/* start after ASCII chars */
+	LONGOPT_GET_SIZE = 256,
+	LONGOPT_WP_STATUS,
+	LONGOPT_WP_SET_RANGE,
+	LONGOPT_WP_ENABLE,
+	LONGOPT_WP_DISABLE,
+	LONGOPT_WP_LIST,
+	LONGOPT_IGNORE_FMAP,
+};
+
+int cli_mfg(int argc, char *argv[])
 {
 	unsigned long size;
 	/* Probe for up to three flash chips. */
@@ -110,33 +175,44 @@ int cli_classic(int argc, char *argv[])
 	int opt;
 	int option_index = 0;
 	int force = 0;
-	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0;
+	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
+	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
+	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
 	int dont_verify_it = 0, list_supported = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
 	int operation_specified = 0;
 	int i;
+	int rc = 0;
 
-	static const char optstring[] = "r:Rw:v:nVEfc:m:l:i:p:Lzh";
-	static const struct option long_options[] = {
-		{"read", 1, NULL, 'r'},
-		{"write", 1, NULL, 'w'},
-		{"erase", 0, NULL, 'E'},
-		{"verify", 1, NULL, 'v'},
-		{"noverify", 0, NULL, 'n'},
-		{"chip", 1, NULL, 'c'},
-		{"mainboard", 1, NULL, 'm'},
-		{"verbose", 0, NULL, 'V'},
-		{"force", 0, NULL, 'f'},
-		{"layout", 1, NULL, 'l'},
-		{"image", 1, NULL, 'i'},
-		{"list-supported", 0, NULL, 'L'},
-		{"list-supported-wiki", 0, NULL, 'z'},
-		{"programmer", 1, NULL, 'p'},
-		{"help", 0, NULL, 'h'},
-		{"version", 0, NULL, 'R'},
-		{NULL, 0, NULL, 0}
+	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhb";
+	static struct option long_options[] = {
+		{"read", 1, 0, 'r'},
+		{"write", 1, 0, 'w'},
+		{"erase", 0, 0, 'E'},
+		{"verify", 1, 0, 'v'},
+		{"noverify", 0, 0, 'n'},
+		{"chip", 1, 0, 'c'},
+		{"mainboard", 1, 0, 'm'},
+		{"verbose", 0, 0, 'V'},
+		{"force", 0, 0, 'f'},
+		{"layout", 1, 0, 'l'},
+		{"image", 1, 0, 'i'},
+		{"list-supported", 0, 0, 'L'},
+		{"list-supported-wiki", 0, 0, 'z'},
+		{"programmer", 1, 0, 'p'},
+		{"help", 0, 0, 'h'},
+		{"version", 0, 0, 'R'},
+		{"get-size", 0, 0, LONGOPT_GET_SIZE},
+		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
+		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
+		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
+		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
+		{"wp-list", 0, 0, LONGOPT_WP_LIST},
+		{"broken-timers", 0, 0, 'b' },
+		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
+		{0, 0, 0, 0}
 	};
 
 	char *filename = NULL;
@@ -145,7 +221,6 @@ int cli_classic(int argc, char *argv[])
 	char *pparam = NULL;
 
 	print_version();
-	print_banner();
 
 	if (selfcheck())
 		exit(1);
@@ -161,40 +236,49 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			filename = strdup(optarg);
 			read_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'w':
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			filename = strdup(optarg);
 			write_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'v':
 			//FIXME: gracefully handle superfluous -v
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			if (dont_verify_it) {
 				fprintf(stderr, "--verify and --noverify are"
 					"mutually exclusive. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			filename = strdup(optarg);
 			verify_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'n':
 			if (verify_it) {
 				fprintf(stderr, "--verify and --noverify are"
 					"mutually exclusive. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			dont_verify_it = 1;
 			break;
@@ -208,9 +292,12 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			erase_it = 1;
+			/* horrible workaround for excess time spent in
+			 * ichspi.c code: */
+			broken_timer = 1;
 			break;
 		case 'm':
 #if CONFIG_INTERNAL == 1
@@ -220,7 +307,7 @@ int cli_classic(int argc, char *argv[])
 			fprintf(stderr, "Error: Internal programmer support "
 				"was not compiled in and --mainboard only\n"
 				"applies to the internal programmer. Aborting.\n");
-			cli_classic_abort_usage();
+			cli_mfg_abort_usage(argv[0]);
 #endif
 			break;
 		case 'f':
@@ -229,7 +316,7 @@ int cli_classic(int argc, char *argv[])
 		case 'l':
 			tempstr = strdup(optarg);
 			if (read_romlayout(tempstr))
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			break;
 		case 'i':
 			tempstr = strdup(optarg);
@@ -240,7 +327,7 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			list_supported = 1;
 			break;
@@ -249,13 +336,13 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			list_supported_wiki = 1;
 #else
 			fprintf(stderr, "Error: Wiki output was not compiled "
 				"in. Aborting.\n");
-			cli_classic_abort_usage();
+			cli_mfg_abort_usage(argv[0]);
 #endif
 			break;
 		case 'p':
@@ -287,7 +374,7 @@ int cli_classic(int argc, char *argv[])
 			if (programmer == PROGRAMMER_INVALID) {
 				fprintf(stderr, "Error: Unknown programmer "
 					"%s.\n", optarg);
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			break;
 		case 'R':
@@ -295,7 +382,7 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
 			exit(0);
 			break;
@@ -303,13 +390,37 @@ int cli_classic(int argc, char *argv[])
 			if (++operation_specified > 1) {
 				fprintf(stderr, "More than one operation "
 					"specified. Aborting.\n");
-				cli_classic_abort_usage();
+				cli_mfg_abort_usage(argv[0]);
 			}
-			cli_classic_usage(argv[0]);
+			cli_mfg_usage(argv[0]);
 			exit(0);
 			break;
+		case LONGOPT_GET_SIZE:
+			get_size = 1;
+			break;
+		case LONGOPT_WP_STATUS:
+			wp_status = 1;
+			break;
+		case LONGOPT_WP_LIST:
+			wp_list = 1;
+			break;
+		case LONGOPT_WP_SET_RANGE:
+			set_wp_range = 1;
+			break;
+		case LONGOPT_WP_ENABLE:
+			set_wp_enable = 1;
+			break;
+		case LONGOPT_WP_DISABLE:
+			set_wp_disable = 1;
+			break;
+		case LONGOPT_IGNORE_FMAP:
+			set_ignore_fmap = 1;
+			break;
+		case 'b':
+			broken_timer = 1;
+			break;
 		default:
-			cli_classic_abort_usage();
+			cli_mfg_abort_usage(argv[0]);
 			break;
 		}
 	}
@@ -328,16 +439,18 @@ int cli_classic(int argc, char *argv[])
 	}
 #endif
 
+#if 0
 	if (optind < argc) {
 		fprintf(stderr, "Error: Extra parameter found.\n");
-		cli_classic_abort_usage();
+		cli_mfg_abort_usage(argv[0]);
 	}
+#endif
 
 #if CONFIG_INTERNAL == 1
 	if ((programmer != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
 		fprintf(stderr, "Error: --mainboard requires the internal "
 				"programmer. Aborting.\n");
-		cli_classic_abort_usage();
+		cli_mfg_abort_usage(argv[0]);
 	}
 #endif
 
@@ -356,15 +469,26 @@ int cli_classic(int argc, char *argv[])
 		flash = NULL;
 	}
 
+#if USE_BIG_LOCK == 1
+	/* get lock before doing any work that touches hardware */
+	msg_gdbg("Acquiring lock (timeout=%d sec)...\n", LOCK_TIMEOUT_SECS);
+	if (acquire_big_lock(LOCK_TIMEOUT_SECS) < 0) {
+		msg_gerr("Could not acquire lock.\n");
+		exit(1);
+	}
+	msg_gdbg("Lock acquired.\n");
+#endif
+
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
 	if (programmer_init(pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_release_lock_exit;
 	}
 
+	/* FIXME: Delay calibration should happen in programmer code. */
 	for (i = 0; i < ARRAY_SIZE(flashes); i++) {
 		startchip = probe_flash(startchip, &flashes[i], 0);
 		if (startchip == -1)
@@ -390,15 +514,15 @@ int cli_classic(int argc, char *argv[])
 			startchip = probe_flash(0, &flashes[0], 1);
 			if (startchip == -1) {
 				printf("Probing for flash chip '%s' failed.\n", chip_to_probe);
-				programmer_shutdown();
-				exit(1);
+				rc = 1;
+				goto cli_mfg_silent_exit;
 			}
 			printf("Please note that forced reads most likely contain garbage.\n");
 			return read_flash_to_file(&flashes[0], filename);
 		}
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	fill_flash = &flashes[0];
@@ -410,32 +534,112 @@ int cli_classic(int argc, char *argv[])
 	    (!force)) {
 		fprintf(stderr, "Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
-		programmer_shutdown();
-		return 1;
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
-	if (!(read_it | write_it | verify_it | erase_it)) {
+	if (!(read_it | write_it | verify_it | erase_it |
+	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
+	      wp_status | wp_list)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(0);
+		rc = 0;
+		goto cli_mfg_silent_exit;
 	}
 
-	if (!filename && !erase_it) {
+	if (set_wp_enable && set_wp_disable) {
+		printf("Error: --wp-enable and --wp-disable are mutually exclusive\n");
+		rc = 1;
+		goto cli_mfg_silent_exit;
+	}
+
+	if (!filename && (read_it | write_it | verify_it)) {
 		printf("Error: No filename specified.\n");
 		// FIXME: flash writes stay enabled!
-		programmer_shutdown();
-		exit(1);
+		rc = 1;
+		goto cli_mfg_silent_exit;
 	}
 
 	/* Always verify write operations unless -n is used. */
 	if (write_it && !dont_verify_it)
 		verify_it = 1;
 
-	/* FIXME: We should issue an unconditional chip reset here. This can be
-	 * done once we have a .reset function in struct flashchip.
-	 * Give the chip time to settle.
-	 */
-	programmer_delay(100000);
-	return doit(fill_flash, force, filename, read_it, write_it, erase_it, verify_it);
+	/* Note: set_wp_disable should be done before setting the range */
+	if (set_wp_disable) {
+		if (fill_flash->wp && fill_flash->wp->disable)
+			rc |= fill_flash->wp->disable(fill_flash);
+	}
+
+	/* Note: set_wp_range must happen before set_wp_enable */
+	if (set_wp_range) {
+		unsigned int start, len;
+		char *endptr = NULL;
+
+		if ((argc - optind) != 2) {
+			printf("Error: invalid number of arguments\n");
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		/* FIXME: add some error checking */
+		start = strtoul(argv[optind], &endptr, 0);
+		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
+			printf("Error: value \"%s\" invalid\n", argv[optind]);
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		len = strtoul(argv[optind + 1], &endptr, 0);
+		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
+			printf("Error: value \"%s\" invalid\n", argv[optind + 1]);
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		if (fill_flash->wp && fill_flash->wp->set_range)
+			rc |= fill_flash->wp->set_range(fill_flash, start, len);
+	}
+	
+	if (!rc && set_wp_enable) {
+		if (fill_flash->wp && fill_flash->wp->enable)
+			rc |= fill_flash->wp->enable(fill_flash);
+	}
+	
+	if (get_size) {
+		printf("%d\n", fill_flash->total_size * 1024);
+		goto cli_mfg_silent_exit;
+	}
+
+	if (wp_status) {
+		if (fill_flash->wp && fill_flash->wp->wp_status)
+			rc |= fill_flash->wp->wp_status(fill_flash);
+		goto cli_mfg_silent_exit;
+	}
+	
+	if (wp_list) {
+		printf("Valid write protection ranges:\n");
+		if (fill_flash->wp && fill_flash->wp->list_ranges)
+			rc |= fill_flash->wp->list_ranges(fill_flash);
+		goto cli_mfg_silent_exit;
+	}
+
+	/* If the user doesn't specify any -i argument, then we can skip the
+	 * fmap parsing to speed up. */
+	if (get_num_include_args() == 0) {
+		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
+		set_ignore_fmap = 1;
+	}
+
+	if (read_it || write_it || erase_it || verify_it)
+		rc = doit(fill_flash, force, filename,
+		          read_it, write_it, erase_it, verify_it);
+
+	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
+cli_mfg_silent_exit:
+	programmer_shutdown();	/* must be done after chip_restore() */
+cli_mfg_release_lock_exit:
+#if USE_BIG_LOCK == 1
+	release_big_lock();
+#endif
+	return rc;
 }
