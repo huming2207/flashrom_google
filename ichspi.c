@@ -35,10 +35,11 @@
  *
  */
 
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
 
 #include <string.h>
 #include "flash.h"
+#include "flashchips.h"
 #include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
@@ -1099,6 +1100,293 @@ static int ich_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	return result;
 }
 
+static void ich_hwseq_set_addr(uint32_t addr)
+{
+	uint32_t addr_old = REGREAD32(ICH9_REG_FADDR) & ~0x01FFFFFF;
+	REGWRITE32(ICH9_REG_FADDR, (addr & 0x01FFFFFF) | addr_old);
+}
+
+/* Sets FADDR.FLA to 'addr' and returns the erase block size in bytes
+ * of the block containing this address. */
+static uint32_t ich_hwseq_get_erase_block_size(unsigned int addr)
+{
+	uint8_t enc_berase;
+	const uint32_t dec_berase[4] = {
+		256,
+		4 * 1024,
+		8 * 1024,
+		64 * 1024
+	};
+
+	ich_hwseq_set_addr(addr);
+	enc_berase = (REGREAD16(ICH9_REG_HSFS) & HSFS_BERASE) >>
+		     HSFS_BERASE_OFF;
+	return dec_berase[enc_berase];
+}
+
+/* Polls for Cycle Done Status, Flash Cycle Error or timeout in 10 us intervals.
+   Resets all error flags in HSFS.
+   Returns 0 if the cycle completes successfully without errors within
+   timeout us, 1 on errors. */
+static int ich_hwseq_wait_for_cycle_complete(unsigned int timeout,
+					     unsigned int len)
+{
+	uint16_t hsfs;
+	uint32_t addr;
+
+	while ((((hsfs = REGREAD16(ICH9_REG_HSFS)) &
+		 (HSFS_FDONE | HSFS_FCERR)) == 0) &&
+	       --timeout) {
+		programmer_delay(10);
+	}
+	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
+	if (!timeout) {
+		addr = REGREAD32(ICH9_REG_FADDR) & 0x01FFFFFF;
+		msg_perr("Timeout error between offset 0x%08x and "
+			 "0x%08x + %d (=0x%08x)!\n",
+			 addr, addr, len - 1, addr + len - 1);
+		prettyprint_ich9_reg_hsfs(hsfs);
+		prettyprint_ich9_reg_hsfc(REGREAD16(ICH9_REG_HSFC));
+		return 1;
+	}
+
+	if (hsfs & HSFS_FCERR) {
+		addr = REGREAD32(ICH9_REG_FADDR) & 0x01FFFFFF;
+		msg_perr("Transaction error between offset 0x%08x and "
+			 "0x%08x + %d (=0x%08x)!\n",
+			 addr, addr, len - 1, addr + len - 1);
+		prettyprint_ich9_reg_hsfs(hsfs);
+		prettyprint_ich9_reg_hsfc(REGREAD16(ICH9_REG_HSFC));
+		return 1;
+	}
+	return 0;
+}
+
+int ich_hwseq_probe(struct flashchip *flash)
+{
+	uint32_t total_size, boundary;
+	uint32_t erase_size_low, size_low, erase_size_high, size_high;
+	struct block_eraser *eraser;
+	extern struct flash_descriptor fdbar;
+
+	if (flash->manufacture_id != INTEL_ID ||
+	    flash->model_id != INTEL_HWSEQ) {
+		msg_cerr("This chip (%s) is not supported in hardware"
+			 "sequencing mode and should never have been probed.\n",
+			 flash->name);
+		msg_cerr("%s: Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 0;
+	}
+
+	msg_cdbg("Prerequisites for Intel Hardware Sequencing are ");
+	if (spi_programmer->type != SPI_CONTROLLER_ICH_HWSEQ) {
+		msg_cdbg("not met.\n");
+		return 0;
+	}
+	msg_cdbg("met.\n");
+
+	total_size = (getFCBA_component_density(0) +
+		      getFCBA_component_density(1));
+	msg_cdbg("Found %d attached SPI flash chip", fdbar.NC + 1);
+	if (fdbar.NC)
+		msg_cdbg("s with a combined");
+	else
+		msg_cdbg(" with a");
+	msg_cdbg(" density of %d kB.\n", total_size / 1024);
+	flash->total_size = total_size / 1024;
+
+	eraser = &(flash->block_erasers[0]);
+	boundary = (REGREAD32(ICH9_REG_FPB) & FPB_FPBA) << 12;
+	size_high = total_size - boundary;
+	erase_size_high = ich_hwseq_get_erase_block_size(boundary);
+
+	if (boundary == 0) {
+		msg_cdbg("There is only one partition containing the whole "
+			 "address space (0x%06x - 0x%06x).\n", 0, size_high-1);
+		eraser->eraseblocks[0].size = erase_size_high;
+		eraser->eraseblocks[0].count = size_high / erase_size_high;
+		msg_cdbg("There are %d erase blocks with %d B each.\n",
+			 size_high / erase_size_high, erase_size_high);
+	} else {
+		msg_cdbg("The flash address space (0x%06x - 0x%06x) is divided "
+			 "at address 0x%06x in two partitions.\n",
+			 0, size_high-1, boundary);
+		size_low = total_size - size_high;
+		erase_size_low = ich_hwseq_get_erase_block_size(0);
+
+		eraser->eraseblocks[0].size = erase_size_low;
+		eraser->eraseblocks[0].count = size_low / erase_size_low;
+		msg_cdbg("The first partition ranges from 0x%06x to 0x%06x.\n",
+			 0, size_low-1);
+		msg_cdbg("In that range are %d erase blocks with %d B each.\n",
+			 size_low / erase_size_low, erase_size_low);
+
+		eraser->eraseblocks[1].size = erase_size_high;
+		eraser->eraseblocks[1].count = size_high / erase_size_high;
+		msg_cdbg("The second partition ranges from 0x%06x to 0x%06x.\n",
+			 boundary, size_high-1);
+		msg_cdbg("In that range are %d erase blocks with %d B each.\n",
+			 size_high / erase_size_high, erase_size_high);
+	}
+	return 1;
+}
+
+static int ich_hwseq_send_command(unsigned int writecnt,
+				      unsigned int readcnt,
+				      const unsigned char *writearr,
+				      unsigned char *readarr)
+{
+	msg_pdbg("skipped. Intel Hardware Sequencing does not support sending "
+		 "arbitrary commands.");
+	return -1;
+}
+
+int ich_hwseq_block_erase(struct flashchip *flash,
+			  unsigned int addr,
+			  unsigned int len)
+{
+	uint32_t erase_block;
+	uint16_t hsfc;
+	uint32_t timeout = 5000 * 1000; /* 5 s for max 64 kB */
+
+	if (flash->manufacture_id != INTEL_ID ||
+	    flash->model_id != INTEL_HWSEQ) {
+		msg_perr("This chip (%s) is not supported in hardware"
+			 "sequencing mode\n", flash->name);
+		return -1;
+	}
+
+	erase_block = ich_hwseq_get_erase_block_size(addr);
+	if (len != erase_block) {
+		msg_cerr("Erase block size for address 0x%06x is %d B, "
+			 "but requested erase block size is %d B. "
+			 "Not erasing anything.\n", addr, erase_block, len);
+		return -1;
+	}
+
+	/* Although the hardware supports this (it would erase the whole block
+	 * containing the address) we play safe here. */
+	if (addr % erase_block != 0) {
+		msg_cerr("Erase address 0x%06x is not aligned to the erase "
+			 "block boundary (any multiple of %d). "
+			 "Not erasing anything.\n", addr, erase_block);
+		return -1;
+	}
+
+	if (addr + len > flash->total_size * 1024) {
+		msg_perr("Request to erase some inaccessible memory address(es)"
+			 " (addr=0x%x, len=%d). "
+			 "Not erasing anything.\n", addr, len);
+		return -1;
+	}
+
+	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
+
+	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
+	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
+
+	hsfc = REGREAD16(ICH9_REG_HSFC);
+	hsfc &= ~HSFC_FCYCLE; /* clear operation */
+	hsfc |= (0x3 << HSFC_FCYCLE_OFF); /* set erase operation */
+	hsfc |= HSFC_FGO; /* start */
+	msg_pdbg("HSFC used for block erasing: ");
+	prettyprint_ich9_reg_hsfc(hsfc);
+	REGWRITE16(ICH9_REG_HSFC, hsfc);
+
+	if (ich_hwseq_wait_for_cycle_complete(timeout, len))
+		return -1;
+	return 0;
+}
+
+int ich_hwseq_read(struct flashchip *flash, uint8_t *buf, int addr, int len)
+{
+	uint16_t hsfc;
+	uint16_t timeout = 100 * 60;
+	uint8_t block_len;
+
+	if (flash->manufacture_id != INTEL_ID ||
+	    flash->model_id != INTEL_HWSEQ) {
+		msg_perr("This chip (%s) is not supported in hardware"
+			 "sequencing mode.\n", flash->name);
+		return -1;
+	}
+
+	if (addr < 0 || addr + len > flash->total_size * 1024) {
+		msg_perr("Request to read from an inaccessible memory address "
+			 "(addr=0x%x, len=%d).\n", addr, len);
+		return -1;
+	}
+
+	msg_pdbg("Reading %d bytes starting at 0x%06x.\n", len, addr);
+	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
+	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
+
+	while (len > 0) {
+		block_len = min(len, spi_programmer->max_data_read);
+		ich_hwseq_set_addr(addr);
+		hsfc = REGREAD16(ICH9_REG_HSFC);
+		hsfc &= ~HSFC_FCYCLE; /* set read operation */
+		hsfc &= ~HSFC_FDBC; /* clear byte count */
+		/* set byte count */
+		hsfc |= (((block_len - 1) << HSFC_FDBC_OFF) & HSFC_FDBC);
+		hsfc |= HSFC_FGO; /* start */
+		REGWRITE16(ICH9_REG_HSFC, hsfc);
+
+		if (ich_hwseq_wait_for_cycle_complete(timeout, block_len))
+			return 1;
+		ich_read_data(buf, block_len, ICH9_REG_FDATA0);
+		addr += block_len;
+		buf += block_len;
+		len -= block_len;
+	}
+	return 0;
+}
+
+int ich_hwseq_write_256(struct flashchip *flash, uint8_t *buf, int addr, int len)
+{
+	uint16_t hsfc;
+	uint16_t timeout = 100 * 60;
+	uint8_t block_len;
+
+	if (flash->manufacture_id != INTEL_ID ||
+	    flash->model_id != INTEL_HWSEQ) {
+		msg_perr("This chip (%s) is not supported in hardware"
+			 "sequencing mode\n", flash->name);
+		return -1;
+	}
+
+	if (addr < 0 || addr + len > flash->total_size * 1024) {
+		msg_perr("Request to write to an inaccessible memory address "
+			 "(addr=0x%x, len=%d).\n", addr, len);
+		return -1;
+	}
+
+	msg_pdbg("Writing %d bytes starting at 0x%06x.\n", len, addr);
+	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
+	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
+
+	while (len > 0) {
+		ich_hwseq_set_addr(addr);
+		block_len = ich_fill_data(buf, len, ICH9_REG_FDATA0);
+		hsfc = REGREAD16(ICH9_REG_HSFC);
+		hsfc &= ~HSFC_FCYCLE; /* clear operation */
+		hsfc |= (0x2 << HSFC_FCYCLE_OFF); /* set write operation */
+		hsfc &= ~HSFC_FDBC; /* clear byte count */
+		/* set byte count */
+		hsfc |= (((block_len - 1) << HSFC_FDBC_OFF) & HSFC_FDBC);
+		hsfc |= HSFC_FGO; /* start */
+		REGWRITE16(ICH9_REG_HSFC, hsfc);
+
+		if (ich_hwseq_wait_for_cycle_complete(timeout, block_len))
+			return -1;
+		addr += block_len;
+		buf += block_len;
+		len -= block_len;
+	}
+	return 0;
+}
+
 static int ich_spi_send_multicommand(struct spi_command *cmds)
 {
 	int ret = 0;
@@ -1217,6 +1505,16 @@ static const struct spi_programmer spi_programmer_ich9 = {
 	.write_256 = default_spi_write_256,
 };
 
+static const struct spi_programmer spi_programmer_ich_hwseq = {
+	.type = SPI_CONTROLLER_ICH_HWSEQ,
+	.max_data_read = 64,
+	.max_data_write = 64,
+	.command = ich_hwseq_send_command,
+	.multicommand = default_spi_send_multicommand,
+	.read = ich_hwseq_read,
+	.write_256 = ich_hwseq_write_256,
+};
+
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			int ich_generation)
 {
@@ -1225,20 +1523,19 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	uint16_t spibar_offset, tmp2;
 	uint32_t tmp;
 	int ichspi_desc = 0;
+	/* used for hw sequencing detection */
+	extern struct flash_descriptor fdbar;
 
 	switch (ich_generation) {
 	case 7:
-		register_spi_programmer(&spi_programmer_ich7);
 		spibar_offset = 0x3020;
 		break;
 	case 8:
-		register_spi_programmer(&spi_programmer_ich9);
 		spibar_offset = 0x3020;
 		break;
 	case 9:
 	case 10:
 	default:		/* Future version might behave the same */
-		register_spi_programmer(&spi_programmer_ich9);
 		spibar_offset = 0x3800;
 		break;
 	}
@@ -1249,8 +1546,8 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	/* Assign Virtual Address */
 	ich_spibar = rcrb + spibar_offset;
 
-	switch (spi_programmer->type) {
-	case SPI_CONTROLLER_ICH7:
+	switch (ich_generation) {
+	case 7:
 		msg_pdbg("0x00: 0x%04x     (SPIS)\n",
 			     mmio_readw(ich_spibar + 0));
 		msg_pdbg("0x02: 0x%04x     (SPIC)\n",
@@ -1286,9 +1583,13 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			msg_perr("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
+		register_spi_programmer(&spi_programmer_ich7);
 		ich_init_opcodes();
 		break;
-	case SPI_CONTROLLER_ICH9:
+	case 8:
+	case 9:
+	case 10:
+	default:		/* Future version might behave the same */
 		tmp2 = mmio_readw(ich_spibar + ICH9_REG_HSFS);
 		msg_pdbg("0x04: 0x%04x (HSFS)\n", tmp2);
 		prettyprint_ich9_reg_hsfs(tmp2);
@@ -1367,10 +1668,13 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			read_ich_descriptors_from_fdo(ich_spibar);
 			prettyprint_ich_descriptors(CHIPSET_UNKNOWN);
 		}
-		ich_init_opcodes();
-		break;
-	default:
-		/* Nothing */
+
+		if (ichspi_lock || fdbar.NC != 0)
+			register_spi_programmer(&spi_programmer_ich_hwseq);
+		else {
+			register_spi_programmer(&spi_programmer_ich9);
+			ich_init_opcodes();
+		}
 		break;
 	}
 

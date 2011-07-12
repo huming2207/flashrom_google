@@ -8969,7 +8969,27 @@ const struct flashchip flashchips[] = {
 		.write		= write_jedec_1,
 		.read		= read_memmapped,
 	},
-
+#if defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
+	{
+		.vendor		= "Intel",
+		.name		= "Hardware Sequencing",
+		.bustype	= CHIP_BUSTYPE_SPI,
+		.manufacture_id	= INTEL_ID,
+		.model_id	= INTEL_HWSEQ,
+		.total_size	= 0,
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= ich_hwseq_probe,
+		.block_erasers	=
+		{
+			{ /* erase blocks will be set by the probing function */
+				.block_erase = ich_hwseq_block_erase,
+			}
+		},
+		.write		= ich_hwseq_write_256,
+		.read		= ich_hwseq_read,
+	},
+#endif // defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
 	{
 		.vendor		= "AMIC",
 		.name		= "unknown AMIC SPI chip",
@@ -9126,6 +9146,7 @@ const struct flashchip flashchips[] = {
 		.probe		= probe_spi_rdid,
 		.write		= NULL,
 	},
+
 	{
 		.vendor		= "Generic",
 		.name		= "unknown SPI chip (REMS)",
