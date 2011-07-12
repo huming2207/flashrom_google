@@ -592,6 +592,57 @@ static void ich_set_bbar(uint32_t min_addr)
 		msg_perr("Setting BBAR failed!\n");
 }
 
+/* Reads up to len byte from the fdata/spid register into the data array.
+ * The amount actually read is limited by the maximum read size of the
+ * chipset. */
+ static void ich_read_data(uint8_t *data, int len, int reg0_off)
+ {
+	int a;
+	uint32_t temp32 = 0;
+
+	if (len > spi_programmer->max_data_read)
+		len = spi_programmer->max_data_read;
+
+	for (a = 0; a < len; a++) {
+		if ((a % 4) == 0)
+			temp32 = REGREAD32(reg0_off + (a));
+
+		data[a] = (temp32 & (((uint32_t) 0xff) << ((a % 4) * 8)))
+			  >> ((a % 4) * 8);
+	}
+}
+
+/* Fills up to len bytes from the data array into the fdata/spid registers.
+ * The amount actually written is limited by the maximum write size of the
+ * chipset and is returned by the function. */
+static uint8_t ich_fill_data(const uint8_t *data, int len, int reg0_off)
+{
+	uint32_t temp32 = 0;
+	int a;
+
+	if (len > spi_programmer->max_data_write)
+		len = spi_programmer->max_data_write;
+
+	if (len <= 0)
+		return 0;
+
+	for (a = 0; a < len; a++) {
+		if ((a % 4) == 0) {
+			temp32 = 0;
+		}
+
+		temp32 |= ((uint32_t) data[a]) << ((a % 4) * 8);
+
+		if ((a % 4) == 3) {
+			REGWRITE32(reg0_off + (a - (a % 4)), temp32);
+		}
+	}
+	if (((a - 1) % 4) != 3) {
+		REGWRITE32(reg0_off + ((a - 1) - ((a - 1) % 4)), temp32);
+	}
+	return len;
+}
+
 /* This function generates OPCODES from or programs OPCODES to ICH according to
  * the chipset's SPI configuration lock.
  *
@@ -638,9 +689,8 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 {
 	int write_cmd = 0;
 	int timeout;
-	uint32_t temp32 = 0;
+	uint32_t temp32;
 	uint16_t temp16;
-	uint32_t a;
 	uint64_t opmenu;
 	int opcode_index;
 
@@ -664,26 +714,8 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 	REGWRITE32(ICH7_REG_SPIA, (offset & 0x00FFFFFF) | temp32);
 
 	/* Program data into SPID0 to N */
-	if (write_cmd && (datalength != 0)) {
-		temp32 = 0;
-		for (a = 0; a < datalength; a++) {
-			if ((a % 4) == 0) {
-				temp32 = 0;
-			}
-
-			temp32 |= ((uint32_t) data[a]) << ((a % 4) * 8);
-
-			if ((a % 4) == 3) {
-				REGWRITE32(ICH7_REG_SPID0 + (a - (a % 4)),
-					   temp32);
-			}
-		}
-		if (((a - 1) % 4) != 3) {
-			REGWRITE32(ICH7_REG_SPID0 +
-				   ((a - 1) - ((a - 1) % 4)), temp32);
-		}
-
-	}
+	if (write_cmd && (datalength != 0))
+		ich_fill_data(data, datalength, ICH7_REG_SPID0);
 
 	/* Assemble SPIS */
 	temp16 = REGREAD16(ICH7_REG_SPIS);
@@ -771,15 +803,7 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 	}
 
 	if ((!write_cmd) && (datalength != 0)) {
-		for (a = 0; a < datalength; a++) {
-			if ((a % 4) == 0) {
-				temp32 = REGREAD32(ICH7_REG_SPID0 + (a));
-			}
-
-			data[a] =
-			    (temp32 & (((uint32_t) 0xff) << ((a % 4) * 8)))
-			    >> ((a % 4) * 8);
-		}
+		ich_read_data(data, datalength, ICH7_REG_SPID0);
 	}
 
 	return 0;
@@ -791,7 +815,6 @@ static int ich9_run_opcode(OPCODE op, uint32_t offset,
 	int write_cmd = 0;
 	int timeout;
 	uint32_t temp32;
-	uint32_t a;
 	uint64_t opmenu;
 	int opcode_index;
 
@@ -816,25 +839,8 @@ static int ich9_run_opcode(OPCODE op, uint32_t offset,
 	REGWRITE32(ICH9_REG_FADDR, (offset & 0x00FFFFFF) | temp32);
 
 	/* Program data into FDATA0 to N */
-	if (write_cmd && (datalength != 0)) {
-		temp32 = 0;
-		for (a = 0; a < datalength; a++) {
-			if ((a % 4) == 0) {
-				temp32 = 0;
-			}
-
-			temp32 |= ((uint32_t) data[a]) << ((a % 4) * 8);
-
-			if ((a % 4) == 3) {
-				REGWRITE32(ICH9_REG_FDATA0 + (a - (a % 4)),
-					   temp32);
-			}
-		}
-		if (((a - 1) % 4) != 3) {
-			REGWRITE32(ICH9_REG_FDATA0 +
-				   ((a - 1) - ((a - 1) % 4)), temp32);
-		}
-	}
+	if (write_cmd && (datalength != 0))
+		ich_fill_data(data, datalength, ICH9_REG_FDATA0);
 
 	/* Assemble SSFS + SSFC */
 	temp32 = REGREAD32(ICH9_REG_SSFS);
@@ -923,15 +929,7 @@ static int ich9_run_opcode(OPCODE op, uint32_t offset,
 	}
 
 	if ((!write_cmd) && (datalength != 0)) {
-		for (a = 0; a < datalength; a++) {
-			if ((a % 4) == 0) {
-				temp32 = REGREAD32(ICH9_REG_FDATA0 + (a));
-			}
-
-			data[a] =
-			    (temp32 & (((uint32_t) 0xff) << ((a % 4) * 8)))
-			    >> ((a % 4) * 8);
-		}
+		ich_read_data(data, datalength, ICH9_REG_FDATA0);
 	}
 
 	return 0;
