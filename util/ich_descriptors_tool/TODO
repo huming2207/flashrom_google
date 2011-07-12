@@ -1,0 +1,5 @@
+- reverse the path, as in assemble a descriptormode image from various
+  blobs (BIOS, GbE, ME, OEM) and a description (xml? custom config?
+  sane defaults and cmd-line switches?)
+- dump 256 OEM bytes
+- handle descriptors of various chipsets correctly
