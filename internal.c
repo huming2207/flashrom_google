@@ -288,7 +288,8 @@ int internal_init(void)
 	 */
 	coreboot_init();
 
-	dmi_init();
+	/* FIXME: Removed to avoid annoying laptop warnings */
+	//dmi_init();
 
 	if (probe_target_bus_later) {
 		/* read the target bus value from register. */
