@@ -275,6 +275,8 @@ static struct w25q_range mx25l3205d_ranges[] = {
 	{ X, 1, 0x7, {0x000000, 4096 * 1024} },
 };
 
+#if 0
+/* FIXME: MX25L6405D has same ID as MX25L6406 */
 static struct w25q_range mx25l6405d_ranges[] = {
 	{ X, 0, 0, {0, 0} },	/* none */
 	{ X, 0, 0x1, {0x7e0000, 2 * 64 * 1024} },	/* blocks 126-127 */
@@ -293,6 +295,28 @@ static struct w25q_range mx25l6405d_ranges[] = {
 	{ X, 1, 0x5, {0x000000, 64 * 124 * 1024} },	/* blocks 0-123 */
 	{ X, 1, 0x6, {0x000000, 64 * 126 * 1024} },	/* blocks 0-125 */
 	{ X, 1, 0x7, {0x000000, 64 * 128 * 1024} },	/* blocks 0-127 */
+};
+#endif
+
+/* FIXME: MX25L6406 has same ID as MX25L6405D */
+static struct w25q_range mx25l6406e_ranges[] = {
+	{ X, 0, 0, {0, 0} },	/* none */
+	{ X, 0, 0x1, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
+	{ X, 0, 0x2, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
+	{ X, 0, 0x3, {0x7a0000, 64 * 8 * 1024} },	/* blocks 120-127 */
+	{ X, 0, 0x4, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
+	{ X, 0, 0x5, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
+	{ X, 0, 0x6, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
+	{ X, 0, 0x7, {0x000000, 64 * 128 * 1024} },	/* all */
+
+	{ X, 1, 0x0, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ X, 1, 0x1, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
+	{ X, 1, 0x2, {0x000000, 64 * 96 * 1024} },	/* blocks 0-95 */
+	{ X, 1, 0x3, {0x000000, 64 * 112 * 1024} },	/* blocks 0-111 */
+	{ X, 1, 0x4, {0x000000, 64 * 120 * 1024} },	/* blocks 0-119 */
+	{ X, 1, 0x5, {0x000000, 64 * 124 * 1024} },	/* blocks 0-123 */
+	{ X, 1, 0x6, {0x000000, 64 * 126 * 1024} },	/* blocks 0-125 */
+	{ X, 1, 0x7, {0x000000, 64 * 128 * 1024} },	/* all */
 };
 
 static struct w25q_range w25q16_ranges[] = {
@@ -567,10 +591,10 @@ static int w25_range_table(const struct flashchip *flash,
 			*num_entries = ARRAY_SIZE(mx25l3205d_ranges);
 			break;
 		case MACRONIX_MX25L6405:
-			/* FIXME: MX25L6405 and MX25L6405D have different write
-			 * protection capabilities, but share IDs */
-			*w25q_ranges = mx25l6405d_ranges;
-			*num_entries = ARRAY_SIZE(mx25l6405d_ranges);
+			/* FIXME: MX25L64* chips have mixed capabilities and
+			   share IDs */
+			*w25q_ranges = mx25l6406e_ranges;
+			*num_entries = ARRAY_SIZE(mx25l6406e_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
