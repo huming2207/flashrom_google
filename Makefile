@@ -227,7 +227,7 @@ all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
 # will not require subversion. The downloadable snapshots are already exported.
 SVNVERSION := $(shell ./util/getversion.sh)
 
-RELEASE := 0.9.3
+RELEASE := 0.9.4
 VERSION := $(RELEASE) $(SVNVERSION)
 RELEASENAME ?= $(VERSION)
 
