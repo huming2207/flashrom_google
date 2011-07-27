@@ -234,13 +234,13 @@ int internal_init(void)
 	arg = extract_programmer_param("bus");
 	if (arg) {
 		if (!strcasecmp(arg,"parallel")) {
-			target_bus = CHIP_BUSTYPE_PARALLEL;
+			target_bus = BUS_PARALLEL;
 		} else if (!strcasecmp(arg,"lpc")) {
-			target_bus = CHIP_BUSTYPE_LPC;
+			target_bus = BUS_LPC;
 		} else if (!strcasecmp(arg,"fwh")) {
-			target_bus = CHIP_BUSTYPE_FWH;
+			target_bus = BUS_FWH;
 		} else if (!strcasecmp(arg,"spi")) {
-			target_bus = CHIP_BUSTYPE_SPI;
+			target_bus = BUS_SPI;
 		} else {
 			msg_perr("Supported busses for %s programmer: parallel,"
 			         " lpc, fwh, spi\n",
@@ -262,7 +262,7 @@ int internal_init(void)
 	/* Default to Parallel/LPC/FWH flash devices. If a known host controller
 	 * is found, the init routine sets the buses_supported bitfield.
 	 */
-	buses_supported = CHIP_BUSTYPE_NONSPI;
+	buses_supported = BUS_NONSPI;
 
 #if defined(__i386__) || defined(__x86_64__)
 	/* Initialize PCI access for flash enables */
@@ -376,8 +376,8 @@ int internal_init(void)
 	init_superio_ite();
 
 	/* probe for programmers that bridge LPC <--> SPI */
-	if (target_bus == CHIP_BUSTYPE_LPC ||
-	    target_bus == CHIP_BUSTYPE_FWH) {
+	if (target_bus == BUS_LPC ||
+	    target_bus == BUS_FWH) {
 		/* note: it85xx init done along with it87* init */
 		wpce775x_probe_spi_flash(NULL);
 		mec1308_probe_spi_flash(NULL);

@@ -975,7 +975,7 @@ int wpce775x_probe_spi_flash(const char *name)
 {
 	int ret;
 
-	if (!(buses_supported & CHIP_BUSTYPE_FWH)) {
+	if (!(buses_supported & BUS_FWH)) {
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
 	}
@@ -984,9 +984,9 @@ int wpce775x_probe_spi_flash(const char *name)
 	if (!ret) {
 		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
 		          buses_supported);
-		if (buses_supported & CHIP_BUSTYPE_FWH)
+		if (buses_supported & BUS_FWH)
 			msg_pdbg("Overriding chipset SPI with WPCE775x FWH|SPI.\n");
-		buses_supported |= CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI;
+		buses_supported |= BUS_FWH | BUS_SPI;
 	}
 	return ret;
 }
