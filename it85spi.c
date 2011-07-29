@@ -118,14 +118,14 @@ void it85xx_enter_scratch_rom(void)
 {
 	int ret, tries;
 
-	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
+	msg_pdbg("%s():%d was called ...\n", __func__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0)
 		return;
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at waiting for IBF==0.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Copy EC firmware to SRAM. */
@@ -134,7 +134,7 @@ void it85xx_enter_scratch_rom(void)
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at taking command.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Waiting for OBF (output buffer) has data.
@@ -142,12 +142,12 @@ void it85xx_enter_scratch_rom(void)
 		 * ISR so that it is okay as long as the command is 0xFA. */
 		if (wait_for(KB_OBF, KB_OBF, MAX_TIMEOUT, NULL, NULL, 0))
 			msg_pdbg("%s():%d * timeout at waiting for OBF.\n",
-			         __FUNCTION__, __LINE__);
+			         __func__, __LINE__);
 		if ((ret = INB(LEGACY_KBC_PORT_DATA)) == 0xFA) {
 			break;
 		} else {
 			msg_perr("%s():%d * not run on SRAM ret=%d\n",
-			         __FUNCTION__, __LINE__, ret);
+			         __func__, __LINE__, ret);
 			continue;
 		}
 	}
@@ -155,10 +155,9 @@ void it85xx_enter_scratch_rom(void)
 	if (tries < MAX_TRY) {
 		/* EC already runs on SRAM */
 		it85xx_scratch_rom_reenter++;
-		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+		msg_pdbg("%s():%d * SUCCESS.\n", __func__, __LINE__);
 	} else {
-		msg_perr("%s():%d * Max try reached.\n",
-		         __FUNCTION__, __LINE__);
+		msg_perr("%s():%d * Max try reached.\n", __func__, __LINE__);
 	}
 }
 
@@ -166,7 +165,7 @@ void it85xx_exit_scratch_rom(void)
 {
 	int tries;
 
-	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
+	msg_pdbg("%s():%d was called ...\n", __func__, __LINE__);
 	if (it85xx_scratch_rom_reenter <= 0)
 		return;
 
@@ -174,7 +173,7 @@ void it85xx_exit_scratch_rom(void)
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at waiting for IBF==0.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Exit SRAM. Run on flash. */
@@ -183,7 +182,7 @@ void it85xx_exit_scratch_rom(void)
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at taking command.\n",
-		             __FUNCTION__, __LINE__)) {
+		             __func__, __LINE__)) {
 			/* We cannot ensure if EC has exited update mode.
 			 * If EC is in normal mode already, a further 0xFE
 			 * command will reboot system. So, exit loop here. */
@@ -196,10 +195,9 @@ void it85xx_exit_scratch_rom(void)
 
 	if (tries < MAX_TRY) {
 		it85xx_scratch_rom_reenter = 0;
-		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+		msg_pdbg("%s():%d * SUCCESS.\n", __func__, __LINE__);
 	} else {
-		msg_perr("%s():%d * Max try reached.\n",
-		         __FUNCTION__, __LINE__);
+		msg_perr("%s():%d * Max try reached.\n", __func__, __LINE__);
 	}
 }
 
