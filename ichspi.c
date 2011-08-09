@@ -23,19 +23,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-/*
- * This module is designed for supporting the devices
- * ST M25P40
- * ST M25P80
- * ST M25P16
- * ST M25P32 already tested
- * ST M25P64
- * AT 25DF321 already tested
- * ... and many more SPI flash devices
- *
- */
-
-#if defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
+#if defined(__i386__) || defined(__x86_64__)
 
 #include <string.h>
 #include "flash.h"
@@ -601,55 +589,49 @@ static void ich_set_bbar(uint32_t min_addr)
 		msg_perr("Setting BBAR failed!\n");
 }
 
-/* Reads up to len byte from the fdata/spid register into the data array.
- * The amount actually read is limited by the maximum read size of the
- * chipset. */
+/* Read len bytes from the fdata/spid register into the data array.
+ *
+ * Note that using len > spi_programmer->max_data_read will return garbage or
+ * may even crash.
+ */
  static void ich_read_data(uint8_t *data, int len, int reg0_off)
  {
-	int a;
+	int i;
 	uint32_t temp32 = 0;
 
-	if (len > spi_programmer->max_data_read)
-		len = spi_programmer->max_data_read;
+	for (i = 0; i < len; i++) {
+		if ((i % 4) == 0)
+			temp32 = REGREAD32(reg0_off + i);
 
-	for (a = 0; a < len; a++) {
-		if ((a % 4) == 0)
-			temp32 = REGREAD32(reg0_off + (a));
-
-		data[a] = (temp32 & (((uint32_t) 0xff) << ((a % 4) * 8)))
-			  >> ((a % 4) * 8);
+		data[i] = (temp32 >> ((i % 4) * 8)) & 0xff;
 	}
 }
 
-/* Fills up to len bytes from the data array into the fdata/spid registers.
- * The amount actually written is limited by the maximum write size of the
- * chipset and is returned by the function. */
-static uint8_t ich_fill_data(const uint8_t *data, int len, int reg0_off)
+/* Fill len bytes from the data array into the fdata/spid registers.
+ *
+ * Note that using len > spi_programmer->max_data_write will trash the registers
+ * following the data registers.
+ */
+static void ich_fill_data(const uint8_t *data, int len, int reg0_off)
 {
 	uint32_t temp32 = 0;
-	int a;
-
-	if (len > spi_programmer->max_data_write)
-		len = spi_programmer->max_data_write;
+	int i;
 
 	if (len <= 0)
-		return 0;
+		return;
 
-	for (a = 0; a < len; a++) {
-		if ((a % 4) == 0) {
+	for (i = 0; i < len; i++) {
+		if ((i % 4) == 0)
 			temp32 = 0;
-		}
 
-		temp32 |= ((uint32_t) data[a]) << ((a % 4) * 8);
+		temp32 |= ((uint32_t) data[i]) << ((i % 4) * 8);
 
-		if ((a % 4) == 3) {
-			REGWRITE32(reg0_off + (a - (a % 4)), temp32);
-		}
+		if ((i % 4) == 3) /* 32 bits are full, write them to regs. */
+			REGWRITE32(reg0_off + (i - (i % 4)), temp32);
 	}
-	if (((a - 1) % 4) != 3) {
-		REGWRITE32(reg0_off + ((a - 1) - ((a - 1) % 4)), temp32);
-	}
-	return len;
+	i--;
+	if ((i % 4) != 3) /* Write remaining data to regs. */
+		REGWRITE32(reg0_off + (i - (i % 4)), temp32);
 }
 
 /* This function generates OPCODES from or programs OPCODES to ICH according to
@@ -811,9 +793,8 @@ static int ich7_run_opcode(OPCODE op, uint32_t offset,
 		return 1;
 	}
 
-	if ((!write_cmd) && (datalength != 0)) {
+	if ((!write_cmd) && (datalength != 0))
 		ich_read_data(data, datalength, ICH7_REG_SPID0);
-	}
 
 	return 0;
 }
@@ -937,9 +918,8 @@ static int ich9_run_opcode(OPCODE op, uint32_t offset,
 		return 1;
 	}
 
-	if ((!write_cmd) && (datalength != 0)) {
+	if ((!write_cmd) && (datalength != 0))
 		ich_read_data(data, datalength, ICH9_REG_FDATA0);
-	}
 
 	return 0;
 }
