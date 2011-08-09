@@ -32,6 +32,7 @@
 #include "big_lock.h"
 #include "flash.h"
 #include "flashchips.h"
+#include "power.h"
 #include "programmer.h"
 #include "writeprotect.h"
 
@@ -479,6 +480,10 @@ int cli_mfg(int argc, char *argv[])
 	msg_gdbg("Lock acquired.\n");
 #endif
 
+	/* Disable power management if timer calibration must occur */
+	if (broken_timer)
+		disable_power_management();
+
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
@@ -630,9 +635,12 @@ int cli_mfg(int argc, char *argv[])
 		set_ignore_fmap = 1;
 	}
 
-	if (read_it || write_it || erase_it || verify_it)
+	if (read_it || write_it || erase_it || verify_it) {
+		/* disable power management for slow operations */
+		disable_power_management();
 		rc = doit(fill_flash, force, filename,
 		          read_it, write_it, erase_it, verify_it);
+	}
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 cli_mfg_silent_exit:
@@ -641,5 +649,10 @@ cli_mfg_release_lock_exit:
 #if USE_BIG_LOCK == 1
 	release_big_lock();
 #endif
+	if (restore_power_management()) {
+		msg_perr("Unable to re-enable power management\n");
+		rc |= 1;
+	}
+
 	return rc;
 }

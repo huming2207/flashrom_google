@@ -22,6 +22,10 @@
 
 /*
  * Contains the ITE IT85* SPI specific routines
+ *
+ * FIXME: EC firmware updates on this chip can be interrupted due to factors
+ * such as SMBus traffic. YOU MUST DISABLE any services, such as power
+ * management daemons, which can interact with the EC during firmware update.
  */
 
 #if defined(__i386__) || defined(__x86_64__)
@@ -122,14 +126,6 @@ void it85xx_enter_scratch_rom()
 	msg_pspew("%s():%d was called ...\n", __FUNCTION__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0) return;
 
-	/* FIXME: this a workaround for the bug that SMBus signal would
-	 *        interfere the EC firmware update. Should be removed if
-	 *        we find out the root cause. */
-	ret = system("stop powerd >&2");
-	if (ret) {
-		msg_perr("Cannot stop powerd.\n");
-	}
-
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
@@ -173,7 +169,6 @@ void it85xx_enter_scratch_rom()
 
 void it85xx_exit_scratch_rom()
 {
-	int ret;
 	int tries;
 
 	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
@@ -209,14 +204,6 @@ void it85xx_exit_scratch_rom()
 	} else {
 		msg_perr("%s():%d * Max try reached.\n",
 		         __FUNCTION__, __LINE__);
-	}
-
-	/* FIXME: this a workaround for the bug that SMBus signal would
-	 *        interfere the EC firmware update. Should be removed if
-	 *        we find out the root cause. */
-	ret = system("start powerd >&2");
-	if (ret) {
-		msg_perr("Cannot start powerd again.\n");
 	}
 }
 
