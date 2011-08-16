@@ -27,8 +27,6 @@
 
 #include <string.h>
 #include "flash.h"
-#include "flashchips.h"
-#include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
 #include "ich_descriptors.h"
