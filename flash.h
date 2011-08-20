@@ -270,10 +270,6 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 #define msg_pspew(...)	print(MSG_BARF, __VA_ARGS__)	/* programmer debug barf  */
 #define msg_cspew(...)	print(MSG_BARF, __VA_ARGS__)	/* chip debug barf  */
 
-/* cli_classic.c */
-int cli_classic(int argc, char *argv[]);
-int cli_mfg(int argc, char *argv[]);
-
 /* cli_mfg.c */
 extern int set_ignore_fmap;
 

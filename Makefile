@@ -249,7 +249,7 @@ LIB_OBJS += $(LOCK_OBJS)
 FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
 endif
 
-CLI_OBJS = flashrom.o cli_classic.o cli_mfg.o cli_output.o print.o
+CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 

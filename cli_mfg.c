@@ -166,7 +166,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_FAST_VERIFY,
 };
 
-int cli_mfg(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	unsigned long size;
 	/* Probe for up to three flash chips. */

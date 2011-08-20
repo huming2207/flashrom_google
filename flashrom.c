@@ -1859,14 +1859,6 @@ void check_chip_supported(const struct flashchip *flash)
 	}
 }
 
-int main(int argc, char *argv[])
-{
-	/* FIXME: this should eventually be a build option controlled
-	   via a USE flag */
-//	return cli_classic(argc, argv);
-	return cli_mfg(argc, argv);
-}
-
 /* FIXME: This function signature needs to be improved once doit() has a better
  * function signature.
  */
