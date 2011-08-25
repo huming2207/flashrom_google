@@ -480,8 +480,12 @@ int cli_mfg(int argc, char *argv[])
 	msg_gdbg("Lock acquired.\n");
 #endif
 
-	/* Disable power management if timer calibration must occur */
-	if (broken_timer)
+	/*
+	 * Disable power management before timer calibration for potentially-
+	 * destructive operations only. Leave power management enabled for
+	 * reads to avoid UI jank (see issue chromium-os:19321).
+	 */
+	if ((write_it || erase_it) && broken_timer)
 		disable_power_management();
 
 	/* FIXME: Delay calibration should happen in programmer code. */
@@ -636,8 +640,6 @@ int cli_mfg(int argc, char *argv[])
 	}
 
 	if (read_it || write_it || erase_it || verify_it) {
-		/* disable power management for slow operations */
-		disable_power_management();
 		rc = doit(fill_flash, force, filename,
 		          read_it, write_it, erase_it, verify_it);
 	}
