@@ -85,6 +85,7 @@ int write_82802ab(struct flashchip *flash, uint8_t *buf, int start, int len);
 void print_status_82802ab(uint8_t status);
 int unlock_82802ab(struct flashchip *flash);
 int unlock_28f004s5(struct flashchip *flash);
+int unlock_lh28f008bjt(struct flashchip *flash);
 
 /* ichspi.c */
 int ich_hwseq_probe(struct flashchip *flash);
