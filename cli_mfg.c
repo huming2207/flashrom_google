@@ -160,6 +160,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_WP_DISABLE,
 	LONGOPT_WP_LIST,
 	LONGOPT_IGNORE_FMAP,
+	LONGOPT_FAST_VERIFY,
 };
 
 int cli_mfg(int argc, char *argv[])
@@ -213,6 +214,7 @@ int cli_mfg(int argc, char *argv[])
 		{"wp-list", 0, 0, LONGOPT_WP_LIST},
 		{"broken-timers", 0, 0, 'b' },
 		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
+		{"fast-verify", 0, 0, LONGOPT_FAST_VERIFY},
 		{0, 0, 0, 0}
 	};
 
@@ -270,7 +272,7 @@ int cli_mfg(int argc, char *argv[])
 				cli_mfg_abort_usage(argv[0]);
 			}
 			filename = strdup(optarg);
-			verify_it = 1;
+			if (!verify_it) verify_it = VERIFY_FULL;
 			/* horrible workaround for excess time spent in
 			 * ichspi.c code: */
 			broken_timer = 1;
@@ -416,6 +418,9 @@ int cli_mfg(int argc, char *argv[])
 			break;
 		case LONGOPT_IGNORE_FMAP:
 			set_ignore_fmap = 1;
+			break;
+		case LONGOPT_FAST_VERIFY:
+			verify_it = VERIFY_PARTIAL;
 			break;
 		case 'b':
 			broken_timer = 1;
@@ -571,7 +576,7 @@ int cli_mfg(int argc, char *argv[])
 
 	/* Always verify write operations unless -n is used. */
 	if (write_it && !dont_verify_it)
-		verify_it = 1;
+		if (!verify_it) verify_it = VERIFY_FULL;
 
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
@@ -646,7 +651,7 @@ int cli_mfg(int argc, char *argv[])
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 cli_mfg_silent_exit:
-	programmer_shutdown();	/* must be done after chip_restore() */
+	programmer_shutdown();  /* must be done after chip_restore() */
 cli_mfg_release_lock_exit:
 #if USE_BIG_LOCK == 1
 	release_big_lock();

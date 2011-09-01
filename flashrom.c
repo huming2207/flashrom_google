@@ -1256,14 +1256,18 @@ notfound:
 	return flash - flashchips;
 }
 
-int verify_flash(struct flashchip *flash, uint8_t *buf)
+int verify_flash(struct flashchip *flash, uint8_t *buf, int verify_it)
 {
 	int ret;
 	int total_size = flash->total_size * 1024;
 
 	msg_cinfo("Verifying flash... ");
 
-	ret = verify_range(flash, buf, 0, total_size, NULL);
+	if (specified_partition() && verify_it == VERIFY_PARTIAL) {
+		ret = handle_partial_verify(flash, buf, verify_range);
+	} else {
+		ret = verify_range(flash, buf, 0, total_size, NULL);
+	}
 
 	if (!ret)
 		msg_cinfo("VERIFIED.          \n");
@@ -1353,7 +1357,7 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 
 	/* First try to handle partial read case, rather than read the whole
 	 * flash, which is slow. */
-	ret = handle_partial_read(flash, buf, flash->read);
+	ret = handle_partial_read(flash, buf, flash->read, 1);
 	if (ret < 0) {
 		msg_cerr("Partial read operation failed!\n");
 		ret = 1;
@@ -2007,7 +2011,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	}
 	msg_cdbg("done.\n");
 
-	// This should be moved into each flash part's code to do it 
+	// This should be moved into each flash part's code to do it
 	// cleanly. This does the job.
 	handle_romentries(flash, oldcontents, newcontents);
 
@@ -2034,9 +2038,11 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 
 	if (verify_it) {
 		/* Work around chips which need some time to calm down. */
-		if (write_it)
+		if (write_it && verify_it != VERIFY_PARTIAL)
 			programmer_delay(1000*1000);
-		ret = verify_flash(flash, newcontents);
+
+		ret = verify_flash(flash, newcontents, verify_it);
+
 		/* If we tried to write, and verification now fails, we
 		 * might have an emergency situation.
 		 */

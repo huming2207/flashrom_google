@@ -42,6 +42,13 @@ struct flashchip;	/* forward declare */
 /* Error codes */
 #define TIMEOUT_ERROR	-101
 
+/* for verify_it variable in flashrom.c and cli_mfg.c */
+enum {
+	VERIFY_OFF = 0,
+	VERIFY_FULL,
+	VERIFY_PARTIAL,
+};
+
 typedef unsigned long chipaddr;
 
 int register_shutdown(int (*function) (void *data), void *data);
@@ -267,6 +274,7 @@ int cli_mfg(int argc, char *argv[]);
 extern int set_ignore_fmap;
 
 /* layout.c */
+int specified_partition();
 int read_romlayout(char *name);
 int find_romentry(char *name);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
@@ -278,10 +286,18 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 int handle_partial_read(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len));
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len),
+                 int write_to_file);
     /* RETURN: the number of partitions that have beenpartial read.
     *         ==0 means no partition is specified.
     *         < 0 means writing file error. */
+int handle_partial_verify(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*verify) (struct flashchip *flash, uint8_t *buf, int start, int len,
+                   const char* message));
+    /* RETURN: ==0 means all identical.
+               !=0 means buf and flash are different. */
 
 /* spi.c */
 struct spi_command {

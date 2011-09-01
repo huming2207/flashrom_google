@@ -55,6 +55,12 @@ static romlayout_t rom_entries[MAX_ROMLAYOUT];
 #if CONFIG_INTERNAL == 1 /* FIXME: Move the whole block to cbtable.c? */
 static char *def_name = "DEFAULT";
 
+
+/* Return TRUE if user specifies any -i argument. */
+int specified_partition() {
+	return num_include_args != 0;
+}
+
 int show_id(uint8_t *bios, int size, int force)
 {
 	unsigned int *walk;
@@ -433,7 +439,6 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 			
 	return 0;
 }
-
 static int write_content_to_file(int entry, uint8_t *buf) {
 	char *file;
 	FILE *fp;
@@ -456,10 +461,12 @@ static int write_content_to_file(int entry, uint8_t *buf) {
 	return 0;
 }
 
+/*  Reads flash content specified with -i argument into *buf. */
 int handle_partial_read(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len)) {
+    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len),
+                 int write_to_file) {
 
 	unsigned int start = 0;
 	int entry;
@@ -488,11 +495,13 @@ int handle_partial_read(
 		len = rom_entries[entry].end - rom_entries[entry].start + 1;
 		if (read(flash, buf + rom_entries[entry].start,
 		         rom_entries[entry].start, len)) {
-			perror("flash partial read failed.");
+			msg_perr("flash partial read failed.");
 			return -1;
 		}
 		/* If file is specified, write this partition to file. */
-		if (write_content_to_file(entry, buf) < 0) return -1;
+		if (write_to_file) {
+			if (write_content_to_file(entry, buf) < 0) return -1;
+		}
 
 		/* Skip to location after current romentry. */
 		start = rom_entries[entry].end + 1;
@@ -502,4 +511,51 @@ int handle_partial_read(
 	}
 
 	return count;
+}
+
+/* Instead of verifying the whole chip, this functions only verifies those
+ * content in specified partitions (-i).
+ */
+int handle_partial_verify(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*verify) (struct flashchip *flash, uint8_t *buf, int start, int len,
+                   const char* message)) {
+	unsigned int start = 0;
+	int entry;
+	unsigned int size = flash->total_size * 1024;
+
+	/* If no regions were specified for inclusion, assume
+	 * that the user wants to read the complete image.
+	 */
+	if (num_include_args == 0)
+		return 0;
+
+	/* Walk through the table and write content to file for those included
+	 * partition. */
+	while (start < size) {
+		int len;
+
+		entry = find_next_included_romentry(start);
+		/* No more romentries for remaining region? */
+		if (entry < 0) {
+			break;
+		}
+
+		/* read content from flash. */
+		len = rom_entries[entry].end - rom_entries[entry].start + 1;
+		if (verify(flash, buf + rom_entries[entry].start,
+		           rom_entries[entry].start, len, NULL)) {
+			msg_perr("flash partial verify failed.");
+			return -1;
+		}
+
+		/* Skip to location after current romentry. */
+		start = rom_entries[entry].end + 1;
+		/* Catch overflow. */
+		if (!start)
+			break;
+	}
+
+	return 0;
 }
