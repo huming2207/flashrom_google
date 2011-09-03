@@ -319,6 +319,10 @@ CONFIG_OGP_SPI ?= no
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= no
 
+# Disable Linux spidev interface support for now, until we check for a Linux
+# device (not host, as DOS binaries for example are built on a Linux host).
+CONFIG_LINUX_SPI ?= no
+
 # Disable Dediprog SF100 until support is complete and tested.
 CONFIG_DEDIPROG ?= no
 
@@ -457,6 +461,11 @@ ifeq ($(CONFIG_BUSPIRATE_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_BUSPIRATE_SPI=1'
 PROGRAMMER_OBJS += buspirate_spi.o
 NEED_SERIAL := yes
+endif
+
+ifeq ($(CONFIG_LINUX_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_LINUX_SPI=1'
+PROGRAMMER_OBJS += linux_spi.o
 endif
 
 ifeq ($(CONFIG_DEDIPROG), yes)
