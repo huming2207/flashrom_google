@@ -49,7 +49,8 @@
 
 #define MEC1308_SIOCFG_LDN	0x07	/* LDN Bank Selector */
 #define MEC1308_DEVICE_ID_REG	0x20	/* Device ID Register */
-#define MEC1308_DEVICE_ID_VAL	0x4d	/* Device ID Value */
+#define MEC1308_DEVICE_ID_VAL	0x4d	/* Device ID Value for MEC1308 */
+#define MEC1310_DEVICE_ID_VAL	0x04	/* Device ID Value for MEC1310 */
 #define MEC1308_DEVICE_REV	0x21	/* Device Revision ID Register */
 
 static unsigned int in_sio_cfgmode;
@@ -352,11 +353,18 @@ int mec1308_probe_spi_flash(const char *name)
 		return 0;
 	}
 	device_id = sio_read(sio_port, MEC1308_DEVICE_ID_REG);
-	if ((device_id == MEC1308_DEVICE_ID_VAL)) {
+	switch(device_id) {
+	case MEC1308_DEVICE_ID_VAL:
 		msg_pdbg("Found EC: MEC1308 (ID:0x%02x,Rev:0x%02x) on "
 		         "sio_port:0x%x.\n", device_id,
 			 sio_read(sio_port, MEC1308_DEVICE_REV), sio_port);
-	} else {
+		break;
+	case MEC1310_DEVICE_ID_VAL:
+		msg_pdbg("Found EC: MEC1310 (ID:0x%02x,Rev:0x%02x) on "
+		         "sio_port:0x%x.\n", device_id,
+			 sio_read(sio_port, MEC1308_DEVICE_REV), sio_port);
+		break;
+	default:
 		msg_pdbg("MEC1308 not found\n");
 		return 0;
 	}
