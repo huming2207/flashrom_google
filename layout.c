@@ -297,6 +297,11 @@ int find_romentry(char *name)
 	/* -i <image>[:<file>] */
 	if (strtok(name, ":")) {
 		file = strtok(NULL, "");
+		if (file == NULL || !strcmp(file, "")) {
+			msg_gerr("Missing filename parameter in %s<filename>",
+			         name);
+			return -1;
+		}
 	}
 	msg_gdbg("Looking for \"%s\" (file=\"%s\")... ",
 	         name, file ? file : "<not specified>");

@@ -2013,7 +2013,11 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 
 	// This should be moved into each flash part's code to do it
 	// cleanly. This does the job.
-	handle_romentries(flash, oldcontents, newcontents);
+	if (handle_romentries(flash, oldcontents, newcontents)) {
+		ret = 1;
+		msg_cerr("Cannot handle partial read.\n");
+		goto out;
+	}
 
 	// ////////////////////////////////////////////////////////////
 
