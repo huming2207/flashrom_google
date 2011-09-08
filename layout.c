@@ -290,16 +290,17 @@ int find_romentry(char *name)
 {
 	int i;
 	char *file = NULL;
+	char *has_colon;
 
 	if (!romimages)
 		return -1;
 
 	/* -i <image>[:<file>] */
+	has_colon = strchr(name, ':');
 	if (strtok(name, ":")) {
 		file = strtok(NULL, "");
-		if (file == NULL || !strcmp(file, "")) {
-			msg_gerr("Missing filename parameter in %s<filename>",
-			         name);
+		if (has_colon && file == NULL) {
+			msg_gerr("Missing filename parameter in %s\n", name);
 			return -1;
 		}
 	}
