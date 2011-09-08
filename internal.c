@@ -242,9 +242,6 @@ int internal_init(void)
 		} else if (!strcasecmp(arg,"spi")) {
 			target_bus = BUS_SPI;
 		} else {
-			msg_perr("Supported busses for %s programmer: parallel,"
-			         " lpc, fwh, spi\n",
-				 programmer_table[programmer].name);
 			free(arg);
 			return 1;
 		}
@@ -294,8 +291,7 @@ int internal_init(void)
 	if (probe_target_bus_later) {
 		/* read the target bus value from register. */
 		if (get_target_bus_from_chipset(&target_bus)) {
-			msg_perr("Cannot get target bus from %s programmer.\n",
-			         programmer_table[programmer].name);
+			msg_perr("Cannot get target bus from programmer.\n");
 			return 1;
 		}
 		msg_pdbg("get_target_bus_from_chipset() returns 0x%x.\n",
