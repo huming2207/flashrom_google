@@ -256,14 +256,14 @@ static int enable_flash_piix4(struct pci_dev *dev, const char *name)
 static int enable_flash_ich(struct pci_dev *dev, const char *name,
 			    int bios_cntl)
 {
-	uint8_t old, new;
+	uint8_t old, new, wanted;
 
 	/*
 	 * Note: the ICH0-ICH5 BIOS_CNTL register is actually 16 bit wide, but
 	 * just treating it as 8 bit wide seems to work fine in practice.
 	 */
 	old = pci_read_byte(dev, bios_cntl);
-	new = old;
+	wanted = old;
 
 	msg_pdbg("\nBIOS Lock Enable: %sabled, ",
 		 (old & (1 << 1)) ? "en" : "dis");
@@ -279,22 +279,23 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * In earlier chipsets this bit is reserved.
 	 */
 	if (old & (1 << 5)) {
-		msg_pinfo("WARNING: BIOS region SMM protection is enabled!\n");
+		msg_pdbg("WARNING: BIOS region SMM protection is enabled!\n");
 		msg_pdbg("Trying to clear BIOS region SMM protection.\n");
-		new &= ~(1 << 5);
+		wanted &= ~(1 << 5);
 	}
 
-	new |= (1 << 0);
+	wanted |= (1 << 0);
 
 	/* Only write the register if it's necessary */
-	if (new == old)
+	if (wanted == old)
 		return 0;
 
-	rpci_write_byte(dev, bios_cntl, new);
+	rpci_write_byte(dev, bios_cntl, wanted);
 
-	if (pci_read_byte(dev, bios_cntl) != new) {
-		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
-			  "(WARNING ONLY).\n", bios_cntl, new, name);
+	if ((new = pci_read_byte(dev, bios_cntl)) != wanted) {
+		msg_pinfo("WARNING: Setting 0x%x from 0x%x to 0x%x on %s "
+			  "failed. New value is 0x%x.\n",
+			  bios_cntl, old, wanted, name, new);
 		return -1;
 	}
 
