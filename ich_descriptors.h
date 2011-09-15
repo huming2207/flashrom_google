@@ -19,14 +19,18 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <stdint.h>
-
 #if defined(__i386__) || defined(__x86_64__)
 #ifndef __ICH_DESCRIPTORS_H__
 #define __ICH_DESCRIPTORS_H__ 1
 
-/* should probably be in ichspi.h */
-#define msg_pdbg2 msg_pspew
+#include <stdint.h>
+
+/* FIXME: Replace with generic return codes */
+#define ICH_RET_OK	0
+#define ICH_RET_ERR	-1
+#define ICH_RET_WARN	-2
+#define ICH_RET_PARAM	-3
+#define ICH_RET_OOB	-4
 
 #define ICH9_REG_FDOC		0xB0	/* 32 Bits Flash Descriptor Observability Control */
 					/* 0-1: reserved */
@@ -56,394 +60,201 @@
 #define VSCC_VCL			(0x1 << VSCC_VCL_OFF)
 					/* 24-31: reserved */
 
-#define pprint_reg(reg, bit, val, sep) msg_pdbg("%s=%d" sep, #bit, (val & reg##_##bit)>>reg##_##bit##_OFF)
-#define pprint_reg_hex(reg, bit, val, sep) msg_pdbg("%s=0x%x" sep, #bit, (val & reg##_##bit)>>reg##_##bit##_OFF)
-void prettyprint_ich9_reg_vscc(uint32_t reg_val);
+#define ICH_FREG_BASE(flreg)  (((flreg) << 12) & 0x01fff000)
+#define ICH_FREG_LIMIT(flreg) (((flreg) >>  4) & 0x01fff000)
 
-enum chipset {
-	CHIPSET_UNKNOWN,
+/* Used to select the right descriptor printing function.
+ * Currently only ICH8 and Ibex Peak are supported.
+ */
+enum ich_chipset {
+	CHIPSET_ICH_UNKNOWN,
 	CHIPSET_ICH7 = 7,
 	CHIPSET_ICH8,
 	CHIPSET_ICH9,
 	CHIPSET_ICH10,
-	CHIPSET_SERIES_5_IBEX_PEAK,
-	CHIPSET_SERIES_6_COUGAR_POINT,
-	CHIPSET_SERIES_7_PANTHER_POINT
+	CHIPSET_5_SERIES_IBEX_PEAK,
+	CHIPSET_6_SERIES_COUGAR_POINT,
+	CHIPSET_7_SERIES_PANTHER_POINT
 };
 
-struct flash_descriptor_addresses {
-	uint32_t (*FCBA)(void);
-	uint32_t (*FRBA)(void);
-	uint32_t (*FMBA)(void);
-	uint32_t (*FMSBA)(void);
-	uint32_t (*FLREG_limit)(uint32_t flreg);
-	uint32_t (*FLREG_base)(uint32_t flreg);
-	uint32_t (*FISBA)(void);
-#ifdef ICH_DESCRIPTORS_FROM_MMAP_DUMP
-	uint32_t (*VTBA)(void);
-#endif // ICH_DESCRIPTORS_FROM_MMAP_DUMP
-};
-	
-struct flash_descriptor {
+void prettyprint_ich_reg_vscc(uint32_t reg_val, int verbosity);
+
+struct ich_desc_content {
 	uint32_t FLVALSIG;	/* 0x00 */
 	union {			/* 0x04 */
 		uint32_t FLMAP0;
 		struct {
-			uint8_t FCBA	:8;
-			uint8_t NC	:2;
-			unsigned	:6;
-			uint8_t FRBA	:8;
-			uint8_t NR	:3;
-			unsigned	:5;
+			uint32_t FCBA	:8, /* Flash Component Base Address */
+				 NC	:2, /* Number Of Components */
+					:6,
+				 FRBA	:8, /* Flash Region Base Address */
+				 NR	:3, /* Number Of Regions */
+					:5;
 		};
 	};
 	union {			/* 0x08 */
 		uint32_t FLMAP1;
 		struct {
-			uint8_t FMBA	:8;
-			uint8_t NM	:3;
-			unsigned	:5;
-			union {
-				uint8_t FISBA	:8;
-				uint8_t FPSBA	:8;
-			};
-			uint8_t ISL	:8;
+			uint32_t FMBA	:8, /* Flash Master Base Address */
+				 NM	:3, /* Number Of Masters */
+					:5,
+				 FISBA	:8, /* Flash ICH Strap Base Address */
+				 ISL	:8; /* ICH Strap Length */
 		};
 	};
 	union {			/* 0x0c */
 		uint32_t FLMAP2;
 		struct {
-			uint8_t  FMSBA	:8;
-			uint8_t  MSL	:8;
-			unsigned	:16;
+			uint32_t FMSBA	:8, /* Flash (G)MCH Strap Base Addr. */
+				 MSL	:8, /* MCH Strap Length */
+					:16;
 		};
 	};
 };
 
-struct flash_component {
+struct ich_desc_component {
 	union {			/* 0x00 */
-		uint32_t FLCOMP;
+		uint32_t FLCOMP; /* Flash Components Register */
 		struct {
-			uint8_t  comp1_density	:3;
-			uint8_t  comp2_density	:3;
-			unsigned		:11;
-			uint8_t  freq_read	:3;
-			uint8_t  fastread	:1;
-			uint8_t  freq_fastread	:3;
-			uint8_t  freq_write	:3;
-			uint8_t  freq_read_id	:3;
-			unsigned		:2;
+			uint32_t comp1_density	:3,
+				 comp2_density	:3,
+						:11,
+				 freq_read	:3,
+				 fastread	:1,
+				 freq_fastread	:3,
+				 freq_write	:3,
+				 freq_read_id	:3,
+						:2;
 		};
 	};
 	union {			/* 0x04 */
-		uint32_t FLILL;
+		uint32_t FLILL; /* Flash Invalid Instructions Register */
 		struct {
-			uint8_t invalid_instr0;
-			uint8_t invalid_instr1;
-			uint8_t invalid_instr2;
-			uint8_t invalid_instr3;
+			uint32_t invalid_instr0	:8,
+				 invalid_instr1	:8,
+				 invalid_instr2	:8,
+				 invalid_instr3	:8;
 		};
 	};
 	union {			/* 0x08 */
-		uint32_t FLPB;
+		uint32_t FLPB; /* Flash Partition Boundary Register */
 		struct {
-			uint16_t FPBA	:13;
-			unsigned	:19;
+			uint32_t FPBA	:13, /* Flash Partition Boundary Addr */
+					:19;
 		};
 	};
 };
 
-struct flash_region {
-	
+struct ich_desc_region {
 	union {
-		uint32_t FLREG0; /* Flash Descriptor */
+		uint32_t FLREGs[5];
 		struct {
-			uint16_t reg0_base	:13;
-			unsigned		:3;
-			uint16_t reg0_limit	:13;
-			unsigned		:3;
+			struct { /* FLREG0 Flash Descriptor */
+				uint32_t reg0_base	:13,
+							:3,
+					 reg0_limit	:13,
+							:3;
+			};
+			struct { /* FLREG1 BIOS */
+				uint32_t reg1_base	:13,
+							:3,
+					 reg1_limit	:13,
+							:3;
+			};
+			struct { /* FLREG2 ME */
+				uint32_t reg2_base	:13,
+							:3,
+					 reg2_limit	:13,
+							:3;
+			};
+			struct { /* FLREG3 GbE */
+				uint32_t reg3_base	:13,
+							:3,
+					 reg3_limit	:13,
+							:3;
+			};
+			struct { /* FLREG4 Platform */
+				uint32_t reg4_base	:13,
+							:3,
+					 reg4_limit	:13,
+							:3;
+			};
 		};
 	};
-	union {
-		uint32_t FLREG1; /* BIOS */
-		struct {
-			uint16_t reg1_base	:13;
-			unsigned		:3;
-			uint16_t reg1_limit	:13;
-			unsigned		:3;
-		};
-	};
-	union {
-		uint32_t FLREG2; /* ME */
-		struct {
-			uint16_t reg2_base	:13;
-			unsigned		:3;
-			uint16_t reg2_limit	:13;
-			unsigned		:3;
-		};
-	};
-	union {
-		uint32_t FLREG3; /* GbE */
-		struct {
-			uint16_t reg3_base	:13;
-			unsigned		:3;
-			uint16_t reg3_limit	:13;
-			unsigned		:3;
-		};
-	};
-} frba;
+};
 
-struct flash_master {
+struct ich_desc_master {
 	union {
 		uint32_t FLMSTR1;
 		struct {
-			uint16_t BIOS_req_ID		:16;
-			uint8_t  BIOS_descr_read	:1;
-			uint8_t  BIOS_BIOS_read		:1;
-			uint8_t  BIOS_ME_read		:1;
-			uint8_t  BIOS_GbE_read		:1;
-			uint8_t  BIOS_plat_read		:1;
-			unsigned			:3;
-			uint8_t  BIOS_descr_write	:1;
-			uint8_t  BIOS_BIOS_write	:1;
-			uint8_t  BIOS_ME_write		:1;
-			uint8_t  BIOS_GbE_write		:1;
-			uint8_t  BIOS_plat_write	:1;
-			unsigned			:3;
+			uint32_t BIOS_req_ID	:16,
+				 BIOS_descr_r	:1,
+				 BIOS_BIOS_r	:1,
+				 BIOS_ME_r	:1,
+				 BIOS_GbE_r	:1,
+				 BIOS_plat_r	:1,
+						:3,
+				 BIOS_descr_w	:1,
+				 BIOS_BIOS_w	:1,
+				 BIOS_ME_w	:1,
+				 BIOS_GbE_w	:1,
+				 BIOS_plat_w	:1,
+						:3;
 		};
 	};
 	union {
 		uint32_t FLMSTR2;
 		struct {
-			uint16_t ME_req_ID		:16;
-			uint8_t  ME_descr_read	:1;
-			uint8_t  ME_BIOS_read		:1;
-			uint8_t  ME_ME_read		:1;
-			uint8_t  ME_GbE_read		:1;
-			uint8_t  ME_plat_read		:1;
-			unsigned			:3;
-			uint8_t  ME_descr_write		:1;
-			uint8_t  ME_BIOS_write		:1;
-			uint8_t  ME_ME_write		:1;
-			uint8_t  ME_GbE_write		:1;
-			uint8_t  ME_plat_write		:1;
-			unsigned			:3;
+			uint32_t ME_req_ID	:16,
+				 ME_descr_r	:1,
+				 ME_BIOS_r	:1,
+				 ME_ME_r	:1,
+				 ME_GbE_r	:1,
+				 ME_plat_r	:1,
+						:3,
+				 ME_descr_w	:1,
+				 ME_BIOS_w	:1,
+				 ME_ME_w	:1,
+				 ME_GbE_w	:1,
+				 ME_plat_w	:1,
+						:3;
 		};
 	};
 	union {
 		uint32_t FLMSTR3;
 		struct {
-			uint16_t GbE_req_ID		:16;
-			uint8_t  GbE_descr_read		:1;
-			uint8_t  GbE_BIOS_read		:1;
-			uint8_t  GbE_ME_read		:1;
-			uint8_t  GbE_GbE_read		:1;
-			uint8_t  GbE_plat_read		:1;
-			unsigned			:3;
-			uint8_t  GbE_descr_write	:1;
-			uint8_t  GbE_BIOS_write		:1;
-			uint8_t  GbE_ME_write		:1;
-			uint8_t  GbE_GbE_write		:1;
-			uint8_t  GbE_plat_write		:1;
-			unsigned			:3;
+			uint32_t GbE_req_ID	:16,
+				 GbE_descr_r	:1,
+				 GbE_BIOS_r	:1,
+				 GbE_ME_r	:1,
+				 GbE_GbE_r	:1,
+				 GbE_plat_r	:1,
+						:3,
+				 GbE_descr_w	:1,
+				 GbE_BIOS_w	:1,
+				 GbE_ME_w	:1,
+				 GbE_GbE_w	:1,
+				 GbE_plat_w	:1,
+						:3;
 		};
 	};
 };
 
-#ifdef ICH_DESCRIPTORS_FROM_MMAP_DUMP
-struct flash_strap {
-	union {
-		struct {
-			union {
-				uint32_t STRP0;
-				struct {
-					uint8_t  ME_DISABLE		:1;
-					unsigned			:6;
-					uint8_t  TCOMODE		:1;
-					uint8_t  ASD			:7;
-					uint8_t  BMCMODE		:1;
-					unsigned			:3;
-					uint8_t  GLAN_PCIE_SEL		:1;
-					uint8_t  GPIO12_SEL		:2;
-					uint8_t  SPICS1_LANPHYPC_SEL	:1;
-					uint8_t  MESM2SEL		:1;
-					unsigned			:1;
-					uint8_t  ASD2			:7;
-				};
-			};
-			union {
-				uint32_t STRP1;
-				struct {
-					uint8_t  ME_disable_B		:1;
-					unsigned			:31;
-				};
-			};
-		}ich8;
-		union {
-			uint32_t STRPs[15];
-			struct {
-				union {
-					uint32_t STRP0;
-					struct {
-						unsigned			:1;
-						uint8_t  cs_ss2			:1;
-						unsigned			:5;
-						uint8_t  SMB_EN			:1;
-						uint8_t  SML0_EN		:1;
-						uint8_t  SML1_EN		:1;
-						uint8_t  SML1FRQ		:2;
-						uint8_t  SMB0FRQ		:2;
-						uint8_t  SML0FRQ		:2;
-						unsigned			:4;
-						uint8_t  LANPHYPC_GP12_SEL	:1;
-						uint8_t  cs_ss1			:1;
-						unsigned			:2;
-						uint8_t  DMI_REQID_DIS		:1;
-						unsigned			:4;
-						uint8_t  BBBS			:2;
-						unsigned			:1;
-					};
-				};
-				union {
-					uint32_t STRP1;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP2;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP3;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP4;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP5;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP6;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP7;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP8;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP9;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP10;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP11;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP12;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP13;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP14;
-					struct {
-					};
-				};
-				union {
-					uint32_t STRP15;
-					struct {
-					};
-				};
-			};
-		}ibex;
-	};
+struct ich_descriptors {
+	struct ich_desc_content content;
+	struct ich_desc_component component;
+	struct ich_desc_region region;
+	struct ich_desc_master master;
 };
 
-struct flash_upper_map {
-	union {
-		uint32_t FLUMAP1;
-		struct {
-			uint8_t  VTBA	:8;
-			uint8_t  VTL	:8;
-			unsigned	:16;
-		};
-	};
-	struct {
-		union {
-			uint32_t JID;
-			struct {
-				uint8_t vid	:8;
-				uint8_t cid0	:8;
-				uint8_t cid1	:8;
-				unsigned	:8;
-			};
-		};
-		union {
-			uint32_t VSCC;
-			struct {
-				uint8_t  ubes	:2;
-				uint8_t  uwg	:1;
-				uint8_t  uwsr	:1;
-				uint8_t  uwews	:1;
-				unsigned	:3;
-				uint8_t  ueo	:8;
-				uint8_t  lbes	:2;
-				uint8_t  lwg	:1;
-				uint8_t  lwsr	:1;
-				uint8_t  lwews	:1;
-				unsigned	:3;
-				uint16_t leo	:16;
-			};
-		};
-	}vscc_table[128];
-};
-#endif // ICH_DESCRIPTORS_FROM_MMAP_DUMP
+void prettyprint_ich_descriptors(enum ich_chipset, const struct ich_descriptors *desc);
 
-void prettyprint_ich_descriptors(enum chipset);
+void prettyprint_ich_descriptor_content(const struct ich_desc_content *content);
+void prettyprint_ich_descriptor_component(const struct ich_descriptors *desc);
+void prettyprint_ich_descriptor_region(const struct ich_descriptors *desc);
+void prettyprint_ich_descriptor_master(const struct ich_desc_master *master);
 
-void prettyprint_ich_descriptor_map(void);
-void prettyprint_ich_descriptor_component(void);
-void prettyprint_ich_descriptor_region(void);
-void prettyprint_ich_descriptor_master(void);
+int read_ich_descriptors_via_fdo(void *spibar, struct ich_descriptors *desc);
 
-int getFCBA_component_density(uint8_t comp);
-
-#ifdef ICH_DESCRIPTORS_FROM_MMAP_DUMP
-
-void prettyprint_ich_descriptor_upper_map(void);
-void prettyprint_ich_descriptor_straps(enum chipset cs);
-int read_ich_descriptors_from_dump(uint32_t *dump, enum chipset cs);
-
-#else // ICH_DESCRIPTORS_FROM_MMAP_DUMP
-
-void read_ich_descriptors_from_fdo(void *spibar);
-
-#endif // ICH_DESCRIPTORS_FROM_MMAP_DUMP
-
-#endif // __ICH_DESCRIPTORS_H__
-#endif // defined(__i386__) || defined(__x86_64__)
+#endif /* __ICH_DESCRIPTORS_H__ */
+#endif /* defined(__i386__) || defined(__x86_64__) */
