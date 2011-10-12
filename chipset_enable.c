@@ -257,6 +257,7 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * just treating it as 8 bit wide seems to work fine in practice.
 	 */
 	old = pci_read_byte(dev, bios_cntl);
+	new = old;
 
 	msg_pdbg("\nBIOS Lock Enable: %sabled, ",
 		     (old & (1 << 1)) ? "en" : "dis");
@@ -272,9 +273,13 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * In earlier chipsets this bit is reserved. */
 	if (old & (1 << 5)) {
 		msg_pinfo("WARNING: BIOS region SMM protection is enabled!\n");
+		msg_pdbg("Trying to clear BIOS region SMM protection.\n");
+		new &= ~(1 << 5);
 	}
 
-	new = old | 1;
+	new |= (1 << 0);
+
+	/* Only write the register if it's necessary */
 	if (new == old)
 		return 0;
 
