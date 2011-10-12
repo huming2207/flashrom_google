@@ -270,7 +270,8 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * "Bit 5: SMM BIOS Write Protect Disable (SMM_BWP)
 	 * 1 = BIOS region SMM protection is enabled.
 	 * The BIOS Region is not writable unless all processors are in SMM."
-	 * In earlier chipsets this bit is reserved. */
+	 * In earlier chipsets this bit is reserved.
+	 */
 	if (old & (1 << 5)) {
 		msg_pinfo("WARNING: BIOS region SMM protection is enabled!\n");
 		msg_pdbg("Trying to clear BIOS region SMM protection.\n");
