@@ -140,6 +140,7 @@ int cli_classic(int argc, char *argv[])
 	};
 
 	char *filename = NULL;
+	char *diff_file = NULL;
 
 	char *tempstr = NULL;
 	char *pparam = NULL;
@@ -437,5 +438,5 @@ int cli_classic(int argc, char *argv[])
 	 * Give the chip time to settle.
 	 */
 	programmer_delay(100000);
-	return doit(fill_flash, force, filename, read_it, write_it, erase_it, verify_it);
+	return doit(fill_flash, force, filename, read_it, write_it, erase_it, verify_it, diff_file);
 }

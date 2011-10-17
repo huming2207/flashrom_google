@@ -129,6 +129,7 @@ void cli_mfg_usage(const char *name)
 	}
 
 	printf("Long-options:\n");
+	printf("   --diff <file>                     diff from file instead of ROM\n");
 	printf("   --get-size                        get chip size (bytes)\n");
 	printf("   --wp-status                       show write protect status\n");
 	printf("   --wp-range <start> <length>       set write protect range\n");
@@ -155,6 +156,7 @@ void cli_mfg_abort_usage(const char *name)
 enum LONGOPT_RETURN_VALUES {
 	/* start after ASCII chars */
 	LONGOPT_GET_SIZE = 256,
+	LONGOPT_DIFF,
 	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
@@ -182,6 +184,7 @@ int cli_mfg(int argc, char *argv[])
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
 	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
 	int dont_verify_it = 0, list_supported = 0;
+	int diff = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -208,6 +211,7 @@ int cli_mfg(int argc, char *argv[])
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'R'},
 		{"get-size", 0, 0, LONGOPT_GET_SIZE},
+		{"diff", 1, 0, LONGOPT_DIFF},
 		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
@@ -220,6 +224,7 @@ int cli_mfg(int argc, char *argv[])
 	};
 
 	char *filename = NULL;
+	char *diff_file = NULL;
 
 	char *tempstr = NULL;
 	char *pparam = NULL;
@@ -416,6 +421,10 @@ int cli_mfg(int argc, char *argv[])
 			break;
 		case LONGOPT_WP_DISABLE:
 			set_wp_disable = 1;
+			break;
+		case LONGOPT_DIFF:
+			diff = 1;
+			diff_file = strdup(optarg);
 			break;
 		case LONGOPT_IGNORE_FMAP:
 			set_ignore_fmap = 1;
@@ -647,7 +656,8 @@ int cli_mfg(int argc, char *argv[])
 
 	if (read_it || write_it || erase_it || verify_it) {
 		rc = doit(fill_flash, force, filename,
-		          read_it, write_it, erase_it, verify_it);
+		          read_it, write_it, erase_it, verify_it,
+		          diff_file);
 	}
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");

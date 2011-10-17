@@ -1922,7 +1922,7 @@ int chip_safety_check(struct flashchip *flash, int force, int read_it, int write
  * but right now it allows us to split off the CLI code.
  * Besides that, the function itself is a textbook example of abysmal code flow.
  */
-int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it)
+int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it, const char *diff_file)
 {
 	uint8_t *oldcontents;
 	uint8_t *newcontents;
@@ -1997,17 +1997,26 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 #endif
 	}
 
-	/* Read the whole chip to be able to check whether regions need to be
-	 * erased and to give better diagnostics in case write fails.
+	/* Obtain a reference image so that we can check whether regions need
+	 * to be erased and to give better diagnostics in case write fails.
 	 * The alternative would be to read only the regions which are to be
 	 * preserved, but in that case we might perform unneeded erase which
 	 * takes time as well.
 	 */
-	msg_cdbg("Reading old flash chip contents... ");
-	if (flash->read(flash, oldcontents, 0, size)) {
-		ret = 1;
-		msg_cdbg("FAILED.\n");
-		goto out;
+	if (diff_file) {
+		msg_cdbg("Reading old contents from file... ");
+		if (read_buf_from_file(oldcontents, size, diff_file)) {
+			ret = 1;
+			msg_cdbg("FAILED.\n");
+			goto out;
+		}
+	} else {
+		msg_cdbg("Reading old contents from flash chip... ");
+		if (flash->read(flash, oldcontents, 0, size)) {
+			ret = 1;
+			msg_cdbg("FAILED.\n");
+			goto out;
+		}
 	}
 	msg_cdbg("done.\n");
 
