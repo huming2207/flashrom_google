@@ -111,19 +111,15 @@ static enum programmer default_programmer =
 
 void cli_mfg_usage(const char *name)
 {
-	const char *pname;
-	int pnamelen;
-	int remaining = 0;
-	enum programmer p;
 
-	printf("Usage: %s [-n] [-V] [-f] [-h|-R|-L|"
+	printf("Usage: flashrom [-n] [-V] [-f] [-h|-R|-L|"
 #if CONFIG_PRINT_WIKI == 1
 	         "-z|"
 #endif
-	         "-E|-r <file>|-w <file>|-v <file>] [-i <image>[:<file>]]\n"
-	       "       [-c <chipname>] [-m [<vendor>:]<part>] [-l <file>]\n"
-	       "       [-p <programmername>[:<parameters>]]\n",
-	       name);
+	         "-E|-r <file>|-w <file>|-v <file>]\n"
+	       "       [-i <image>[:<file>]] [-c <chipname>] "
+	               "[-m [<vendor>:]<part>] [-l <file>]\n"
+	       "       [-p <programmer>[:<parameters>]]\n\n");
 
 	printf("Please note that the command line interface for flashrom has "
 	         "changed between\n"
@@ -152,61 +148,36 @@ void cli_mfg_usage(const char *name)
 	       "   -f | --force                      force specific operations "
 	         "(see man page)\n"
 	       "   -n | --noverify                   don't auto-verify\n"
-	       "        --fast-verify                only verify -i part\n"
 	       "   -l | --layout <file>              read ROM layout from "
 	         "<file>\n"
 	       "   -i | --image <name>[:<file>]      only access image <name> "
-	         "from flash layout.\n"
-	       "                                     the content are included "
-	         "in <file> if specified.\n"
+	         "from flash layout\n"
 	       "   -L | --list-supported             print supported devices\n"
 #if CONFIG_PRINT_WIKI == 1
 	       "   -z | --list-supported-wiki        print supported devices "
 	         "in wiki syntax\n"
 #endif
-	       "   -p | --programmer <name>[:<param>] specify the programmer "
- 	         "device\n"
 	       "   -b | --broken-timers              assume system timers are "
 	         "broken\n"
-	       "   --ignore-fmap                     don't try to parse the "
-	         "fmap structure on the flash\n"
-		 );
-
-	for (p = 0; p < PROGRAMMER_INVALID; p++) {
-		pname = programmer_table[p].name;
-		pnamelen = strlen(pname);
-		if (remaining - pnamelen - 2 < 0) {
-			printf("\n                                     ");
-			remaining = 43;
-		} else {
-			printf(" ");
-			remaining--;
-		}
-		if (p == 0) {
-			printf("(");
-			remaining--;
-		}
-		printf("%s", pname);
-		remaining -= pnamelen;
-		if (p < PROGRAMMER_INVALID - 1) {
-			printf(",");
-			remaining--;
-		} else {
-			printf(")\n");
-		}
-	}
-
-	printf("Long-options:\n");
-	printf("   --diff <file>                     diff from file instead of ROM\n");
-	printf("   --flash-name                      flash vendor and device name\n");
-	printf("   --get-size                        get chip size (bytes)\n");
-	printf("   --wp-status                       show write protect status\n");
-	printf("   --wp-range <start> <length>       set write protect range\n");
-	printf("   --wp-enable                       enable write protection\n");
-	printf("   --wp-disable                      disable write protection\n");
-	printf("   --wp-list                         list write protection ranges\n");
+	       "   -p | --programmer <name>[:<param>] specify the programmer "
+	         "device\n"
+	);
 
 	list_programmers_linebreak(37, 80, 1);
+
+	printf("Long-options:\n"
+	       "   --diff <file>                     diff from file instead of ROM\n"
+	       "   --fast-verify                     only verify -i part\n"
+	       "   --flash-name                      flash vendor and device name\n"
+	       "   --get-size                        get chip size (bytes)\n"
+	       "   --ignore-fmap                     ignore fmap structure\n"
+	       "   --wp-disable                      disable write protection\n"
+	       "   --wp-enable                       enable write protection\n"
+	       "   --wp-list                         list write protection ranges\n"
+	       "   --wp-range <start> <length>       set write protect range\n"
+	       "   --wp-status                       show write protect status\n"
+	       );
+
 	printf("\nYou can specify one of -h, -R, -L, "
 #if CONFIG_PRINT_WIKI == 1
 	         "-z, "
