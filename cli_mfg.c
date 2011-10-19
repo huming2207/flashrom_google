@@ -84,6 +84,7 @@ void cli_mfg_usage(const char *name)
 	       "   -f | --force                      force specific operations "
 	         "(see man page)\n"
 	       "   -n | --noverify                   don't auto-verify\n"
+	       "        --fast-verify                only verify -i part\n"
 	       "   -l | --layout <file>              read ROM layout from "
 	         "<file>\n"
 	       "   -i | --image <name>[:<file>]      only access image <name> "
