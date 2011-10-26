@@ -1238,7 +1238,7 @@ static int ich_hwseq_send_command(unsigned int writecnt,
 				      unsigned char *readarr)
 {
 	msg_pdbg("skipped. Intel Hardware Sequencing does not support sending "
-		 "arbitrary commands.");
+		 "arbitrary commands.\n");
 	return -1;
 }
 
@@ -1669,7 +1669,22 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			prettyprint_ich_descriptors(CHIPSET_UNKNOWN);
 		}
 
-		if (ichspi_lock || fdbar.NC != 0)
+		/* FIXME: original code uses ichspi_lock to decide whether
+		 *        using ich_hwseq or not (if locked, go hwseq).
+		 *        But this is not exactly true. The lock-down doesn't
+		 *        mean we HAVE to use hwseq. So, removed the ichspi_lock
+		 *        from the if expression.
+		 *
+		 *        Note that the issue of hardware sequencing is the
+		 *        lack of support of flash status read so that breaks
+		 *        the --wp-status command.
+		 *        See chrome-os-partner:6594 for more details.
+		 *
+		 * TODO: implement an argopt to choose between software and
+		 *       hardware sequencing. By default, go software.
+		 *
+		 */
+		if (fdbar.NC != 0)
 			register_spi_programmer(&spi_programmer_ich_hwseq);
 		else {
 			register_spi_programmer(&spi_programmer_ich9);
