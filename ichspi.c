@@ -1546,6 +1546,11 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	/* Assign Virtual Address */
 	ich_spibar = rcrb + spibar_offset;
 
+	if (target_bus != CHIP_BUSTYPE_SPI) {
+		msg_pdbg("Not targeting SPI, ignore the SPI init.\n");
+		return 0;
+	}
+
 	switch (ich_generation) {
 	case 7:
 		msg_pdbg("0x00: 0x%04x     (SPIS)\n",
