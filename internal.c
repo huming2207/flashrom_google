@@ -298,6 +298,8 @@ int internal_init(void)
 			         programmer_table[programmer].name);
 			return 1;
 		}
+		msg_pdbg("get_target_bus_from_chipset() returns 0x%x.\n",
+		         target_bus);
 	}
 
 	/* In case Super I/O probing would cause pretty explosions. */

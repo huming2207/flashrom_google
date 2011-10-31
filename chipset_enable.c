@@ -1290,25 +1290,50 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 		/* Map RCBA to virtual memory */
 		rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
-		/* Set BBS (Boot BIOS Straps) field of GCS register. */
-		gcs = mmio_readl(rcrb + 0x3410);
-		switch ((gcs & 0xc00) >> 10) {
-		case 0x1:
-			*bus = CHIP_BUSTYPE_SPI;
-			break;
-		case 0x3:
-			*bus = CHIP_BUSTYPE_LPC;
-			break;
-		default:
-			*bus = CHIP_BUSTYPE_UNKNOWN;
-			ret = -2;  /* unknown bus type. */
-			break;
+		if (!strcmp(chipset_enables[i].vendor_name, "Intel") &&
+		    !strcmp(chipset_enables[i].device_name, "HM65")) {
+			/* ICH 10 BBS (Boot BIOS Straps) field of GCS register.
+			 *   00b: LPC.
+			 *   01b: reserved
+			 *   10b: PCI
+			 *   11b: SPI
+			 */
+			gcs = mmio_readl(rcrb + 0x3410);
+			switch ((gcs & 0xc00) >> 10) {
+			case 0x0:
+				*bus = CHIP_BUSTYPE_LPC;
+				break;
+			case 0x3:
+				*bus = CHIP_BUSTYPE_SPI;
+				break;
+			default:
+				*bus = CHIP_BUSTYPE_UNKNOWN;
+				ret = -2;  /* unknown bus type. */
+				break;
+			}
+			ret = 0;
+		} else {
+			/* Older BBS (Boot BIOS Straps) field of GCS register.
+			 *   00: reserved
+			 *   01: SPI
+			 *   02: PCI
+			 *   03: LPC
+			 */
+			gcs = mmio_readl(rcrb + 0x3410);
+			switch ((gcs & 0xc00) >> 10) {
+			case 0x1:
+				*bus = CHIP_BUSTYPE_SPI;
+				break;
+			case 0x3:
+				*bus = CHIP_BUSTYPE_LPC;
+				break;
+			default:
+				*bus = CHIP_BUSTYPE_UNKNOWN;
+				ret = -2;  /* unknown bus type. */
+				break;
+			}
+			ret = 0;
 		}
-
-		ret = 0;
-		break;
-		/* For unexpected second device, the chipset_flash_enable()
-		   has shown the warning message. */
 	}
 
 	return ret;
