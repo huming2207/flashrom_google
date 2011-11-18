@@ -967,6 +967,9 @@ int wpce775x_spi_common_init(void)
 	   for reading. */
 	if (EnterFlashUpdate()) return 1;
 
+	/* Add FWH | LPC to list of buses supported if they are not
+	 * both there already. */
+	buses_supported |= BUS_FWH | BUS_LPC;
 	register_spi_programmer(&spi_programmer_wpce775x);
 	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
 	return 0;
@@ -975,21 +978,10 @@ int wpce775x_spi_common_init(void)
 /* Called by internal_init() */
 int wpce775x_probe_spi_flash(const char *name)
 {
-	int ret;
-
 	if (!(buses_supported & BUS_FWH)) {
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
 	}
-	ret = wpce775x_spi_common_init();
-	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
-	if (!ret) {
-		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
-		          buses_supported);
-		if (buses_supported & BUS_FWH)
-			msg_pdbg("Overriding chipset SPI with WPCE775x FWH|SPI.\n");
-		buses_supported |= BUS_FWH | BUS_SPI;
-	}
-	return ret;
+	return wpce775x_spi_common_init();
 }
 #endif

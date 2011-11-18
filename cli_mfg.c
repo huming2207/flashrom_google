@@ -198,6 +198,7 @@ void cli_mfg_usage(const char *name)
 
 	printf("Long-options:\n");
 	printf("   --diff <file>                     diff from file instead of ROM\n");
+	printf("   --flash-name                      flash vendor and device name\n");
 	printf("   --get-size                        get chip size (bytes)\n");
 	printf("   --wp-status                       show write protect status\n");
 	printf("   --wp-range <start> <length>       set write protect range\n");
@@ -225,6 +226,7 @@ enum LONGOPT_RETURN_VALUES {
 	/* start after ASCII chars */
 	LONGOPT_GET_SIZE = 256,
 	LONGOPT_DIFF,
+	LONGOPT_FLASH_NAME,
 	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
@@ -250,7 +252,7 @@ int main(int argc, char *argv[])
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
+	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
 	int dont_verify_it = 0, list_supported = 0;
 	int diff = 0;
 #if CONFIG_PRINT_WIKI == 1
@@ -280,6 +282,7 @@ int main(int argc, char *argv[])
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'R'},
 		{"get-size", 0, 0, LONGOPT_GET_SIZE},
+		{"flash-name", 0, 0, LONGOPT_FLASH_NAME},
 		{"diff", 1, 0, LONGOPT_DIFF},
 		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
@@ -499,6 +502,9 @@ int main(int argc, char *argv[])
 		case LONGOPT_WP_DISABLE:
 			set_wp_disable = 1;
 			break;
+		case LONGOPT_FLASH_NAME:
+			flash_name = 1;
+			break;
 		case LONGOPT_DIFF:
 			diff = 1;
 			diff_file = strdup(optarg);
@@ -642,7 +648,7 @@ int main(int argc, char *argv[])
 		goto cli_mfg_silent_exit;
 	}
 
-	if (!(read_it | write_it | verify_it | erase_it |
+	if (!(read_it | write_it | verify_it | erase_it | flash_name |
 	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
 	      wp_status | wp_list)) {
 		printf("No operations were specified.\n");
@@ -672,6 +678,17 @@ int main(int argc, char *argv[])
 	if (set_wp_disable) {
 		if (fill_flash->wp && fill_flash->wp->disable)
 			rc |= fill_flash->wp->disable(fill_flash);
+	}
+
+	if (flash_name) {
+		if (fill_flash->vendor && fill_flash->name) {
+			printf("vendor=\"%s\" name=\"%s\"\n",
+			       fill_flash->vendor, fill_flash->name);
+			goto cli_mfg_silent_exit;
+		} else {
+			rc = -1;
+			goto cli_mfg_silent_exit;
+		}
 	}
 
 	/* Note: set_wp_range must happen before set_wp_enable */

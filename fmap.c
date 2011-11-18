@@ -177,7 +177,7 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 
 		msg_gdbg("using brute force method to find fmap\n");
 		tmp = flash->read(flash, image, 0, flash->total_size * 1024);
-		if (!ignore_error(tmp)) {
+		if (tmp && !ignore_error(tmp)) {
 			msg_gdbg("failed to read flash\n");
 			return -1;
 		}

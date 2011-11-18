@@ -338,7 +338,9 @@ int it85xx_spi_init(struct superio s)
 		 * If we decide to disable FWH for this region, we should print
 		 * a debug message about it.
 		 */
-		/* Set this as SPI controller. */
+		/* Set this as SPI controller and add FWH | LPC to
+		 * supported buses. */
+		buses_supported |= BUS_LPC | BUS_FWH;
 		register_spi_programmer(&spi_programmer_it85xx);
 	}
 	return ret;
