@@ -139,19 +139,24 @@ static int mec1308_get_sio_index(uint16_t *port)
 	for (i = 0; i < ARRAY_SIZE(ports); i++) {
 		uint8_t tmp8;
 
-		mec1308_sio_enter(ports[i]);
-
 		/*
-		 * If entry is successful, the data port will read back 0x00
-		 * and the index port will read back the last value written to
-		 * it (the key itself).
+		 * Only after config mode has been successfully entered will the
+		 * index port will read back the last value written to it.
+		 * So we will attempt to enter config mode, set the index
+		 * register, and see if the index register retains the value.
+		 *
+		 * Note: It seems to work "best" when using a device ID register
+		 * as the index and reading from the data port before reading
+		 * the index port.
 		 */
-		tmp8 = INB(ports[i]);
-		if (tmp8 != MEC1308_SIO_ENTRY_KEY)
-			continue;
+		mec1308_sio_enter(ports[i]);
+		OUTB(MEC1308_DEVICE_ID_REG, ports[i]);
 		tmp8 = INB(ports[i] + 1);
-		if (tmp8 != 0x00)
+		tmp8 = INB(ports[i]);
+		if ((tmp8 != MEC1308_DEVICE_ID_REG)) {
+			in_sio_cfgmode = 0;
 			continue;
+		}
 
 		port_internal = ports[i];
 		port_found = 1;
