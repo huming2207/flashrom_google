@@ -1257,7 +1257,7 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x1c44, OK, "Intel", "Z68",		enable_flash_pch6},
 	{0x8086, 0x1c46, OK, "Intel", "P67",		enable_flash_pch6},
 	{0x8086, 0x1c47, NT, "Intel", "UM67",		enable_flash_pch6},
-	{0x8086, 0x1c49, NT, "Intel", "HM65",		enable_flash_pch6},
+	{0x8086, 0x1c49, OK, "Intel", "HM65",		enable_flash_pch6},
 	{0x8086, 0x1c4a, OK, "Intel", "H67",		enable_flash_pch6},
 	{0x8086, 0x1c4b, NT, "Intel", "HM67",		enable_flash_pch6},
 	{0x8086, 0x1c4c, NT, "Intel", "Q65",		enable_flash_pch6},
@@ -1365,7 +1365,7 @@ int chipset_flash_enable(void)
 		msg_pdbg(" with PCI ID %04x:%04x",
 			 chipset_enables[i].vendor_id,
 			 chipset_enables[i].device_id);
-		msg_pinfo(". ");
+		msg_pdbg(". ");
 
 		if (chipset_enables[i].status == NT) {
 			msg_pinfo("\nThis chipset is marked as untested. If "
@@ -1374,7 +1374,7 @@ int chipset_flash_enable(void)
 				  "flashrom@flashrom.org including a\nverbose "
 				  "(-V) log. Thank you!\n");
 		}
-		msg_pinfo("Enabling flash write... ");
+		msg_pdbg("Enabling flash write... ");
 		ret = chipset_enables[i].doit(dev,
 					      chipset_enables[i].device_name);
 		if (ret == NOT_DONE_YET) {

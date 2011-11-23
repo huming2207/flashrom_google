@@ -1425,7 +1425,7 @@ int erase_and_write_flash(struct flashchip *flash, uint8_t *oldcontents,
 			 */
 			break;
 		}
-		msg_cinfo("done. ");
+		msg_cdbg("done. ");
 	}
 	/* Free the scratchpad. */
 	free(curcontents);
@@ -1836,7 +1836,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			goto out;
 		}
 	}
-	msg_cinfo("done.\n");
+	msg_cdbg("done.\n");
 
 	// This should be moved into each flash part's code to do it
 	// cleanly. This does the job.

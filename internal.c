@@ -258,6 +258,7 @@ int internal_init(void)
 		} else if (!strcasecmp(arg,"spi")) {
 			target_bus = BUS_SPI;
 		} else {
+			msg_perr("Unsupported bus: %s\n", arg);
 			free(arg);
 			return 1;
 		}
@@ -370,7 +371,7 @@ int internal_init(void)
 	}
 
 #if __FLASHROM_LITTLE_ENDIAN__
-#if defined(__i386__) || defined(__x86_64__) || defined (__mips__)
+#if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
 	/* try to enable it. Failure IS an option, since not all motherboards
 	 * really need this to be done, etc., etc.
 	 */
@@ -380,8 +381,8 @@ int internal_init(void)
 			 "will most likely fail.\n");
 	} else if (ret == ERROR_FATAL)
 		return ret;
-#endif
 
+	register_par_programmer(&par_programmer_internal, internal_buses_supported);
 #if defined(__i386__) || defined(__x86_64__)
 	/* Probe unconditionally for IT87* LPC->SPI translation and for
 	 * IT87* Parallel write enable.
@@ -404,8 +405,6 @@ int internal_init(void)
 	 * The error code might have been a warning only.
 	 * Besides that, we don't check the board enable return code either.
 	 */
-#if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
-	register_par_programmer(&par_programmer_internal, internal_buses_supported);
 	return 0;
 #else
 	msg_perr("Your platform is not supported yet for the internal "

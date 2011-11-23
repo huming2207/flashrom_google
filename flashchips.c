@@ -9370,27 +9370,7 @@ const struct flashchip flashchips[] = {
 		.read		= read_memmapped,
 		.voltage	= {3000, 3600}, /* Also has 12V fast program */
 	},
-#if defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
-	{
-		.vendor		= "Intel",
-		.name		= "Hardware Sequencing",
-		.bustype	= BUS_SPI,
-		.manufacture_id	= INTEL_ID,
-		.model_id	= INTEL_HWSEQ,
-		.total_size	= 0,
-		.page_size	= 256,
-		.tested		= TEST_OK_PREW,
-		.probe		= ich_hwseq_probe,
-		.block_erasers	=
-		{
-			{ /* erase blocks will be set by the probing function */
-				.block_erase = ich_hwseq_block_erase,
-			}
-		},
-		.write		= ich_hwseq_write_256,
-		.read		= ich_hwseq_read,
-	},
-#endif // defined(CONFIG_INTERNAL) && (defined(__i386__) || defined(__x86_64__))
+
 	{
 		.vendor		= "Programmer",
 		.name		= "Opaque flash chip",
