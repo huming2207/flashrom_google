@@ -377,7 +377,7 @@ int internal_init(void)
 	 */
 	ret = chipset_flash_enable();
 	if (ret == -2) {
-		msg_perr("WARNING: No chipset found. Flash detection "
+		msg_pdbg("WARNING: No chipset found. Flash detection "
 			 "will most likely fail.\n");
 	} else if (ret == ERROR_FATAL)
 		return ret;
