@@ -620,26 +620,13 @@ int init_superio_ite(void);
 int mcp6x_spi_init(int want_spi);
 
 /* mec1308.c */
-struct superio probe_superio_mec1308(void);
 int mec1308_probe_spi_flash(const char *name);
-int mec1308_spi_read(struct flashchip *flash,
-                     uint8_t * buf, int start, int len);
-int mec1308_spi_write_256(struct flashchip *flash,
-                          uint8_t *buf, int start, int len);
-int mec1308_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-                             const unsigned char *writearr,
-                             unsigned char *readarr);
 
 /* sb600spi.c */
 int sb600_probe_spi(struct pci_dev *dev);
 
 /* tegra2_spi.c */
 int tegra2_spi_init(void);
-int tegra2_spi_shutdown(void *);
-int tegra2_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-		      const unsigned char *writearr, unsigned char *readarr);
-int tegra2_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
-int tegra2_spi_write(struct flashchip *flash, uint8_t *buf, int start, int len);
 
 /* wbsio_spi.c */
 int wbsio_check_for_spi(void);
@@ -675,15 +662,7 @@ typedef int fdtype;
 #endif
 
 /* wpce775x.c */
-struct superio probe_superio_wpce775x(void);
 int wpce775x_probe_spi_flash(const char *name);
-int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf,
-                      unsigned int start, unsigned int len);
-int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf,
-                           unsigned int start, unsigned int len);
-int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-			      const unsigned char *writearr,
-			      unsigned char *readarr);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);
