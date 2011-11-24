@@ -291,16 +291,17 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 int handle_partial_read(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len),
-                 int write_to_file);
+    int (*read) (struct flashchip *flash, uint8_t *buf,
+                 unsigned int start, unsigned int len),
+    int write_to_file);
     /* RETURN: the number of partitions that have beenpartial read.
     *         ==0 means no partition is specified.
     *         < 0 means writing file error. */
 int handle_partial_verify(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*verify) (struct flashchip *flash, uint8_t *buf, int start, int len,
-                   const char* message));
+    int (*verify) (struct flashchip *flash, uint8_t *buf, unsigned int start,
+                   unsigned int len, const char* message));
     /* RETURN: ==0 means all identical.
                !=0 means buf and flash are different. */
 

@@ -709,7 +709,8 @@ wpce775x_nbyte_program_exit:
 	return ret;
 }
 
-int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len)
+int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf,
+                      unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {
 		initflash_cfg_setup(flash);
@@ -718,7 +719,8 @@ int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len
 	return spi_read_chunked(flash, buf, start, len, flash->page_size);
 }
 
-int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
+int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf,
+                           unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {
 		initflash_cfg_setup(flash);

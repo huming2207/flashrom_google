@@ -677,10 +677,10 @@ typedef int fdtype;
 /* wpce775x.c */
 struct superio probe_superio_wpce775x(void);
 int wpce775x_probe_spi_flash(const char *name);
-int wpce775x_spi_read(struct flashchip *flash,
-                      uint8_t * buf, int start, int len);
-int wpce775x_spi_write_256(struct flashchip *flash,
-                           uint8_t *buf, int start, int len);
+int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf,
+                      unsigned int start, unsigned int len);
+int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf,
+                           unsigned int start, unsigned int len);
 int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 			      const unsigned char *writearr,
 			      unsigned char *readarr);
