@@ -125,5 +125,6 @@
 #define SPI_INVALID_LENGTH	-4
 #define SPI_FLASHROM_BUG	-5
 #define SPI_PROGRAMMER_ERROR	-6
+#define SPI_ACCESS_DENIED	-7
 
 #endif		/* !__SPI_H__ */

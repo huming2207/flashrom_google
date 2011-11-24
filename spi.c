@@ -100,25 +100,35 @@ int default_spi_send_multicommand(struct spi_command *cmds)
 int default_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int max_data = spi_programmer->max_data_read;
+	int rc;
 	if (max_data == MAX_DATA_UNSPECIFIED) {
 		msg_perr("%s called, but SPI read chunk size not defined "
 			 "on this hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
-	return spi_read_chunked(flash, buf, start, len, max_data);
+	rc = spi_read_chunked(flash, buf, start, len, max_data);
+	/* translate SPI-specific access denied error to generic error */
+	if (rc == SPI_ACCESS_DENIED)
+		rc = ACCESS_DENIED;
+	return rc;
 }
 
 int default_spi_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int max_data = spi_programmer->max_data_write;
+	int rc;
 	if (max_data == MAX_DATA_UNSPECIFIED) {
 		msg_perr("%s called, but SPI write chunk size not defined "
 			 "on this hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
-	return spi_write_chunked(flash, buf, start, len, max_data);
+	rc = spi_write_chunked(flash, buf, start, len, max_data);
+	/* translate SPI-specific access denied error to generic error */
+	if (rc == SPI_ACCESS_DENIED)
+		rc = ACCESS_DENIED;
+	return rc;
 }
 
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)

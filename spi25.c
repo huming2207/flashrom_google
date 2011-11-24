@@ -917,8 +917,10 @@ int spi_nbyte_program(unsigned int addr, uint8_t *bytes, unsigned int len)
 
 	result = spi_send_multicommand(cmds);
 	if (result) {
-		msg_cerr("%s failed during command execution at address 0x%x\n",
-			__func__, addr);
+		if (result != SPI_ACCESS_DENIED) {
+			msg_cerr("%s failed during command execution at address 0x%x\n",
+				__func__, addr);
+		}
 	}
 	return result;
 }
@@ -980,7 +982,7 @@ int spi_nbyte_read(unsigned int address, uint8_t *bytes, unsigned int len)
  */
 int spi_read_chunked(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize)
 {
-	int rc = 0;
+	int rc = 0, chunk_status = 0;
 	unsigned int i, j, starthere, lenhere, toread;
 	unsigned int page_size = flash->page_size;
 
@@ -1001,11 +1003,22 @@ int spi_read_chunked(struct flashchip *flash, uint8_t *buf, unsigned int start, 
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 		for (j = 0; j < lenhere; j += chunksize) {
 			toread = min(chunksize, lenhere - j);
-			rc = spi_nbyte_read(starthere + j, buf + starthere - start + j, toread);
-			if (rc)
-				break;
+			chunk_status = spi_nbyte_read(starthere + j, buf + starthere - start + j, toread);
+			if (chunk_status) {
+				if (ignore_error(chunk_status)) {
+					/* fill this chunk with 0xff bytes and
+					   let caller know about the error */
+					memset(buf + starthere - start + j, 0xff, toread);
+					rc = chunk_status;
+					chunk_status = 0;
+					continue;
+				} else {
+					rc = chunk_status;
+					break;
+				}
+			}
 		}
-		if (rc)
+		if (chunk_status)
 			break;
 	}
 

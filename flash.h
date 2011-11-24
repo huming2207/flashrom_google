@@ -245,11 +245,24 @@ int write_buf_to_file(unsigned char *buf, unsigned long size, const char *filena
 #define OK 0
 #define NT 1    /* Not tested */
 
+/* what to do in case of an error */
+enum error_action {
+	error_fail,	/* fail immediately */
+	error_ignore,	/* non-fatal error; continue */
+};
+
 /* Something happened that shouldn't happen, but we can go on. */
 #define ERROR_NONFATAL 0x100
 
 /* Something happened that shouldn't happen, we'll abort. */
 #define ERROR_FATAL -0xee
+
+/* Operation failed due to access restriction set in programmer or flash chip */
+#define ACCESS_DENIED -7
+extern enum error_action access_denied_action;
+
+/* convenience function for checking return codes */
+extern int ignore_error(int x);
 
 /* cli_output.c */
 /* Let gcc and clang check for correct printf-style format strings. */

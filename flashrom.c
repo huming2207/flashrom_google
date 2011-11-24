@@ -42,6 +42,24 @@ const char flashrom_version[] = FLASHROM_VERSION;
 char *chip_to_probe = NULL;
 int verbose = 0;
 
+/* error handling stuff */
+enum error_action access_denied_action = error_ignore;
+
+int ignore_error(int err) {
+	int rc = 0;
+
+	switch(err) {
+	case ACCESS_DENIED:
+		if (access_denied_action == error_ignore)
+			rc = 1;
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
 static enum programmer programmer = PROGRAMMER_INVALID;
 
 static char *programmer_param = NULL;
@@ -603,6 +621,7 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 	unsigned int i;
 	uint8_t *readbuf = malloc(len);
 	int ret = 0, failcount = 0;
+	unsigned int chunksize;
 
 	if (!len)
 		goto out_free;
@@ -626,23 +645,35 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 	if (!message)
 		message = "VERIFY";
 
-	ret = flash->read(flash, readbuf, start, len);
-	if (ret) {
-		msg_gerr("Verification impossible because read failed "
-			 "at 0x%x (len 0x%x)\n", start, len);
-		return ret;
+	chunksize = min(flash->page_size, len);
+	for (i = 0; i < len; i += chunksize) {
+		int tmp, j;
+
+		tmp = flash->read(flash, readbuf + i, start + i, chunksize);
+
+		if (tmp) {
+			ret = tmp;
+			if (ignore_error(tmp)) {
+				chunksize = min(flash->page_size, len - i);
+				continue;
+			} else {
+				goto out_free;
+			}
+		}
+
+		for (j = 0; j < chunksize; j++) {
+			if (cmpbuf[i + j] != readbuf[i + j]) {
+				/* Only print the first failure. */
+				if (!failcount++)
+					msg_cerr("%s FAILED at 0x%08x! "
+						 "Expected=0x%02x, Read=0x%02x,",
+						 message, start + i + j, cmpbuf[i + j],
+						 readbuf[j]);
+			}
+		}
+		chunksize = min(flash->page_size, len - i);
 	}
 
-	for (i = 0; i < len; i++) {
-		if (cmpbuf[i] != readbuf[i]) {
-			/* Only print the first failure. */
-			if (!failcount++)
-				msg_cerr("%s FAILED at 0x%08x! "
-					 "Expected=0x%02x, Read=0x%02x,",
-					 message, start + i, cmpbuf[i],
-					 readbuf[i]);
-		}
-	}
 	if (failcount) {
 		msg_cerr(" failed byte count from 0x%08x-0x%08x: 0x%x\n",
 			 start, start + len - 1, failcount);
@@ -1081,6 +1112,16 @@ int verify_flash(struct flashchip *flash, uint8_t *buf, int verify_it)
 		ret = verify_range(flash, buf, 0, total_size, NULL);
 	}
 
+	if (ret == ACCESS_DENIED) {
+		msg_gdbg("Could not fully verify due to access error, ");
+		if (access_denied_action == error_ignore) {
+			msg_gdbg("ignoring\n");
+			ret = 0;
+		} else {
+			msg_gdbg("aborting\n");
+		}
+	}
+
 	if (!ret)
 		msg_cinfo("VERIFIED.          \n");
 
@@ -1178,10 +1219,18 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 		goto out_free;
 	} else if (ret > 0) {
 		/* Partial read has been handled, pass the whole flash read. */
-	} else if (flash->read(flash, buf, 0, size)) {
-		msg_cerr("Read operation failed!\n");
-		ret = 1;
-		goto out_free;
+	} else {
+		int tmp = flash->read(flash, buf, 0, size);
+
+		if (!tmp) {
+			ret = tmp;
+		} else if (ignore_error(tmp)) {
+			ret = 0;
+		} else {
+			msg_cerr("Read operation failed!\n");
+			ret = 1;
+			goto out_free;
+		}
 	}
 
 	ret = write_buf_to_file(buf, size, filename);
@@ -1285,8 +1334,14 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 	if (need_erase(curcontents, newcontents, len, gran)) {
 		msg_cdbg("E");
 		ret = erasefn(flash, start, len);
-		if (ret)
+		if (ret) {
+			if (ret == ACCESS_DENIED)
+				msg_cdbg("D");
+			else
+				msg_cerr("ERASE FAILED!\n");
 			return ret;
+		}
+
 		if (check_erased_range(flash, start, len)) {
 			msg_cerr("ERASE FAILED!\n");
 			return -1;
@@ -1304,8 +1359,11 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 		/* Needs the partial write function signature. */
 		ret = flash->write(flash, newcontents + starthere,
 				   start + starthere, lenhere);
-		if (ret)
+		if (ret) {
+			if (ret == ACCESS_DENIED)
+				msg_cdbg("D");
 			return ret;
+		}
 		starthere += lenhere;
 		skip = 0;
 	}
@@ -1326,7 +1384,7 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 							unsigned int len)),
 			     void *param1, void *param2)
 {
-	int i, j;
+	int i, j, rc = 0;
 	unsigned int start = 0;
 	unsigned int len;
 	struct block_eraser eraser = flash->block_erasers[erasefunction];
@@ -1342,15 +1400,19 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 				msg_cdbg(", ");
 			msg_cdbg("0x%06x-0x%06x", start,
 				     start + len - 1);
-			if (do_something(flash, start, len, param1, param2,
-					 eraser.block_erase)) {
-				return 1;
+			rc = do_something(flash, start, len, param1, param2,
+			                  eraser.block_erase);
+			if (rc) {
+				if (ignore_error(rc))
+					rc = 0;
+				else
+					return rc;
 			}
 			start += len;
 		}
 	}
 	msg_cdbg("\n");
-	return 0;
+	return rc;
 }
 
 static int check_block_eraser(const struct flashchip *flash, int k, int log)
@@ -1832,11 +1894,18 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			goto out;
 		}
 	} else {
+		int tmp;
+
 		msg_cdbg("Reading old contents from flash chip... ");
-		if (flash->read(flash, oldcontents, 0, size)) {
-			ret = 1;
-			msg_cdbg("FAILED.\n");
-			goto out;
+		tmp = flash->read(flash, oldcontents, 0, size);
+		if (tmp) {
+			if (ignore_error(tmp)) {
+				msg_gdbg("ignoring access error.\n");
+			} else {
+				ret = 1;
+				msg_cdbg("FAILED.\n");
+				goto out;
+			}
 		}
 	}
 	msg_cdbg("done.\n");

@@ -989,6 +989,95 @@ static int run_opcode(OPCODE op, uint32_t offset,
 	}
 }
 
+#define DEFAULT_NUM_FD_REGIONS	5
+static int num_fd_regions;
+
+const char *const region_names[] = {
+	"Flash Descriptor", "BIOS", "Management Engine",
+	"Gigabit Ethernet", "Platform Data"
+};
+
+enum fd_access_level {
+	FD_REGION_LOCKED,
+	FD_REGION_READ_ONLY,
+	FD_REGION_WRITE_ONLY,
+	FD_REGION_READ_WRITE,
+};
+
+struct fd_region_permission {
+	enum fd_access_level level;
+	const char *name;
+} fd_region_permissions[] = {
+	/* order corresponds to FRAP bitfield */
+	{ FD_REGION_LOCKED, "locked" },
+	{ FD_REGION_READ_ONLY, "read-only" },
+	{ FD_REGION_WRITE_ONLY, "write-only" },
+	{ FD_REGION_READ_WRITE, "read-write" },
+};
+
+/* FIXME: Replace usage of access_names with the region_access struct */
+const char *const access_names[4] = {
+	"locked", "read-only", "write-only", "read-write"
+};
+
+struct fd_region {
+	const char *name;
+	struct fd_region_permission *permission;
+	uint32_t base;
+	uint32_t limit;
+} fd_regions[] = {
+	/* order corresponds to flash descriptor */
+	{ .name = "Flash Descriptor" },
+	{ .name = "BIOS" },
+	{ .name = "Management Engine" },
+	{ .name = "Gigabit Ethernet" },
+	{ .name = "Platform Data" },
+};
+
+static int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
+{
+	int i;
+	uint8_t type = opcode->spi_type;
+	int ret = 0;
+
+	/* check flash descriptor permissions (if present) */
+	for (i = 0; i < num_fd_regions; i++) {
+		const char *name = fd_regions[i].name;
+		enum fd_access_level level;
+
+		if ((addr + count - 1 < fd_regions[i].base) ||
+		    (addr > fd_regions[i].limit))
+			continue;
+
+		if (!fd_regions[i].permission) {
+			msg_perr("No permissions set for flash region %s\n",
+			          fd_regions[i].name);
+			break;
+		}
+
+		level = fd_regions[i].permission->level;
+
+		if (type == SPI_OPCODE_TYPE_READ_WITH_ADDRESS) {
+			if (level != FD_REGION_READ_ONLY &&
+			    level != FD_REGION_READ_WRITE) {
+				msg_pspew("%s: Cannot read address 0x%08x in "
+				          "region %s\n", __func__,addr,name);
+				ret = SPI_ACCESS_DENIED;
+			}
+		} else if (type == SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS) {
+			if (level != FD_REGION_WRITE_ONLY &&
+			    level != FD_REGION_READ_WRITE) {
+				msg_pspew("%s: Cannot write to address 0x%08x in"
+				          "region %s\n", __func__,addr,name);
+				ret = SPI_ACCESS_DENIED;
+			}
+		}
+		break;
+	}
+
+	return ret;
+}
+
 static int ich_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		    const unsigned char *writearr, unsigned char *readarr)
 {
@@ -1051,19 +1140,6 @@ static int ich_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		return SPI_INVALID_LENGTH;
 	}
 
-	/* if opcode-type requires an address */
-	if (opcode->spi_type == SPI_OPCODE_TYPE_READ_WITH_ADDRESS ||
-	    opcode->spi_type == SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS) {
-		addr = (writearr[1] << 16) |
-		    (writearr[2] << 8) | (writearr[3] << 0);
-		if (addr < ichspi_bbar) {
-			msg_perr("%s: Address 0x%06x below allowed "
-				 "range 0x%06x-0xffffff\n", __func__,
-				 addr, ichspi_bbar);
-			return SPI_INVALID_ADDRESS;
-		}
-	}
-
 	/* Translate read/write array/count.
 	 * The maximum data length is identical for the maximum read length and
 	 * for the maximum write length excluding opcode and address. Opcode and
@@ -1080,6 +1156,24 @@ static int ich_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	} else {
 		data = (uint8_t *) readarr;
 		count = readcnt;
+	}
+
+	/* if opcode-type requires an address */
+	if (opcode->spi_type == SPI_OPCODE_TYPE_READ_WITH_ADDRESS ||
+	    opcode->spi_type == SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS) {
+		addr = (writearr[1] << 16) |
+		    (writearr[2] << 8) | (writearr[3] << 0);
+		if (addr < ichspi_bbar) {
+			msg_perr("%s: Address 0x%06x below allowed "
+				 "range 0x%06x-0xffffff\n", __func__,
+				 addr, ichspi_bbar);
+			return SPI_INVALID_ADDRESS;
+		}
+		if (num_fd_regions > 0) {
+			result = check_fd_permissions(opcode, addr, count);
+			if (result)
+				return result;
+		}
 	}
 
 	result = run_opcode(*opcode, addr, count, data);
@@ -1427,32 +1521,25 @@ static int ich_spi_send_multicommand(struct spi_command *cmds)
 
 static void do_ich9_spi_frap(uint32_t frap, int i)
 {
-	static const char *const access_names[4] = {
-		"locked", "read-only", "write-only", "read-write"
-	};
-	static const char *const region_names[5] = {
-		"Flash Descriptor", "BIOS", "Management Engine",
-		"Gigabit Ethernet", "Platform Data"
-	};
-	uint32_t base, limit;
 	int rwperms = (((ICH_BRWA(frap) >> i) & 1) << 1) |
 		      (((ICH_BRRA(frap) >> i) & 1) << 0);
 	int offset = ICH9_REG_FREG0 + i * 4;
 	uint32_t freg = mmio_readl(ich_spibar + offset);
 
 	msg_pdbg("0x%02X: 0x%08x (FREG%i: %s)\n",
-		     offset, freg, i, region_names[i]);
+		     offset, freg, i, fd_regions[i].name);
 
-	base  = ICH_FREG_BASE(freg);
-	limit = ICH_FREG_LIMIT(freg);
-	if (base > limit) {
+	fd_regions[i].base  = ICH_FREG_BASE(freg);
+	fd_regions[i].limit = ICH_FREG_LIMIT(freg) | 0x0fff;
+	fd_regions[i].permission = &fd_region_permissions[rwperms];
+	if (fd_regions[i].base > fd_regions[i].limit) {
 		/* this FREG is disabled */
 		msg_pdbg("%s region is unused.\n", region_names[i]);
 		return;
 	}
 
-	msg_pdbg("0x%08x-0x%08x is %s\n", base, (limit | 0x0fff),
-		 access_names[rwperms]);
+	msg_pdbg("0x%08x-0x%08x is %s\n", fd_regions[i].base,
+	         fd_regions[i].limit, fd_regions[i].permission->name);
 }
 
 	/* In contrast to FRAP and the master section of the descriptor the bits
@@ -1466,9 +1553,6 @@ static void do_ich9_spi_frap(uint32_t frap, int i)
 
 static void prettyprint_ich9_reg_pr(int i)
 {
-	static const char *const access_names[4] = {
-		"locked", "read-only", "write-only", "read-write"
-	};
 	uint8_t off = ICH9_REG_PR0 + (i * 4);
 	uint32_t pr = mmio_readl(ich_spibar + off);
 	int rwperms = ICH_PR_PERMS(pr);
@@ -1654,6 +1738,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		ich_init_opcodes();
 
 		if (desc_valid) {
+			num_fd_regions = DEFAULT_NUM_FD_REGIONS;
 			tmp2 = mmio_readw(ich_spibar + ICH9_REG_HSFC);
 			msg_pdbg("0x06: 0x%04x (HSFC)\n", tmp2);
 			prettyprint_ich9_reg_hsfc(tmp2);
@@ -1671,15 +1756,15 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			msg_pdbg("BRRA 0x%02x\n", ICH_BRRA(tmp));
 
 			/* Decode and print FREGx and FRAP registers */
-			for (i = 0; i < 5; i++)
+			for (i = 0; i < num_fd_regions; i++)
 				do_ich9_spi_frap(tmp, i);
 		}
 
 		/* try to disable PR locks before printing them */
 		if (!ichspi_lock)
-			for (i = 0; i < 5; i++)
+			for (i = 0; i < num_fd_regions; i++)
 				ich9_set_pr(i, 0, 0);
-		for (i = 0; i < 5; i++)
+		for (i = 0; i < num_fd_regions; i++)
 			prettyprint_ich9_reg_pr(i);
 
 		tmp = mmio_readl(ich_spibar + ICH9_REG_SSFS);
