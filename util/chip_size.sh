@@ -16,12 +16,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
-
+#
 #TODO: Compare size reported by JEDEC ID (opcode 9fh)
+
+LOGFILE="${0}.log"
+
 REPORTED_SIZE=$(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null | tail -n 1)
 ACTUAL_SIZE=$(stat --printf="%s\n" ${BACKUP})
-if [ ${REPORTED_SIZE} -ne ${ACTUAL_SIZE} ]; then
+echo -n "$0: ${REPORTED_SIZE} ?= ${ACTUAL_SIZE} ... " >> ${LOGFILE}
+if [ "$REPORTED_SIZE" != "$ACTUAL_SIZE" ]; then
+	echo "no." >> ${LOGFILE}
 	return ${EXIT_FAILURE}
+else
+	echo "yes." >> ${LOGFILE}
 fi
 
 return ${EXIT_SUCCESS}
