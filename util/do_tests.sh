@@ -32,7 +32,10 @@
 
 export EXIT_SUCCESS=0
 export EXIT_FAILURE=1
-export DEBUG=1
+
+if [ -z "$DEBUG" ]; then
+	DEBUG=0
+fi
 
 show_help()
 {
@@ -152,7 +155,13 @@ rc=${EXIT_SUCCESS}
 msg_dbg "Test cases: ${TESTS}"
 for TEST in ${TESTS}; do
 	msg_dbg "Running test: \"${TEST}\""
-	./${TEST}
+
+	if [ $DEBUG -eq 1 ]; then
+		sh -x ${TEST}
+	else
+		sh ${TEST}
+	fi
+
 	if [ ${?} -ne ${EXIT_SUCCESS} ]; then
 		rc=${EXIT_FAILURE}
 		break
