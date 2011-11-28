@@ -33,7 +33,9 @@
 #
 
 LOGFILE="${0}.log"
-NEW_WP_RANGE_START=0x000000
+
+# Try to write protect the uppermost block
+NEW_WP_RANGE_START=$((($(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null) - 0x010000)))
 NEW_WP_RANGE_LEN=0x010000
 
 # Back-up old settings
@@ -46,9 +48,10 @@ old_len=`printf "%s" "${old_len%%,*}"`
 echo "old start: ${old_start}, old length: ${old_len}" >> ${LOGFILE}
 
 # If the old write protection settings are the same as the new ones, we need
-# to choose new values. If this is the case, we'll extend the range to the
-# next 64K block.
+# to choose new values. If this is the case, we'll drop the lower bound of the
+# range by 1 block and extend the range 64K block.
 if [ $((${old_start} == ${NEW_WP_RANGE_START})) -ne 1 ] && [ $((${old_len} == ${NEW_WP_RANGE_LEN})) -ne 1 ] ; then
+	NEW_WP_RANGE_START=$((${NEW_WP_RANGE_START} - 0x10000))
 	NEW_WP_RANGE_LEN=$((${NEW_WP_RANGE_LEN} + 0x10000))
 fi
 
