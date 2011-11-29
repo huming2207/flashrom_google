@@ -62,8 +62,8 @@ rm -f "$ff_4k_text"
 
 # Make 4k worth of 0x00 bytes
 dd if=/dev/zero of="$zero_4k" bs=1 count=4096 2> /dev/null
-echo "ffh pattern written in ${ff_4k}"
-echo "00h pattern written in ${zero_4k}"
+echo "ffh pattern written in ${ff_4k}" >> ${logfile}
+echo "00h pattern written in ${zero_4k}" >> ${logfile}
 
 #
 # Actual tests are performed below.
@@ -105,7 +105,7 @@ while [ $i -lt $num_regions ] ; do
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${logfile}
+	echo "${tmpstr}passed" | tee -a ${logfile}
 done
 
 # Make a layout - 4K regions on 4.5K boundaries. This will help find problems
@@ -133,7 +133,7 @@ cp "$BACKUP" "$testfile"
 
 i=0
 while [ $i -lt $num_regions ] ; do
-	tmpstr="aligned region ${i} test: "
+	tmpstr="unaligned region ${i} test: "
 	offset=$(($((${i} * 8192)) + 2048))
 	# Protect against too long write
 	writelen=4096
@@ -161,7 +161,7 @@ while [ $i -lt $num_regions ] ; do
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${logfile}
+	echo "${tmpstr}passed" | tee -a ${logfile}
 done
 
 return "$EXIT_SUCCESS"
