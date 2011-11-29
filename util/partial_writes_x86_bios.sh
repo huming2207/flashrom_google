@@ -43,15 +43,9 @@ partial_writes_fail()
 }
 
 # FIXME: this is a chromium-os -ism. most distros don't strip out "diff"...
-which diff > /dev/null
-if [ "$?" != "0" ] ; then
-       partial_writes_fail "diff is required to use this script"
-fi
+which diff > /dev/null || partial_writes_fail "diff is required to use this script"
 
-which uuencode > /dev/null
-if [ "$?" != "0" ] ; then
-       partial_writes_fail "uuencode is required to use this script"
-fi
+which uuencode > /dev/null || partial_writes_fail "uuencode is required to use this script"
 
 # Make 4k worth of 0xff bytes
 echo "begin 640 $ff_4k" > "$ff_4k_text"
@@ -105,7 +99,7 @@ while [ $i -lt $num_regions ] ; do
 	# flashrom logic does not violate user-specified regions
 	system_flashrom -r difftest.bin
 	diff -q difftest.bin "$testfile"
-	if [ "$?" != "0" ] ; then
+	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr}failed diff test"
 	fi
 	rm -f difftest.bin
@@ -161,7 +155,7 @@ while [ $i -lt $num_regions ] ; do
 	# flashrom logic does not violate user-specified regions
 	system_flashrom -r difftest.bin
 	diff -q difftest.bin "$testfile"
-	if [ "$?" != "0" ] ; then
+	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr} failed diff test"
 	fi
 	rm -f difftest.bin

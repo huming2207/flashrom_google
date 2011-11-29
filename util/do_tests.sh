@@ -100,14 +100,13 @@ olddir=$(pwd)
 
 # test data location
 tmpdir=$(mktemp -d -t flashrom_test.XXXXXXXXXX)
-if [ "$?" != "0" ] ; then
+if [ $? -ne 0 ] ; then
 	echo "Could not create temporary directory"
 	exit ${EXIT_FAILURE}
 fi
 
 which flashrom > /dev/null
-#if [ "$?" != "0" ] ; then
-if [ ${?} -ne 0 ] ; then
+if [ $? -ne 0 ] ; then
 	echo "Please install a stable version of flashrom in your path."
 	echo "This will be used to compare the test flashrom binary and "
 	echo "restore your firmware image at the end of the test."
