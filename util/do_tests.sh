@@ -30,8 +30,7 @@
 # DEBUG: Indicates that extra verbosity should be used.
 # BACKUP: The backup firmware image obtained during setup.
 
-export EXIT_SUCCESS=0
-export EXIT_FAILURE=1
+. "$(pwd)/common.sh"
 
 if [ -z "$DEBUG" ]; then
 	DEBUG=0
@@ -115,7 +114,8 @@ if [ ${?} -ne 0 ] ; then
 	exit ${EXIT_FAILURE}
 fi
 
-# Copy the test case files and flashrom to temporary directory.
+# Copy the test scripts and flashrom to temporary directory.
+cp common.sh "${TMPDIR}/"
 cp "${FLASHROM}" "${TMPDIR}/"
 for TEST in ${TESTS}; do
 	cp ${TEST} "${TMPDIR}/"
@@ -126,8 +126,8 @@ echo "Running test in ${TMPDIR}"
 
 # Make a backup
 echo "Reading firmware image"
-BACKUP="backup.bin"
-flashrom ${FLASHROM_PARAM} -r "$BACKUP" > /dev/null
+export BACKUP="backup.bin"
+system_flashrom -r "$BACKUP"
 if [ $? -ne 0 ]; then
 	echo "Failed to create backup image"
 	exit ${EXIT_FAILURE}
@@ -178,7 +178,7 @@ else
 fi
 
 echo "restoring original image using system's flashrom"
-flashrom ${FLASHROM_PARAM} -w "$BACKUP"
+system_flashrom -w "$BACKUP"
 echo "test files remain in ${TMPDIR}"
 cd "${OLDDIR}"
 exit ${rc}

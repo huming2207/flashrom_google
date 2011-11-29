@@ -32,6 +32,8 @@
 # the requested range.
 #
 
+. "$(pwd)/common.sh"
+
 LOGFILE="${0}.log"
 
 # Try to write protect the uppermost block
@@ -57,7 +59,7 @@ fi
 
 # Try to set new range values
 echo "attempting to set write protect range: start=${NEW_WP_RANGE_START} ${NEW_WP_RANGE_LEN}" >> ${LOGFILE}
-./flashrom ${FLASHROM_PARAM} --wp-range ${NEW_WP_RANGE_START} ${NEW_WP_RANGE_LEN} 2>/dev/null
+do_test_flashrom --wp-range ${NEW_WP_RANGE_START} ${NEW_WP_RANGE_LEN}
 if [ ${?} -ne ${EXIT_SUCCESS} ]; then
 	echo -n "failed to set write protect range" >> ${LOGFILE}
 	return ${EXIT_FAILURE}
@@ -74,7 +76,7 @@ if [ $((${new_start} == ${NEW_WP_RANGE_START})) -ne 1 ]; then return ${EXIT_FAIL
 if [ $((${new_len} == ${NEW_WP_RANGE_LEN})) -ne 1 ]; then return ${EXIT_FAILURE} ; fi
 
 # restore the old settings
-./flashrom ${FLASHROM_PARAM} --wp-range ${old_start} ${old_len} 2>/dev/null
+do_test_flashrom --wp-range ${old_start} ${old_len}
 if [ ${?} -ne ${EXIT_SUCCESS} ]; then
 	echo "failed to restore old settings" >> ${LOGFILE}
 	return ${EXIT_FAILURE}

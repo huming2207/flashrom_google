@@ -19,6 +19,8 @@
 #
 #TODO: Compare size reported by JEDEC ID (opcode 9fh)
 
+. "$(pwd)/common.sh"
+
 LOGFILE="${0}.log"
 
 REPORTED_SIZE=$(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null | tail -n 1)

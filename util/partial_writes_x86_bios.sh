@@ -26,6 +26,8 @@
 # may skip regions which do not need to be re-written.
 #
 
+. "$(pwd)/common.sh"
+
 LOGFILE="${0}.log"
 ZERO_4K="00_4k.bin"
 FF_4K="ff_4k.bin"
@@ -94,14 +96,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
 	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
 
-	./flashrom ${FLASHROM_PARAM} -l layout_bios_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE" 2> /dev/null
-	if [ "$?" != "0" ] ; then
+	do_test_flashrom -l layout_bios_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr}failed to flash region"
 	fi
 
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
-	flashrom ${FLASHROM_PARAM} -r difftest.bin 2> /dev/null
+	system_flashrom -r difftest.bin
 	diff -q difftest.bin "$TESTFILE"
 	if [ "$?" != "0" ] ; then
 		partial_writes_fail "${tmpstr}failed diff test"
@@ -132,7 +134,7 @@ for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
 done
 
 # reset the test file and ROM to the original state
-flashrom ${FLASHROM_PARAM} -w "${BACKUP}" > /dev/null
+system_flashrom -w "${BACKUP}"
 cp "$BACKUP" "$TESTFILE"
 
 i=0
@@ -150,14 +152,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
 	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) count=writelen 2> /dev/null
 
-	./flashrom ${FLASHROM_PARAM} -l layout_bios_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE" 2> /dev/null
-	if [ "$?" != "0" ] ; then
+	do_test_flashrom -l layout_bios_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr} failed to flash region"
 	fi
 
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
-	flashrom ${FLASHROM_PARAM} -r difftest.bin 2> /dev/null
+	system_flashrom -r difftest.bin
 	diff -q difftest.bin "$TESTFILE"
 	if [ "$?" != "0" ] ; then
 		partial_writes_fail "${tmpstr} failed diff test"

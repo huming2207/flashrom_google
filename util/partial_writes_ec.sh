@@ -56,6 +56,8 @@
 # 0x000000 0x01ffff fw
 # 0x020000 0x0fffff unused
 
+. "$(pwd)/common.sh"
+
 LOGFILE="${0}.log"
 ZERO_4K="00_4k.bin"
 FF_4K="ff_4k.bin"
@@ -102,7 +104,7 @@ fi
 # Part 1: Write an alternate firmware image to the "fw" region in EC flash
 #
 
-./flashrom ${FLASHROM_PARAM} -l ${LAYOUT_FILE} -i fw -w "${ALT_EC_IMAGE}" 2> /dev/null
+do_test_flashrom -l ${LAYOUT_FILE} -i fw -w "${ALT_EC_IMAGE}"
 if [ $? -ne 0 ]; then
 	partial_writes_ec_fail "Failed to write alternate EC firmware" >> ${LOGFILE}
 else
@@ -110,7 +112,7 @@ else
 fi
 
 # Restore original firmware region
-./flashrom ${FLASHROM_PARAM} -l ${LAYOUT_FILE} -i fw -w "${BACKUP}" 2> /dev/null
+do_test_flashrom -l ${LAYOUT_FILE} -i fw -w "${BACKUP}"
 if [ $? -ne 0 ]; then
 	partial_writes_ec_fail "Failed to restore original EC firmware" >> ${LOGFILE}
 else
@@ -183,8 +185,8 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
 	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
 
-	./flashrom ${FLASHROM_PARAM} -l layout_ec_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE" 2> /dev/null
-	if [ "$?" != "0" ] ; then
+	do_test_flashrom -l layout_ec_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	if [ $? -ne 0 ] ; then
 		partial_writes_ec_fail "${tmpstr}failed to flash"
 	fi
 
@@ -241,8 +243,8 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${start} + ${offset})) 2> /dev/null
 	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${start} + ${offset} + 4096)) count=writelen 2> /dev/null
 
-	./flashrom ${FLASHROM_PARAM} -l layout_ec_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE" 2> /dev/null
-	if [ "$?" != "0" ] ; then
+	do_test_flashrom -l layout_ec_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	if [ $? -ne 0 ] ; then
 		partial_writes_ec_fail "${tmpstr}failed to flash region"
 	fi
 

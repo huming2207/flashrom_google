@@ -26,6 +26,7 @@
 # the settings on the chip are actually correct. It merely checks that Flashrom
 # prints what we want it to print.
 
+. "$(pwd)/common.sh"
 
 LOGFILE="${0}.log"
 WP_DISABLED=0
@@ -58,14 +59,14 @@ echo "old write protect status: ${old_status}" >> ${LOGFILE}
 
 # invert the old setting
 if [ ${old_status} -eq ${WP_ENABLED} ]; then
-	./flashrom ${FLASHROM_PARAM} --wp-disable 2>/dev/null
+	do_test_flashrom --wp-disable
 	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
 	wp_status "$tmp"
 	if [ $? = ${WP_ENABLED} ]; then
 		wp_toggle_fail "failed to disable write protection"
 	fi
 elif [ ${old_status} -eq ${WP_DISABLED} ]; then
-	./flashrom ${FLASHROM_PARAM} --wp-enable 2>/dev/null
+	do_test_flashrom --wp-enable
 	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
 	wp_status "$tmp"
 	if [ $? = ${WP_DISABLED} ]; then
@@ -75,15 +76,14 @@ fi
 
 # restore old setting
 if [ ${old_status} -eq ${WP_ENABLED} ]; then
-	./flashrom ${FLASHROM_PARAM} --wp-enable 2>/dev/null
+	do_test_flashrom --wp-enable
 	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
 	wp_status "$tmp"
 	if [ $? != ${WP_ENABLED} ]; then
 		wp_toggle_fail "failed to enable write protection"
 	fi
 elif [ ${old_status} -eq ${WP_DISABLED} ]; then
-	./flashrom ${FLASHROM_PARAM} --wp-disable 2>/dev/null
-	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
+	do_test_flashrom --wp-disable
 	wp_status "$tmp"
 	if [ $? != ${WP_DISABLED} ]; then
 		wp_toggle_fail "failed to disable write protection"
