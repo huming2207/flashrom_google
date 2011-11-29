@@ -28,67 +28,68 @@
 
 . "$(pwd)/common.sh"
 
-LOGFILE="${0}.log"
-WP_DISABLED=0
-WP_ENABLED=1
-MAGIC="write protect is"
+logfile="${0}.log"
+wp_disabled=0
+wp_enabled=1
+magic_string="write protect is"
 
 wp_toggle_fail()
 {
-	echo "$1" >> ${LOGFILE}
-	echo "$0: failed" >> ${LOGFILE}
+	echo "$1" >> ${logfile}
+	echo "$0: failed" >> ${logfile}
 	exit ${EXIT_FAILURE}
 }
 
 wp_status()
 {
 	if [ "$(printf %s\\n "$1" | sed 's/.*enabled.*/enabled/')" = "enabled" ]; then
-		return ${WP_ENABLED} 
+		return ${wp_enabled}
 	elif [ "$(printf %s\\n "$1" | sed 's/.*disabled.*/disabled/')" = "disabled" ]; then
-		return ${WP_DISABLED}
+		return ${wp_disabled}
 	else
 		wp_toggle_fail "unknown write protect status: \"$1\""
 	fi
 }
 
 # Back-up old settings
-tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
+tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$magic_string")
 wp_status "$tmp"
 old_status=$?
-echo "old write protect status: ${old_status}" >> ${LOGFILE}
+echo "old write protect status: ${old_status}" >> ${logfile}
 
 # invert the old setting
-if [ ${old_status} -eq ${WP_ENABLED} ]; then
+if [ ${old_status} -eq ${wp_enabled} ]; then
 	do_test_flashrom --wp-disable
-	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
+	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$magic_string")
 	wp_status "$tmp"
-	if [ $? = ${WP_ENABLED} ]; then
+	if [ $? -eq ${wp_enabled} ]; then
 		wp_toggle_fail "failed to disable write protection"
 	fi
-elif [ ${old_status} -eq ${WP_DISABLED} ]; then
+elif [ ${old_status} -eq ${wp_disabled} ]; then
 	do_test_flashrom --wp-enable
-	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
+	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$magic_string")
 	wp_status "$tmp"
-	if [ $? = ${WP_DISABLED} ]; then
+	if [ $? -eq ${wp_disabled} ]; then
 		wp_toggle_fail "failed to enable write protection"
 	fi
 fi
 
 # restore old setting
-if [ ${old_status} -eq ${WP_ENABLED} ]; then
+if [ ${old_status} -eq ${wp_enabled} ]; then
 	do_test_flashrom --wp-enable
-	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$MAGIC")
+	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$magic_string")
 	wp_status "$tmp"
-	if [ $? != ${WP_ENABLED} ]; then
+	if [ $? -ne ${wp_enabled} ]; then
 		wp_toggle_fail "failed to enable write protection"
 	fi
-elif [ ${old_status} -eq ${WP_DISABLED} ]; then
+elif [ ${old_status} -eq ${wp_disabled} ]; then
 	do_test_flashrom --wp-disable
+	tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null | grep "$magic_string")
 	wp_status "$tmp"
-	if [ $? != ${WP_DISABLED} ]; then
+	if [ $? -ne ${wp_disabled} ]; then
 		wp_toggle_fail "failed to disable write protection"
 	fi
 fi
 
-echo "$0: passed" >> ${LOGFILE}
+echo "$0: passed" >> ${logfile}
 return ${EXIT_SUCCESS}

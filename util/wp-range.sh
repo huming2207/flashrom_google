@@ -34,11 +34,11 @@
 
 . "$(pwd)/common.sh"
 
-LOGFILE="${0}.log"
+logfile="${0}.log"
 
 # Try to write protect the uppermost block
-NEW_WP_RANGE_START=$((($(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null) - 0x010000)))
-NEW_WP_RANGE_LEN=0x010000
+new_wp_range_start=$((($(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null) - 0x010000)))
+new_wp_range_len=0x010000
 
 # Back-up old settings
 tmp=$(./flashrom ${FLASHROM_PARAM} --wp-status 2>/dev/null)
@@ -47,21 +47,21 @@ old_start=`printf "%s" "${old_start%%,*}"`
 
 old_len=${tmp##*len=}
 old_len=`printf "%s" "${old_len%%,*}"`
-echo "old start: ${old_start}, old length: ${old_len}" >> ${LOGFILE}
+echo "old start: ${old_start}, old length: ${old_len}" >> ${logfile}
 
 # If the old write protection settings are the same as the new ones, we need
 # to choose new values. If this is the case, we'll drop the lower bound of the
 # range by 1 block and extend the range 64K block.
-if [ $((${old_start} == ${NEW_WP_RANGE_START})) -ne 1 ] && [ $((${old_len} == ${NEW_WP_RANGE_LEN})) -ne 1 ] ; then
-	NEW_WP_RANGE_START=$((${NEW_WP_RANGE_START} - 0x10000))
-	NEW_WP_RANGE_LEN=$((${NEW_WP_RANGE_LEN} + 0x10000))
+if [ $((${old_start} == ${new_wp_range_start})) -ne 1 ] && [ $((${old_len} == ${new_wp_range_len})) -ne 1 ] ; then
+	new_wp_range_start=$((${new_wp_range_start} - 0x10000))
+	new_wp_range_len=$((${new_wp_range_len} + 0x10000))
 fi
 
 # Try to set new range values
-echo "attempting to set write protect range: start=${NEW_WP_RANGE_START} ${NEW_WP_RANGE_LEN}" >> ${LOGFILE}
-do_test_flashrom --wp-range ${NEW_WP_RANGE_START} ${NEW_WP_RANGE_LEN}
+echo "attempting to set write protect range: start=${new_wp_range_start} ${new_wp_range_len}" >> ${logfile}
+do_test_flashrom --wp-range ${new_wp_range_start} ${new_wp_range_len}
 if [ ${?} -ne ${EXIT_SUCCESS} ]; then
-	echo -n "failed to set write protect range" >> ${LOGFILE}
+	echo -n "failed to set write protect range" >> ${logfile}
 	return ${EXIT_FAILURE}
 fi
 
@@ -72,15 +72,15 @@ new_start=`printf "%s" "${new_start%%,*}"`
 new_len=${tmp##*len=}
 new_len=`printf "%s" "${new_len%%,*}"`
 
-if [ $((${new_start} == ${NEW_WP_RANGE_START})) -ne 1 ]; then return ${EXIT_FAILURE} ; fi
-if [ $((${new_len} == ${NEW_WP_RANGE_LEN})) -ne 1 ]; then return ${EXIT_FAILURE} ; fi
+if [ $((${new_start} == ${new_wp_range_start})) -ne 1 ]; then return ${EXIT_FAILURE} ; fi
+if [ $((${new_len} == ${new_wp_range_len})) -ne 1 ]; then return ${EXIT_FAILURE} ; fi
 
 # restore the old settings
 do_test_flashrom --wp-range ${old_start} ${old_len}
 if [ ${?} -ne ${EXIT_SUCCESS} ]; then
-	echo "failed to restore old settings" >> ${LOGFILE}
+	echo "failed to restore old settings" >> ${logfile}
 	return ${EXIT_FAILURE}
 fi
 
-echo "$0: passed" >> ${LOGFILE}
+echo "$0: passed" >> ${logfile}
 return ${EXIT_SUCCESS}

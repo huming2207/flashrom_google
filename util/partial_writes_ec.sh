@@ -58,18 +58,18 @@
 
 . "$(pwd)/common.sh"
 
-LOGFILE="${0}.log"
-ZERO_4K="00_4k.bin"
-FF_4K="ff_4k.bin"
-FF_4K_TEXT="ff_4k.txt"
-NUM_REGIONS=16
+logfile="${0}.log"
+zero_4k="00_4k.bin"
+ff_4k="ff_4k.bin"
+ff_4k_text="ff_4k.txt"
+num_regions=16
 
-TESTFILE="test.bin"
+testfile="test.bin"
 
 partial_writes_ec_fail()
 {
-	echo "$1" >> ${LOGFILE}
-	echo "$0: failed" >> ${LOGFILE}
+	echo "$1" >> ${logfile}
+	echo "$0: failed" >> ${logfile}
 	exit ${EXIT_FAILURE}
 }
 
@@ -90,12 +90,12 @@ if [ "$?" != "0" ] ; then
 	partial_writes_ec_fail "printf is required to use this script"
 fi
 
-echo "User-provided \$ALT_EC_IMAGE: ${ALT_EC_IMAGE}" >> ${LOGFILE}
+echo "User-provided \$ALT_EC_IMAGE: ${ALT_EC_IMAGE}" >> ${logfile}
 if [ -z "$ALT_EC_IMAGE" ] || [ ! -e "$ALT_EC_IMAGE" ]; then
 	partial_writes_ec_fail "Please provide absolute path to alternate EC firmware image using the ALT_EC_IMAGE environment variable."
 fi
 
-echo "User-provided \$LAYOUT_FILE: ${LAYOUT_FILE}" >> ${LOGFILE}
+echo "User-provided \$LAYOUT_FILE: ${LAYOUT_FILE}" >> ${logfile}
 if [ -z "$LAYOUT_FILE" ] || [ ! -e "$LAYOUT_FILE" ]; then
 	partial_writes_ec_fail "Please provide absolute path to layout file using the LAYOUT_FILE environment variable"
 fi
@@ -106,17 +106,17 @@ fi
 
 do_test_flashrom -l ${LAYOUT_FILE} -i fw -w "${ALT_EC_IMAGE}"
 if [ $? -ne 0 ]; then
-	partial_writes_ec_fail "Failed to write alternate EC firmware" >> ${LOGFILE}
+	partial_writes_ec_fail "Failed to write alternate EC firmware" >> ${logfile}
 else
-	echo "Wrote alternate EC firmware image successfully" >> ${LOGFILE}
+	echo "Wrote alternate EC firmware image successfully" >> ${logfile}
 fi
 
 # Restore original firmware region
 do_test_flashrom -l ${LAYOUT_FILE} -i fw -w "${BACKUP}"
 if [ $? -ne 0 ]; then
-	partial_writes_ec_fail "Failed to restore original EC firmware" >> ${LOGFILE}
+	partial_writes_ec_fail "Failed to restore original EC firmware" >> ${logfile}
 else
-	echo "Restored original firmware image successfully" >> ${LOGFILE}
+	echo "Restored original firmware image successfully" >> ${logfile}
 fi
 
 #
@@ -130,8 +130,8 @@ for range in $ranges; do
 	end=$(echo $range | awk -F":" '{ print $2 }')
 	len=$((${end} - ${start}))
 
-	echo "Testing if range is usable: ${start}:${end}, len=${len}" >> ${LOGFILE}
-	if [ ${len} -lt $(($((${NUM_REGIONS} - 1)) * 4096)) ]; then
+	echo "Testing if range is usable: ${start}:${end}, len=${len}" >> ${logfile}
+	if [ ${len} -lt $(($((${num_regions} - 1)) * 4096)) ]; then
 		continue
 	else
 		range_found=1
@@ -146,29 +146,29 @@ else
 fi
 
 # Make 4k worth of 0xff bytes
-echo "begin 640 $FF_4K" > "$FF_4K_TEXT"
+echo "begin 640 $ff_4k" > "$ff_4k_text"
 i=0
 while [ $i -le 90 ]; do
-	echo "M____________________________________________________________" >> "$FF_4K_TEXT"
+	echo "M____________________________________________________________" >> "$ff_4k_text"
 	i=$((${i} + 1))
 done
-echo "!_P``" >> "$FF_4K_TEXT"
-echo "\`" >> "$FF_4K_TEXT"
-echo "end" >> "$FF_4K_TEXT"
-uudecode -o "$FF_4K" "$FF_4K_TEXT"
-rm -f "$FF_4K_TEXT"
+echo "!_P``" >> "$ff_4k_text"
+echo "\`" >> "$ff_4k_text"
+echo "end" >> "$ff_4k_text"
+uudecode -o "$ff_4k" "$ff_4k_text"
+rm -f "$ff_4k_text"
 
 # Make 4k worth of 0x00 bytes
-dd if=/dev/zero of="$ZERO_4K" bs=1 count=4096 2> /dev/null
-echo "ffh pattern written in ${FF_4K}"
-echo "00h pattern written in ${ZERO_4K}"
+dd if=/dev/zero of="$zero_4k" bs=1 count=4096 2> /dev/null
+echo "ffh pattern written in ${ff_4k}"
+echo "00h pattern written in ${zero_4k}"
 
 # Actual tests are performed below.
 #
 
 # Make a layout - 4K regions on 4K boundaries. This will test basic
 # functionality of erasing and writing specific blocks.
-for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
+for i in `seq 0 $((${num_regions} - 1))` ; do
 	offset_00=$((${i} * 8192))
 	offset_ff=$((${i} * 8192 + 4096))
 	echo "\
@@ -177,15 +177,15 @@ for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
 	" >> layout_ec_4k_aligned.txt
 done
 
-cp "${BACKUP}" "$TESTFILE"
+cp "${BACKUP}" "$testfile"
 i=0
-while [ $i -lt $NUM_REGIONS ] ; do
+while [ $i -lt $num_regions ] ; do
 	tmpstr="aligned region ${i} test: "
 	offset=$((${start} + $((${i} * 8192))))
-	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
-	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
+	dd if=${zero_4k} of=${testfile} bs=1 conv=notrunc seek=${offset} 2> /dev/null
+	dd if=${ff_4k} of=${testfile} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
 
-	do_test_flashrom -l layout_ec_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	do_test_flashrom -l layout_ec_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$testfile"
 	if [ $? -ne 0 ] ; then
 		partial_writes_ec_fail "${tmpstr}failed to flash"
 	fi
@@ -193,14 +193,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
 	flashrom ${FLASHROM_PARAM} -r difftest.bin 2> /dev/null
-	diff -q difftest.bin "$TESTFILE"
+	diff -q difftest.bin "$testfile"
 	if [ "$?" != "0" ] ; then
 		partial_writes_ec_fail "${tmpstr}failed diff test"
 	fi
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${LOGFILE}
+	echo "${tmpstr}passed" >> ${logfile}
 done
 
 # Make a layout - 4K regions on 4.5K boundaries. This will help find problems
@@ -213,7 +213,7 @@ done
 # Note: The last chunk of 0xff bytes is too long, so special logic was added to
 # below to avoid overrunning a 128KB test region.
 #
-for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
+for i in `seq 0 $((${num_regions} - 1))` ; do
 	offset_00=$((${i} * 8192 + 2048))
 	offset_ff=$((${i} * 8192 + 4096 + 2048))
 	echo "\
@@ -224,10 +224,10 @@ done
 
 # reset the test file and ROM to the original state
 flashrom ${FLASHROM_PARAM} -w "${BACKUP}" > /dev/null
-cp "$BACKUP" "$TESTFILE"
+cp "$BACKUP" "$testfile"
 
 i=0
-while [ $i -lt $NUM_REGIONS ] ; do
+while [ $i -lt $num_regions ] ; do
 	tmpstr="unaligned region ${i} test: "
 	offset=$(($((${i} * 8192)) + 2048))
 
@@ -240,10 +240,10 @@ while [ $i -lt $NUM_REGIONS ] ; do
 		fi
 	fi
 
-	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${start} + ${offset})) 2> /dev/null
-	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${start} + ${offset} + 4096)) count=writelen 2> /dev/null
+	dd if=${zero_4k} of=${testfile} bs=1 conv=notrunc seek=$((${start} + ${offset})) 2> /dev/null
+	dd if=${ff_4k} of=${testfile} bs=1 conv=notrunc seek=$((${start} + ${offset} + 4096)) count=writelen 2> /dev/null
 
-	do_test_flashrom -l layout_ec_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	do_test_flashrom -l layout_ec_unaligned.txt -i 00_${i} -i ff_${i} -w "$testfile"
 	if [ $? -ne 0 ] ; then
 		partial_writes_ec_fail "${tmpstr}failed to flash region"
 	fi
@@ -251,14 +251,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
 	flashrom ${FLASHROM_PARAM} -r difftest.bin 2> /dev/null
-	diff -q difftest.bin "$TESTFILE"
+	diff -q difftest.bin "$testfile"
 	if [ "$?" != "0" ] ; then
 		partial_writes_ec_fail "${tmpstr}failed diff test"
 	fi
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${LOGFILE}
+	echo "${tmpstr}passed" >> ${logfile}
 done
 
 return "$EXIT_SUCCESS"

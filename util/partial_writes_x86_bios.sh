@@ -28,58 +28,58 @@
 
 . "$(pwd)/common.sh"
 
-LOGFILE="${0}.log"
-ZERO_4K="00_4k.bin"
-FF_4K="ff_4k.bin"
-FF_4K_TEXT="ff_4k.txt"
+logfile="${0}.log"
+zero_4k="00_4k.bin"
+ff_4k="ff_4k.bin"
+ff_4k_text="ff_4k.txt"
 
-TESTFILE="test.bin"
+testfile="test.bin"
 
 partial_writes_fail()
 {
-	echo "$1" >> ${LOGFILE}
-	echo "$0: failed" >> ${LOGFILE}
+	echo "$1" >> ${logfile}
+	echo "$0: failed" >> ${logfile}
 	exit ${EXIT_FAILURE}
 }
 
 # FIXME: this is a chromium-os -ism. most distros don't strip out "diff"...
 which diff > /dev/null
 if [ "$?" != "0" ] ; then
-	partial_writes_fail "diff is required to use this script"
+       partial_writes_fail "diff is required to use this script"
 fi
 
 which uuencode > /dev/null
 if [ "$?" != "0" ] ; then
-	partial_writes_fail "uuencode is required to use this script"
+       partial_writes_fail "uuencode is required to use this script"
 fi
 
 # Make 4k worth of 0xff bytes
-echo "begin 640 $FF_4K" > "$FF_4K_TEXT"
+echo "begin 640 $ff_4k" > "$ff_4k_text"
 i=0
 while [ $i -le 90 ] ; do
-	echo "M____________________________________________________________" >> "$FF_4K_TEXT"
+	echo "M____________________________________________________________" >> "$ff_4k_text"
 	i=$((${i} + 1))
 done
-echo "!_P``" >> "$FF_4K_TEXT"
-echo "\`" >> "$FF_4K_TEXT"
-echo "end" >> "$FF_4K_TEXT"
-uudecode -o "$FF_4K" "$FF_4K_TEXT"
-rm -f "$FF_4K_TEXT"
+echo "!_P``" >> "$ff_4k_text"
+echo "\`" >> "$ff_4k_text"
+echo "end" >> "$ff_4k_text"
+uudecode -o "$ff_4k" "$ff_4k_text"
+rm -f "$ff_4k_text"
 
 # Make 4k worth of 0x00 bytes
-dd if=/dev/zero of="$ZERO_4K" bs=1 count=4096 2> /dev/null
-echo "ffh pattern written in ${FF_4K}"
-echo "00h pattern written in ${ZERO_4K}"
+dd if=/dev/zero of="$zero_4k" bs=1 count=4096 2> /dev/null
+echo "ffh pattern written in ${ff_4k}"
+echo "00h pattern written in ${zero_4k}"
 
 #
 # Actual tests are performed below.
 #
-NUM_REGIONS=16
+num_regions=16
 
 # Make a layout - 4K regions on 4K boundaries. This will test basic
 # functionality of erasing and writing specific blocks.
 offset=0
-for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
+for i in `seq 0 $((${num_regions} - 1))` ; do
 	offset_00=$((${i} * 8192))
 	offset_ff=$((${i} * 8192 + 4096))
 	echo "\
@@ -88,15 +88,15 @@ for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
 	" >> layout_bios_4k_aligned.txt
 done
 
-cp "${BACKUP}" "$TESTFILE"
+cp "${BACKUP}" "$testfile"
 i=0
-while [ $i -lt $NUM_REGIONS ] ; do
+while [ $i -lt $num_regions ] ; do
 	tmpstr="aligned region ${i} test: "
 	offset=$((${i} * 8192))
-	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
-	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
+	dd if=${zero_4k} of=${testfile} bs=1 conv=notrunc seek=${offset} 2> /dev/null
+	dd if=${ff_4k} of=${testfile} bs=1 conv=notrunc seek=$((${offset} + 4096)) 2> /dev/null
 
-	do_test_flashrom -l layout_bios_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	do_test_flashrom -l layout_bios_4k_aligned.txt -i 00_${i} -i ff_${i} -w "$testfile"
 	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr}failed to flash region"
 	fi
@@ -104,14 +104,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
 	system_flashrom -r difftest.bin
-	diff -q difftest.bin "$TESTFILE"
+	diff -q difftest.bin "$testfile"
 	if [ "$?" != "0" ] ; then
 		partial_writes_fail "${tmpstr}failed diff test"
 	fi
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${LOGFILE}
+	echo "${tmpstr}passed" >> ${logfile}
 done
 
 # Make a layout - 4K regions on 4.5K boundaries. This will help find problems
@@ -124,7 +124,7 @@ done
 # Note: The last chunk of 0xff bytes is only 2K as to avoid overrunning a 128KB
 # test image.
 #
-for i in `seq 0 $((${NUM_REGIONS} - 1))` ; do
+for i in `seq 0 $((${num_regions} - 1))` ; do
 	offset_00=$((${i} * 8192 + 2048))
 	offset_ff=$((${i} * 8192 + 4096 + 2048))
 	echo "\
@@ -135,10 +135,10 @@ done
 
 # reset the test file and ROM to the original state
 system_flashrom -w "${BACKUP}"
-cp "$BACKUP" "$TESTFILE"
+cp "$BACKUP" "$testfile"
 
 i=0
-while [ $i -lt $NUM_REGIONS ] ; do
+while [ $i -lt $num_regions ] ; do
 	tmpstr="aligned region ${i} test: "
 	offset=$(($((${i} * 8192)) + 2048))
 	# Protect against too long write
@@ -149,10 +149,10 @@ while [ $i -lt $NUM_REGIONS ] ; do
 			writelen=0
 		fi
 	fi
-	dd if=${ZERO_4K} of=${TESTFILE} bs=1 conv=notrunc seek=${offset} 2> /dev/null
-	dd if=${FF_4K} of=${TESTFILE} bs=1 conv=notrunc seek=$((${offset} + 4096)) count=writelen 2> /dev/null
+	dd if=${zero_4k} of=${testfile} bs=1 conv=notrunc seek=${offset} 2> /dev/null
+	dd if=${ff_4k} of=${testfile} bs=1 conv=notrunc seek=$((${offset} + 4096)) count=writelen 2> /dev/null
 
-	do_test_flashrom -l layout_bios_unaligned.txt -i 00_${i} -i ff_${i} -w "$TESTFILE"
+	do_test_flashrom -l layout_bios_unaligned.txt -i 00_${i} -i ff_${i} -w "$testfile"
 	if [ $? -ne 0 ] ; then
 		partial_writes_fail "${tmpstr} failed to flash region"
 	fi
@@ -160,14 +160,14 @@ while [ $i -lt $NUM_REGIONS ] ; do
 	# download the entire ROM image and use diff to compare to ensure
 	# flashrom logic does not violate user-specified regions
 	system_flashrom -r difftest.bin
-	diff -q difftest.bin "$TESTFILE"
+	diff -q difftest.bin "$testfile"
 	if [ "$?" != "0" ] ; then
 		partial_writes_fail "${tmpstr} failed diff test"
 	fi
 	rm -f difftest.bin
 
 	i=$((${i} + 1))
-	echo "${tmpstr}passed" >> ${LOGFILE}
+	echo "${tmpstr}passed" >> ${logfile}
 done
 
 return "$EXIT_SUCCESS"

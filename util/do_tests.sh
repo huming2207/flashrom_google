@@ -96,10 +96,10 @@ if [ -z "${FLASHROM}" ] ; then
 fi
 echo "testing flashrom binary: ${FLASHROM}"
 
-OLDDIR=$(pwd)
+olddir=$(pwd)
 
 # test data location
-TMPDIR=$(mktemp -d -t flashrom_test.XXXXXXXXXX)
+tmpdir=$(mktemp -d -t flashrom_test.XXXXXXXXXX)
 if [ "$?" != "0" ] ; then
 	echo "Could not create temporary directory"
 	exit ${EXIT_FAILURE}
@@ -115,14 +115,14 @@ if [ ${?} -ne 0 ] ; then
 fi
 
 # Copy the test scripts and flashrom to temporary directory.
-cp common.sh "${TMPDIR}/"
-cp "${FLASHROM}" "${TMPDIR}/"
+cp common.sh "${tmpdir}/"
+cp "${FLASHROM}" "${tmpdir}/"
 for TEST in ${TESTS}; do
-	cp ${TEST} "${TMPDIR}/"
+	cp ${TEST} "${tmpdir}/"
 done
 
-cd "${TMPDIR}"
-echo "Running test in ${TMPDIR}"
+cd "${tmpdir}"
+echo "Running test in ${tmpdir}"
 
 # Make a backup
 echo "Reading firmware image"
@@ -179,6 +179,6 @@ fi
 
 echo "restoring original image using system's flashrom"
 system_flashrom -w "$BACKUP"
-echo "test files remain in ${TMPDIR}"
-cd "${OLDDIR}"
+echo "test files remain in ${tmpdir}"
+cd "${olddir}"
 exit ${rc}

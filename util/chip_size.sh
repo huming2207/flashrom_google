@@ -21,16 +21,16 @@
 
 . "$(pwd)/common.sh"
 
-LOGFILE="${0}.log"
+logfile="${0}.log"
 
-REPORTED_SIZE=$(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null | tail -n 1)
-ACTUAL_SIZE=$(stat --printf="%s\n" ${BACKUP})
-echo -n "$0: ${REPORTED_SIZE} ?= ${ACTUAL_SIZE} ... " >> ${LOGFILE}
-if [ "$REPORTED_SIZE" != "$ACTUAL_SIZE" ]; then
-	echo "no." >> ${LOGFILE}
+reported_size=$(./flashrom ${FLASHROM_PARAM} --get-size 2>/dev/null | tail -n 1)
+actual_size=$(stat --printf="%s\n" ${BACKUP})
+echo -n "$0: ${reported_size} ?= ${actual_size} ... " >> ${logfile}
+if [ "$reported_size" != "$actual_size" ]; then
+	echo "no." >> ${logfile}
 	return ${EXIT_FAILURE}
 else
-	echo "yes." >> ${LOGFILE}
+	echo "yes." >> ${logfile}
 fi
 
 return ${EXIT_SUCCESS}
