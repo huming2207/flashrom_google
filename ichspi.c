@@ -1689,7 +1689,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 				     mmio_readl(ich_spibar + offs), i);
 		}
 		if (mmio_readw(ich_spibar) & (1 << 15)) {
-			msg_perr("WARNING: SPI Configuration Lockdown activated.\n");
+			msg_pdbg("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
 		ich_init_opcodes();
@@ -1724,7 +1724,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		msg_pdbg("0x04: 0x%04x (HSFS)\n", tmp2);
 		prettyprint_ich9_reg_hsfs(tmp2);
 		if (tmp2 & HSFS_FLOCKDN) {
-			msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+			msg_pdbg("WARNING: SPI Configuration Lockdown activated.\n");
 			ichspi_lock = 1;
 		}
 		if (tmp2 & HSFS_FDV)
