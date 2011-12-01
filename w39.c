@@ -20,9 +20,8 @@
  */
 
 #include "flash.h"
-#include "chipdrivers.h"
 
-static int printlock_w39_fwh_block(struct flashchip *flash, int offset)
+static int printlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
 {
 	chipaddr wrprotect = flash->virtual_registers + offset + 2;
 	uint8_t locking;
@@ -60,7 +59,7 @@ static int printlock_w39_fwh_block(struct flashchip *flash, int offset)
 	return (locking & ((1 << 2) | (1 << 0))) ? -1 : 0;
 }
 
-static int unlock_w39_fwh_block(struct flashchip *flash, int offset)
+static int unlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
 {
 	chipaddr wrprotect = flash->virtual_registers + offset + 2;
 	uint8_t locking;
@@ -70,10 +69,10 @@ static int unlock_w39_fwh_block(struct flashchip *flash, int offset)
 	if (locking & ((1 << 2) | (1 << 0))) {
 		/* Lockdown active? */
 		if (locking & (1 << 1)) {
-			msg_cerr("Can't unlock block at 0x%x!\n", offset);
+			msg_cerr("Can't unlock block at 0x%08x!\n", offset);
 			return -1;
 		} else {
-			msg_cdbg("Unlocking block at 0x%x\n", offset);
+			msg_cdbg("Unlocking block at 0x%08x\n", offset);
 			chip_writeb(0, wrprotect);
 		}
 	}
@@ -81,7 +80,7 @@ static int unlock_w39_fwh_block(struct flashchip *flash, int offset)
 	return 0;
 }
 
-static uint8_t w39_idmode_readb(struct flashchip *flash, int offset)
+static uint8_t w39_idmode_readb(struct flashchip *flash, unsigned int offset)
 {
 	chipaddr bios = flash->virtual_memory;
 	uint8_t val;
@@ -128,7 +127,7 @@ static int printlock_w39_bootblock_64k16k(uint8_t lock)
 	return 0;
 }
 
-static int printlock_w39_common(struct flashchip *flash, int offset)
+static int printlock_w39_common(struct flashchip *flash, unsigned int offset)
 {
 	uint8_t lock;
 
@@ -139,7 +138,7 @@ static int printlock_w39_common(struct flashchip *flash, int offset)
 
 static int printlock_w39_fwh(struct flashchip *flash)
 {
-	int i, total_size = flash->total_size * 1024;
+	unsigned int i, total_size = flash->total_size * 1024;
 	int ret = 0;
 	
 	/* Print lock status of the complete chip */
@@ -151,7 +150,7 @@ static int printlock_w39_fwh(struct flashchip *flash)
 
 static int unlock_w39_fwh(struct flashchip *flash)
 {
-	int i, total_size = flash->total_size * 1024;
+	unsigned int i, total_size = flash->total_size * 1024;
 	
 	/* Unlock the complete chip */
 	for (i = 0; i < total_size; i += flash->page_size)

@@ -23,7 +23,6 @@
 #include <ctype.h>
 #include <unistd.h>
 #include "flash.h"
-#include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
 
@@ -50,7 +49,8 @@ static int buspirate_serialport_setup(char *dev)
 #define sp_flush_incoming(...) 0
 #endif
 
-static int buspirate_sendrecv(unsigned char *buf, unsigned int writecnt, unsigned int readcnt)
+static int buspirate_sendrecv(unsigned char *buf, unsigned int writecnt,
+			      unsigned int readcnt)
 {
 	int i, ret = 0;
 
@@ -90,13 +90,13 @@ static int buspirate_spi_send_command(unsigned int writecnt, unsigned int readcn
 		const unsigned char *writearr, unsigned char *readarr);
 
 static const struct spi_programmer spi_programmer_buspirate = {
-	.type = SPI_CONTROLLER_BUSPIRATE,
-	.max_data_read = 12,
-	.max_data_write = 12,
-	.command = buspirate_spi_send_command,
-	.multicommand = default_spi_send_multicommand,
-	.read = default_spi_read,
-	.write_256 = default_spi_write_256,
+	.type		= SPI_CONTROLLER_BUSPIRATE,
+	.max_data_read	= 12,
+	.max_data_write	= 12,
+	.command	= buspirate_spi_send_command,
+	.multicommand	= default_spi_send_multicommand,
+	.read		= default_spi_read,
+	.write_256	= default_spi_write_256,
 };
 
 static const struct buspirate_spispeeds spispeeds[] = {
@@ -108,7 +108,7 @@ static const struct buspirate_spispeeds spispeeds[] = {
 	{"2.6M",	0x5},
 	{"4M",		0x6},
 	{"8M",		0x7},
-	{NULL,		0x0}
+	{NULL,		0x0},
 };
 
 static int buspirate_spi_shutdown(void *data)
@@ -149,11 +149,11 @@ static int buspirate_spi_shutdown(void *data)
 int buspirate_spi_init(void)
 {
 	unsigned char buf[512];
-	int ret = 0;
-	int i;
 	char *dev = NULL;
 	char *speed = NULL;
 	int spispeed = 0x7;
+	int ret = 0;
+	int i;
 
 	dev = extract_programmer_param("dev");
 	if (!dev || !strlen(dev)) {
@@ -295,7 +295,8 @@ static int buspirate_spi_send_command(unsigned int writecnt, unsigned int readcn
 		const unsigned char *writearr, unsigned char *readarr)
 {
 	static unsigned char *buf = NULL;
-	int i = 0, ret = 0;
+	unsigned int i = 0;
+	int ret = 0;
 
 	if (writecnt > 16 || readcnt > 16 || (readcnt + writecnt) > 16)
 		return SPI_INVALID_LENGTH;

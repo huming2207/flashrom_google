@@ -187,6 +187,7 @@
 #define ATMEL_AT49F020		0x0B
 #define ATMEL_AT49F002N		0x07	/* for AT49F002(N)  */
 #define ATMEL_AT49F002NT		0x08	/* for AT49F002(N)T */
+#define ATMEL_AT49LH002		0xE9
 
 /* Bright Microelectronics has the same manufacturer ID as Hyundai... */
 #define BRIGHT_ID		0xAD	/* Bright Microelectronics */
@@ -195,6 +196,7 @@
 #define BRIGHT_BM29F400T	0xAD
 
 #define CATALYST_ID		0x31	/* Catalyst */
+#define CATALYST_CAT28F512	0xB8
 
 #define EMST_ID			0x8C	/* EMST / EFST Elite Flash Storage */
 #define EMST_F25L008A		0x2014
@@ -249,6 +251,13 @@
 #define EON_EN25F80		0x3114
 #define EON_EN25F16		0x3115
 #define EON_EN25F32		0x3116
+#define EON_EN25Q40		0x3013
+#define EON_EN25Q80		0x3014
+#define EON_EN25Q16		0x3015	/* Same as EN25D16 */
+#define EON_EN25Q32		0x3016	/* Same as EN25Q32A and EN25Q32B */
+#define EON_EN25Q64		0x3017
+#define EON_EN25Q128		0x3018
+#define EON_EN25QH16		0x7015
 #define EON_EN29F512		0x7F21
 #define EON_EN29F010		0x20
 #define EON_EN29F040A		0x7F04
@@ -374,8 +383,8 @@
 #define MACRONIX_MX25L3235D	0x5E16	/* MX25L3225D/MX25L3235D/MX25L3237D */
 #define MACRONIX_MX29F001B	0x19
 #define MACRONIX_MX29F001T	0x18
-#define MACRONIX_MX29F002B	0x34	/* Same as MX29F002NB */
-#define MACRONIX_MX29F002T	0xB0	/* Same as MX29F002NT */
+#define MACRONIX_MX29F002B	0x34	/* Same as MX29F002NB; N has reset pin n/c. */
+#define MACRONIX_MX29F002T	0xB0	/* Same as MX29F002NT; N has reset pin n/c. */
 #define MACRONIX_MX29F004B	0x46
 #define MACRONIX_MX29F004T	0x45
 #define MACRONIX_MX29F022T	0x36	/* Same as MX29F022NT */
@@ -479,7 +488,7 @@
 #define SST_SST25VF040_REMS	0x44	/* REMS or RES opcode, same as SST25LF040A */
 #define SST_SST25VF040B		0x258D
 #define SST_SST25VF040B_REMS	0x8D	/* REMS or RES opcode */
-#define SST_SST25VF080_REMS	0x80	/* REMS or RES opcode */
+#define SST_SST25VF080_REMS	0x80	/* REMS or RES opcode, same as SST25LF080A */
 #define SST_SST25VF080B		0x258E
 #define SST_SST25VF080B_REMS	0x8E	/* REMS or RES opcode */
 #define SST_SST25VF016B		0x2541
@@ -531,7 +540,7 @@
  * ST25P chips are SPI, first byte of device ID is memory type, second
  * byte of device ID is related to log(bitsize) at least for some chips.
  */
-#define ST_ID			0x20	/* ST / SGS/Thomson */
+#define ST_ID			0x20	/* ST / SGS/Thomson / Numonyx (later acquired by Micron) */
 #define ST_M25P05A		0x2010
 #define ST_M25P05_RES		0x10	/* Same code as M25P10. */
 #define ST_M25P10A		0x2011
@@ -648,5 +657,8 @@
 #define WINBOND_W49F020		0x8C
 #define WINBOND_W49V002A	0xB0
 #define WINBOND_W49V002FA	0x32
+
+#define PROGMANUF_ID		0xFFFE	/* dummy ID for opaque chips behind a programmer */
+#define PROGDEV_ID		0x01	/* dummy ID for opaque chips behind a programmer */
 
 #endif /* !FLASHCHIPS_H */

@@ -471,8 +471,9 @@ static int write_content_to_file(int entry, uint8_t *buf) {
 int handle_partial_read(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len),
-                 int write_to_file) {
+    int (*read) (struct flashchip *flash, uint8_t *buf,
+                 unsigned int start, unsigned int len),
+    int write_to_file) {
 
 	unsigned int start = 0;
 	int entry;
@@ -525,8 +526,8 @@ int handle_partial_read(
 int handle_partial_verify(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*verify) (struct flashchip *flash, uint8_t *buf, int start, int len,
-                   const char* message)) {
+    int (*verify) (struct flashchip *flash, uint8_t *buf,
+                   unsigned int start, unsigned int len, const char *message)) {
 	unsigned int start = 0;
 	int entry;
 	unsigned int size = flash->total_size * 1024;

@@ -56,13 +56,13 @@ struct wp_range {
 enum bit_state {
 	OFF	= 0,
 	ON	= 1,
-	X	= 0	/* don't care */
+	X	= -1	/* don't care. Must be bigger than max # of bp. */
 };
 
 struct w25q_range {
 	enum bit_state sec;		/* if 1, bp[2:0] describe sectors */
 	enum bit_state tb;		/* top/bottom select */
-	unsigned short int bp : 3;	/* block protect bitfield */
+	int bp;				/* block protect bitfield */
 	struct wp_range range;
 };
 
@@ -656,15 +656,19 @@ int w25_status_to_range(const struct flashchip *flash,
 	if (w25_range_table(flash, &w25q_ranges, &num_entries)) return -1;
 	for (i = 0; i < num_entries; i++) {
 		int bp;
+		int table_bp, table_tb, table_sec;
 
 		bp = status->bp0 | (status->bp1 << 1) | (status->bp2 << 2);
 		msg_cspew("comparing  0x%x 0x%x / 0x%x 0x%x / 0x%x 0x%x\n",
 		          bp, w25q_ranges[i].bp,
 		          status->tb, w25q_ranges[i].tb,
 		          status->sec, w25q_ranges[i].sec);
-		if ((bp == w25q_ranges[i].bp) &&
-		    (status->tb == w25q_ranges[i].tb) &&
-		    (status->sec == w25q_ranges[i].sec)) {
+		table_bp = w25q_ranges[i].bp;
+		table_tb = w25q_ranges[i].tb;
+		table_sec = w25q_ranges[i].sec;
+		if ((bp == table_bp || table_bp == X) &&
+		    (status->tb == table_tb || table_tb == X) &&
+		    (status->sec == table_sec || table_sec == X)) {
 			*start = w25q_ranges[i].range.start;
 			*len = w25q_ranges[i].range.len;
 
@@ -851,5 +855,3 @@ struct wp wp_w25 = {
 	.disable	= w25_disable_writeprotect,
 	.wp_status	= w25_wp_status,
 };
-
-

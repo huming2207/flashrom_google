@@ -247,9 +247,9 @@ void print_supported_pcidevs(const struct pcidev_status *devs)
 	msg_pinfo("PCI devices:\n");
 	for (i = 0; devs[i].vendor_name != NULL; i++) {
 		msg_pinfo("%s %s [%04x:%04x]%s\n", devs[i].vendor_name,
-		       devs[i].device_name, devs[i].vendor_id,
-		       devs[i].device_id,
-		       (devs[i].status == NT) ? " (untested)" : "");
+		          devs[i].device_name, devs[i].vendor_id,
+		          devs[i].device_id,
+		          (devs[i].status == NT) ? " (untested)" : "");
 	}
 }
 
@@ -295,6 +295,10 @@ int undo_pci_write(void *p)
 {									\
 	struct undo_pci_write_data *undo_pci_write_data;		\
 	undo_pci_write_data = malloc(sizeof(struct undo_pci_write_data)); \
+	if (!undo_pci_write_data) {					\
+		msg_gerr("Out of memory!\n");				\
+		exit(1);						\
+	}								\
 	undo_pci_write_data->dev = *a;					\
 	undo_pci_write_data->reg = b;					\
 	undo_pci_write_data->type = pci_write_type_##c;			\

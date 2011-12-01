@@ -71,13 +71,13 @@ void programmer_delay(int usecs);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 enum chipbustype {
-	CHIP_BUSTYPE_NONE	= 0,
-	CHIP_BUSTYPE_PARALLEL	= 1 << 0,
-	CHIP_BUSTYPE_LPC	= 1 << 1,
-	CHIP_BUSTYPE_FWH	= 1 << 2,
-	CHIP_BUSTYPE_SPI	= 1 << 3,
-	CHIP_BUSTYPE_NONSPI	= CHIP_BUSTYPE_PARALLEL | CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH,
-	CHIP_BUSTYPE_UNKNOWN	= CHIP_BUSTYPE_PARALLEL | CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH | CHIP_BUSTYPE_SPI,
+	BUS_NONE	= 0,
+	BUS_PARALLEL	= 1 << 0,
+	BUS_LPC		= 1 << 1,
+	BUS_FWH		= 1 << 2,
+	BUS_SPI		= 1 << 3,
+	BUS_PROG	= 1 << 4,
+	BUS_NONSPI	= BUS_PARALLEL | BUS_LPC | BUS_FWH,
 };
 
 /* used to select bus which target chip resides */
@@ -125,9 +125,9 @@ struct flashchip {
 	uint32_t model_id;
 
 	/* Total chip size in kilobytes */
-	int total_size;
+	unsigned int total_size;
 	/* Chip page size in bytes */
-	int page_size;
+	unsigned int page_size;
 	int feature_bits;
 
 	/*
@@ -138,8 +138,10 @@ struct flashchip {
 
 	int (*probe) (struct flashchip *flash);
 
-	/* Delay after "enter/exit ID mode" commands in microseconds. */
-	int probe_timing;
+	/* Delay after "enter/exit ID mode" commands in microseconds.
+	 * NB: negative values have special meanings, see TIMING_* below.
+	 */
+	signed int probe_timing;
 
 	/*
 	 * Erase blocks and associated erase function. Any chip erase function
@@ -160,8 +162,8 @@ struct flashchip {
 
 	int (*printlock) (struct flashchip *flash);
 	int (*unlock) (struct flashchip *flash);
-	int (*write) (struct flashchip *flash, uint8_t *buf, int start, int len);
-	int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len);
+	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	struct {
 		uint16_t min;
 		uint16_t max;
@@ -221,7 +223,7 @@ extern int verbose;
 extern const char flashrom_version[];
 extern char *chip_to_probe;
 void map_flash_registers(struct flashchip *flash);
-int read_memmapped(struct flashchip *flash, uint8_t *buf, int start, int len);
+int read_memmapped(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int erase_flash(struct flashchip *flash);
 int probe_flash(int startchip, struct flashchip *fill_flash, int force);
 int read_flash_to_file(struct flashchip *flash, const char *filename);
@@ -229,22 +231,38 @@ int min(int a, int b);
 int max(int a, int b);
 void tolower_string(char *str);
 char *extract_param(char **haystack, const char *needle, const char *delim);
-int verify_range(struct flashchip *flash, uint8_t *cmpbuf, int start, int len, const char *message);
-int need_erase(uint8_t *have, uint8_t *want, int len, enum write_granularity gran);
+int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len, const char *message);
+int need_erase(uint8_t *have, uint8_t *want, unsigned int len, enum write_granularity gran);
 char *strcat_realloc(char *dest, const char *src);
 void print_version(void);
 void print_banner(void);
 void list_programmers_linebreak(int startcol, int cols, int paren);
 int selfcheck(void);
-int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it);
+int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it, const char *diff_file);
 int read_buf_from_file(unsigned char *buf, unsigned long size, const char *filename);
 int write_buf_to_file(unsigned char *buf, unsigned long size, const char *filename);
 
 #define OK 0
 #define NT 1    /* Not tested */
 
-/* Something happened that shouldn't happen, but we can go on */
+/* what to do in case of an error */
+enum error_action {
+	error_fail,	/* fail immediately */
+	error_ignore,	/* non-fatal error; continue */
+};
+
+/* Something happened that shouldn't happen, but we can go on. */
 #define ERROR_NONFATAL 0x100
+
+/* Something happened that shouldn't happen, we'll abort. */
+#define ERROR_FATAL -0xee
+
+/* Operation failed due to access restriction set in programmer or flash chip */
+#define ACCESS_DENIED -7
+extern enum error_action access_denied_action;
+
+/* convenience function for checking return codes */
+extern int ignore_error(int x);
 
 /* cli_output.c */
 /* Let gcc and clang check for correct printf-style format strings. */
@@ -252,7 +270,8 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 #define MSG_ERROR	0
 #define MSG_INFO	1
 #define MSG_DEBUG	2
-#define MSG_BARF	3
+#define MSG_DEBUG2	3
+#define MSG_BARF	4
 #define msg_gerr(...)	print(MSG_ERROR, __VA_ARGS__)	/* general errors */
 #define msg_perr(...)	print(MSG_ERROR, __VA_ARGS__)	/* programmer errors */
 #define msg_cerr(...)	print(MSG_ERROR, __VA_ARGS__)	/* chip errors */
@@ -262,13 +281,12 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 #define msg_gdbg(...)	print(MSG_DEBUG, __VA_ARGS__)	/* general debug */
 #define msg_pdbg(...)	print(MSG_DEBUG, __VA_ARGS__)	/* programmer debug */
 #define msg_cdbg(...)	print(MSG_DEBUG, __VA_ARGS__)	/* chip debug */
+#define msg_gdbg2(...)	print(MSG_DEBUG2, __VA_ARGS__)	/* general debug2 */
+#define msg_pdbg2(...)	print(MSG_DEBUG2, __VA_ARGS__)	/* programmer debug2 */
+#define msg_cdbg2(...)	print(MSG_DEBUG2, __VA_ARGS__)	/* chip debug2 */
 #define msg_gspew(...)	print(MSG_BARF, __VA_ARGS__)	/* general debug barf  */
 #define msg_pspew(...)	print(MSG_BARF, __VA_ARGS__)	/* programmer debug barf  */
 #define msg_cspew(...)	print(MSG_BARF, __VA_ARGS__)	/* chip debug barf  */
-
-/* cli_classic.c */
-int cli_classic(int argc, char *argv[]);
-int cli_mfg(int argc, char *argv[]);
 
 /* cli_mfg.c */
 extern int set_ignore_fmap;
@@ -286,16 +304,17 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 int handle_partial_read(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf, int start, int len),
-                 int write_to_file);
+    int (*read) (struct flashchip *flash, uint8_t *buf,
+                 unsigned int start, unsigned int len),
+    int write_to_file);
     /* RETURN: the number of partitions that have beenpartial read.
     *         ==0 means no partition is specified.
     *         < 0 means writing file error. */
 int handle_partial_verify(
     struct flashchip *flash,
     uint8_t *buf,
-    int (*verify) (struct flashchip *flash, uint8_t *buf, int start, int len,
-                   const char* message));
+    int (*verify) (struct flashchip *flash, uint8_t *buf, unsigned int start,
+                   unsigned int len, const char* message));
     /* RETURN: ==0 means all identical.
                !=0 means buf and flash are different. */
 

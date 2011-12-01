@@ -24,6 +24,8 @@
 #ifndef __PROGRAMMER_H__
 #define __PROGRAMMER_H__ 1
 
+#include "flash.h"	/* for chipaddr and flashchip */
+
 enum programmer {
 #if CONFIG_INTERNAL == 1
 	PROGRAMMER_INTERNAL,
@@ -79,10 +81,11 @@ enum programmer {
 #if CONFIG_SATAMV == 1
 	PROGRAMMER_SATAMV,
 #endif
+#if CONFIG_LINUX_SPI == 1
+	PROGRAMMER_LINUX_SPI,
+#endif
 	PROGRAMMER_INVALID /* This must always be the last entry. */
 };
-
-extern enum programmer programmer;
 
 struct programmer_entry {
 	const char *vendor;
@@ -94,20 +97,12 @@ struct programmer_entry {
 				    size_t len);
 	void (*unmap_flash_region) (void *virt_addr, size_t len);
 
-	void (*chip_writeb) (uint8_t val, chipaddr addr);
-	void (*chip_writew) (uint16_t val, chipaddr addr);
-	void (*chip_writel) (uint32_t val, chipaddr addr);
-	void (*chip_writen) (uint8_t *buf, chipaddr addr, size_t len);
-	uint8_t (*chip_readb) (const chipaddr addr);
-	uint16_t (*chip_readw) (const chipaddr addr);
-	uint32_t (*chip_readl) (const chipaddr addr);
-	void (*chip_readn) (uint8_t *buf, const chipaddr addr, size_t len);
 	void (*delay) (int usecs);
 };
 
 extern const struct programmer_entry programmer_table[];
 
-int programmer_init(char *param);
+int programmer_init(enum programmer prog, char *param);
 int programmer_shutdown(void);
 
 enum bitbang_spi_master_type {
@@ -158,7 +153,7 @@ enum board_match_phase {
 	P3
 };
 
-struct board_pciid_enable {
+struct board_match {
 	/* Any device, but make it sensible, like the ISA bridge. */
 	uint16_t first_vendor;
 	uint16_t first_device;
@@ -190,7 +185,7 @@ struct board_pciid_enable {
 	int (*enable) (void); /* May be NULL. */
 };
 
-extern const struct board_pciid_enable board_pciid_enables[];
+extern const struct board_match board_matches[];
 
 struct board_info {
 	const char *vendor;
@@ -290,7 +285,7 @@ extern int superio_count;
 #endif
 #if NEED_PCI == 1
 struct pci_dev *pci_dev_find_filter(struct pci_filter filter);
-struct pci_dev *pci_dev_find_vendorclass(uint16_t vendor, uint16_t class);
+struct pci_dev *pci_dev_find_vendorclass(uint16_t vendor, uint16_t devclass);
 struct pci_dev *pci_dev_find(uint16_t vendor, uint16_t device);
 struct pci_dev *pci_card_find(uint16_t vendor, uint16_t device,
 			      uint16_t card_vendor, uint16_t card_device);
@@ -304,6 +299,7 @@ extern int force_boardenable;
 extern int force_boardmismatch;
 void probe_superio(void);
 int register_superio(struct superio s);
+extern enum chipbustype internal_buses_supported;
 int internal_init(void);
 void internal_chip_writeb(uint8_t val, chipaddr addr);
 void internal_chip_writew(uint16_t val, chipaddr addr);
@@ -358,6 +354,18 @@ void fallback_chip_writen(uint8_t *buf, chipaddr addr, size_t len);
 uint16_t fallback_chip_readw(const chipaddr addr);
 uint32_t fallback_chip_readl(const chipaddr addr);
 void fallback_chip_readn(uint8_t *buf, const chipaddr addr, size_t len);
+struct par_programmer {
+	void (*chip_writeb) (uint8_t val, chipaddr addr);
+	void (*chip_writew) (uint16_t val, chipaddr addr);
+	void (*chip_writel) (uint32_t val, chipaddr addr);
+	void (*chip_writen) (uint8_t *buf, chipaddr addr, size_t len);
+	uint8_t (*chip_readb) (const chipaddr addr);
+	uint16_t (*chip_readw) (const chipaddr addr);
+	uint32_t (*chip_readl) (const chipaddr addr);
+	void (*chip_readn) (uint8_t *buf, const chipaddr addr, size_t len);
+};
+extern const struct par_programmer *par_programmer;
+void register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses);
 
 /* dummyflasher.c */
 #if CONFIG_DUMMY == 1
@@ -425,9 +433,6 @@ extern const struct pcidev_status nics_intel[];
 /* nicintel_spi.c */
 #if CONFIG_NICINTEL_SPI == 1
 int nicintel_spi_init(void);
-int nicintel_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-	const unsigned char *writearr, unsigned char *readarr);
-void nicintel_spi_chip_writeb(uint8_t val, chipaddr addr);
 extern const struct pcidev_status nics_intel_spi[];
 #endif
 
@@ -489,6 +494,11 @@ int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 int buspirate_spi_init(void);
 #endif
 
+/* linux_spi.c */
+#if CONFIG_LINUX_SPI == 1
+int linux_spi_init(void);
+#endif
+
 /* dediprog.c */
 #if CONFIG_DEDIPROG == 1
 int dediprog_init(void);
@@ -546,6 +556,12 @@ enum spi_controller {
 #if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__) || defined(__arm__)))
 	SPI_CONTROLLER_BITBANG,
 #endif
+#if CONFIG_LINUX_SPI == 1
+	SPI_CONTROLLER_LINUX,
+#endif
+#if CONFIG_SERPROG == 1
+	SPI_CONTROLLER_SERPROG,
+#endif
 };
 extern const int spi_programmer_count;
 
@@ -554,30 +570,41 @@ extern const int spi_programmer_count;
 #define MAX_DATA_WRITE_UNLIMITED 256
 struct spi_programmer {
 	enum spi_controller type;
-	int max_data_read;
-	int max_data_write;
+	unsigned int max_data_read;
+	unsigned int max_data_write;
 	int (*command)(unsigned int writecnt, unsigned int readcnt,
 		   const unsigned char *writearr, unsigned char *readarr);
 	int (*multicommand)(struct spi_command *cmds);
 
 	/* Optimized functions for this programmer */
-	int (*read)(struct flashchip *flash, uint8_t *buf, int start, int len);
-	int (*write_256)(struct flashchip *flash, uint8_t *buf, int start, int len);
+	int (*read)(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write_256)(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 };
 
 extern const struct spi_programmer *spi_programmer;
 int default_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr, unsigned char *readarr);
 int default_spi_send_multicommand(struct spi_command *cmds);
-int default_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
-int default_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
+int default_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+int default_spi_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 void register_spi_programmer(const struct spi_programmer *programmer);
 
 /* ichspi.c */
 #if CONFIG_INTERNAL == 1
+enum ich_chipset {
+	CHIPSET_ICH_UNKNOWN,
+	CHIPSET_ICH7 = 7,
+	CHIPSET_ICH8,
+	CHIPSET_ICH9,
+	CHIPSET_ICH10,
+	CHIPSET_5_SERIES_IBEX_PEAK,
+	CHIPSET_6_SERIES_COUGAR_POINT,
+	CHIPSET_7_SERIES_PANTHER_POINT
+};
+
 extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
-		    int ich_generation);
+		 enum ich_chipset ich_generation);
 int via_init_spi(struct pci_dev *dev);
 
 /* it85spi.c */
@@ -593,30 +620,30 @@ int init_superio_ite(void);
 int mcp6x_spi_init(int want_spi);
 
 /* mec1308.c */
-struct superio probe_superio_mec1308(void);
 int mec1308_probe_spi_flash(const char *name);
-int mec1308_spi_read(struct flashchip *flash,
-                     uint8_t * buf, int start, int len);
-int mec1308_spi_write_256(struct flashchip *flash,
-                          uint8_t *buf, int start, int len);
-int mec1308_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-                             const unsigned char *writearr,
-                             unsigned char *readarr);
 
 /* sb600spi.c */
 int sb600_probe_spi(struct pci_dev *dev);
 
 /* tegra2_spi.c */
 int tegra2_spi_init(void);
-int tegra2_spi_shutdown(void *);
-int tegra2_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-		      const unsigned char *writearr, unsigned char *readarr);
-int tegra2_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
-int tegra2_spi_write(struct flashchip *flash, uint8_t *buf, int start, int len);
 
 /* wbsio_spi.c */
 int wbsio_check_for_spi(void);
 #endif
+
+/* opaque.c */
+struct opaque_programmer {
+	int max_data_read;
+	int max_data_write;
+	/* Specific functions for this programmer */
+	int (*probe) (struct flashchip *flash);
+	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*erase) (struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
+};
+extern const struct opaque_programmer *opaque_programmer;
+void register_opaque_programmer(const struct opaque_programmer *pgm);
 
 /* serprog.c */
 #if CONFIG_SERPROG == 1
@@ -624,7 +651,7 @@ int serprog_init(void);
 void serprog_chip_writeb(uint8_t val, chipaddr addr);
 uint8_t serprog_chip_readb(const chipaddr addr);
 void serprog_chip_readn(uint8_t *buf, const chipaddr addr, size_t len);
-void serprog_delay(int delay);
+void serprog_delay(int usecs);
 #endif
 
 /* serial.c */
@@ -635,15 +662,7 @@ typedef int fdtype;
 #endif
 
 /* wpce775x.c */
-struct superio probe_superio_wpce775x(void);
 int wpce775x_probe_spi_flash(const char *name);
-int wpce775x_spi_read(struct flashchip *flash,
-                      uint8_t * buf, int start, int len);
-int wpce775x_spi_write_256(struct flashchip *flash,
-                           uint8_t *buf, int start, int len);
-int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
-			      const unsigned char *writearr,
-			      unsigned char *readarr);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

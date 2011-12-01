@@ -143,14 +143,20 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 		for (offset = flash->total_size * 1024 - stride;
 		     offset > 0;
 		     offset -= stride) {
+			int tmp;
+
 			if (offset % (stride * 2) == 0)
 					continue;
-
-			if (flash->read(flash, (uint8_t *)&tmp64,
-			                offset, sizeof(tmp64))) {
-				msg_gdbg("failed to read flash at "
-				         "offset 0x%lx\n", offset);
-				return -1;
+			tmp = flash->read(flash, (uint8_t *)&tmp64,
+			                  offset, sizeof(tmp64));
+			if (tmp) {
+				if (ignore_error(tmp)) {
+					continue;
+				} else {
+					msg_gdbg("failed to read flash at "
+					         "offset 0x%lx\n", offset);
+					return -1;
+				}
 			}
 
 			if (!memcmp(&tmp64, &sig, sizeof(sig))) {
@@ -166,10 +172,15 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	 * with before going upstream.
 	 */
 	if (!fmap_found) {
+		int tmp;
 		uint8_t *image = malloc(flash->total_size * 1024);
 
 		msg_gdbg("using brute force method to find fmap\n");
-		flash->read(flash, image, 0, flash->total_size * 1024);
+		tmp = flash->read(flash, image, 0, flash->total_size * 1024);
+		if (!ignore_error(tmp)) {
+			msg_gdbg("failed to read flash\n");
+			return -1;
+		}
 		for (offset = flash->total_size * 1024 - sizeof(sig);
 		     offset > 0;
 		     offset--) {

@@ -317,7 +317,7 @@ int tegra2_spi_init(void)
 	uint32_t *spi_cmd;
 	uint32_t *spi_sts;
 
-	buses_supported = CHIP_BUSTYPE_SPI;
+	buses_supported = BUS_SPI;
 	register_spi_programmer(&spi_programmer_tegra2);
 
 	gpio_base = physmap("GPIO", TEGRA2_GPIO_BASE, 4096);

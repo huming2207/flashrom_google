@@ -54,7 +54,12 @@ static const char *dmidecode_names[] = {
 	"baseboard-version",
 };
 
-/* A full list of chassis types can be found in the System Management BIOS
+/* This list is used to identify supposed laptops. The is_laptop field has the
+ * following meaning:
+ * 	- 0: in all likelihood not a laptop
+ * 	- 1: in all likelihood a laptop
+ * 	- 2: chassis-type is not specific enough
+ * A full list of chassis types can be found in the System Management BIOS
  * (SMBIOS) Reference Specification 2.7.0 section 7.4.1 "Chassis Types" at
  * http://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.0.pdf
  * The types below are the most common ones.
@@ -64,14 +69,19 @@ static const struct {
 	unsigned char is_laptop;
 	const char *name;
 } dmi_chassis_types[] = {
-	{0x01, 0, "Other"},
-	{0x02, 0, "Unknown"},
+	{0x01, 2, "Other"},
+	{0x02, 2, "Unknown"},
 	{0x03, 0, "Desktop",},
+	{0x06, 0, "Mini Tower"},
+	{0x07, 0, "Tower"},
 	{0x08, 1, "Portable"},
 	{0x09, 1, "Laptop"},
 	{0x0a, 1, "Notebook"},
 	{0x0b, 1, "Hand Held"},
 	{0x0e, 1, "Sub Notebook"},
+	{0x11, 0, "Main Server Chassis"},
+	{0x17, 0, "Rack Mount Chassis"},
+	{0x18, 0, "Sealed-case PC"}, /* used by Supermicro (X8SIE) */
 };
 
 #define DMI_COMMAND_LEN_MAX 260
@@ -98,13 +108,14 @@ static char *get_dmi_string(const char *string_name)
 	}
 
 	/* Kill lines starting with '#', as recent dmidecode versions
-	   have the quirk to emit a "# SMBIOS implementations newer..."
-	   message even on "-s" if the SMBIOS declares a
-	   newer-than-supported version number, while it *should* only print
-	   the requested string. */
+	 * have the quirk to emit a "# SMBIOS implementations newer..."
+	 * message even on "-s" if the SMBIOS declares a
+	 * newer-than-supported version number, while it *should* only print
+	 * the requested string.
+	 */
 	do {
 		if (!fgets(answerbuf, DMI_MAX_ANSWER_LEN, dmidecode_pipe)) {
-			if(ferror(dmidecode_pipe)) {
+			if (ferror(dmidecode_pipe)) {
 				msg_perr("DMI pipe read error\n");
 				pclose(dmidecode_pipe);
 				return NULL;
@@ -112,7 +123,7 @@ static char *get_dmi_string(const char *string_name)
 				answerbuf[0] = 0;	/* Hit EOF */
 			}
 		}
-	} while(answerbuf[0] == '#');
+	} while (answerbuf[0] == '#');
 
 	/* Toss all output above DMI_MAX_ANSWER_LEN away to prevent
 	   deadlock on pclose. */
@@ -125,8 +136,7 @@ static char *get_dmi_string(const char *string_name)
 	}
 
 	/* Chomp trailing newline. */
-	if (answerbuf[0] != 0 &&
-	    answerbuf[strlen(answerbuf) - 1] == '\n')
+	if (answerbuf[0] != 0 && answerbuf[strlen(answerbuf) - 1] == '\n')
 		answerbuf[strlen(answerbuf) - 1] = 0;
 	msg_pdbg("DMI string %s: \"%s\"\n", string_name, answerbuf);
 
@@ -152,15 +162,24 @@ void dmi_init(void)
 	}
 
 	chassis_type = get_dmi_string("chassis-type");
-	if (chassis_type) {
-		for (i = 0; i < ARRAY_SIZE(dmi_chassis_types); i++) {
-			if (!strcasecmp(chassis_type,
-					dmi_chassis_types[i].name) &&
-			    dmi_chassis_types[i].is_laptop) {
-				msg_pdbg("Laptop detected via DMI\n");
-				is_laptop = 1;
-			}
+	if (chassis_type == NULL)
+		return;
+
+	is_laptop = 2;
+	for (i = 0; i < ARRAY_SIZE(dmi_chassis_types); i++) {
+		if (strcasecmp(chassis_type, dmi_chassis_types[i].name) == 0) {
+			is_laptop = dmi_chassis_types[i].is_laptop;
+			break;
 		}
+	}
+
+	switch (is_laptop) {
+	case 1:
+		msg_pdbg("Laptop detected via DMI.\n");
+		break;
+	case 2:
+		msg_pdbg("DMI chassis-type is not specific enough.\n");
+		break;
 	}
 	free(chassis_type);
 }

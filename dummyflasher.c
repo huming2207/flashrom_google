@@ -55,33 +55,47 @@ enum emu_chip {
 };
 static enum emu_chip emu_chip = EMULATE_NONE;
 static char *emu_persistent_image = NULL;
-static int emu_chip_size = 0;
+static unsigned int emu_chip_size = 0;
 #if EMULATE_SPI_CHIP
-static int emu_max_byteprogram_size = 0;
-static int emu_max_aai_size = 0;
-static int emu_jedec_se_size = 0;
-static int emu_jedec_be_52_size = 0;
-static int emu_jedec_be_d8_size = 0;
-static int emu_jedec_ce_60_size = 0;
-static int emu_jedec_ce_c7_size = 0;
+static unsigned int emu_max_byteprogram_size = 0;
+static unsigned int emu_max_aai_size = 0;
+static unsigned int emu_jedec_se_size = 0;
+static unsigned int emu_jedec_be_52_size = 0;
+static unsigned int emu_jedec_be_d8_size = 0;
+static unsigned int emu_jedec_ce_60_size = 0;
+static unsigned int emu_jedec_ce_c7_size = 0;
 #endif
 #endif
 
-static int spi_write_256_chunksize = 256;
+static unsigned int spi_write_256_chunksize = 256;
 
 static int dummy_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
-static int dummy_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
+static int dummy_spi_write_256(struct flashchip *flash, uint8_t *buf,
+			       unsigned int start, unsigned int len);
 
 static const struct spi_programmer spi_programmer_dummyflasher = {
-	.type = SPI_CONTROLLER_DUMMY,
-	.max_data_read = MAX_DATA_READ_UNLIMITED,
-	.max_data_write = MAX_DATA_UNSPECIFIED,
-	.command = dummy_spi_send_command,
-	.multicommand = default_spi_send_multicommand,
-	.read = default_spi_read,
-	.write_256 = dummy_spi_write_256,
+	.type		= SPI_CONTROLLER_DUMMY,
+	.max_data_read	= MAX_DATA_READ_UNLIMITED,
+	.max_data_write	= MAX_DATA_UNSPECIFIED,
+	.command	= dummy_spi_send_command,
+	.multicommand	= default_spi_send_multicommand,
+	.read		= default_spi_read,
+	.write_256	= dummy_spi_write_256,
 };
+
+static const struct par_programmer par_programmer_dummy = {
+		.chip_readb		= dummy_chip_readb,
+		.chip_readw		= dummy_chip_readw,
+		.chip_readl		= dummy_chip_readl,
+		.chip_readn		= dummy_chip_readn,
+		.chip_writeb		= dummy_chip_writeb,
+		.chip_writew		= dummy_chip_writew,
+		.chip_writel		= dummy_chip_writel,
+		.chip_writen		= dummy_chip_writen,
+};
+
+enum chipbustype dummy_buses_supported = BUS_NONE;
 
 static int dummy_shutdown(void *data)
 {
@@ -119,24 +133,24 @@ int dummy_init(void)
 	/* Convert the parameters to lowercase. */
 	tolower_string(bustext);
 
-	buses_supported = CHIP_BUSTYPE_NONE;
+	dummy_buses_supported = BUS_NONE;
 	if (strstr(bustext, "parallel")) {
-		buses_supported |= CHIP_BUSTYPE_PARALLEL;
+		dummy_buses_supported |= BUS_PARALLEL;
 		msg_pdbg("Enabling support for %s flash.\n", "parallel");
 	}
 	if (strstr(bustext, "lpc")) {
-		buses_supported |= CHIP_BUSTYPE_LPC;
+		dummy_buses_supported |= BUS_LPC;
 		msg_pdbg("Enabling support for %s flash.\n", "LPC");
 	}
 	if (strstr(bustext, "fwh")) {
-		buses_supported |= CHIP_BUSTYPE_FWH;
+		dummy_buses_supported |= BUS_FWH;
 		msg_pdbg("Enabling support for %s flash.\n", "FWH");
 	}
 	if (strstr(bustext, "spi")) {
-		register_spi_programmer(&spi_programmer_dummyflasher);
+		dummy_buses_supported |= BUS_SPI;
 		msg_pdbg("Enabling support for %s flash.\n", "SPI");
 	}
-	if (buses_supported == CHIP_BUSTYPE_NONE)
+	if (dummy_buses_supported == BUS_NONE)
 		msg_pdbg("Support for all flash bus types disabled.\n");
 	free(bustext);
 
@@ -280,6 +294,14 @@ dummy_init_out:
 		free(flashchip_contents);
 		return 1;
 	}
+	if (dummy_buses_supported & (BUS_PARALLEL | BUS_LPC | BUS_FWH))
+		register_par_programmer(&par_programmer_dummy,
+					dummy_buses_supported &
+						(BUS_PARALLEL | BUS_LPC |
+						 BUS_FWH));
+	if (dummy_buses_supported & BUS_SPI)
+		register_spi_programmer(&spi_programmer_dummyflasher);
+
 	return 0;
 }
 
@@ -353,8 +375,8 @@ void dummy_chip_readn(uint8_t *buf, const chipaddr addr, size_t len)
 static int emulate_spi_chip_response(unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr)
 {
-	int offs;
-	static int aai_offs;
+	unsigned int offs;
+	static int unsigned aai_offs;
 	static int aai_active = 0;
 
 	if (writecnt == 0) {
@@ -583,14 +605,14 @@ static int dummy_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	}
 #endif
 	msg_pspew(" reading %u bytes:", readcnt);
-	for (i = 0; i < readcnt; i++) {
+	for (i = 0; i < readcnt; i++)
 		msg_pspew(" 0x%02x", readarr[i]);
-	}
 	msg_pspew("\n");
 	return 0;
 }
 
-static int dummy_spi_write_256(struct flashchip *flash, uint8_t *buf, int start, int len)
+static int dummy_spi_write_256(struct flashchip *flash, uint8_t *buf,
+			       unsigned int start, unsigned int len)
 {
 	return spi_write_chunked(flash, buf, start, len,
 				 spi_write_256_chunksize);

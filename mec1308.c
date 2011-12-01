@@ -329,6 +329,65 @@ static int mec1308_shutdown(void *data)
 	return 0;
 }
 
+int mec1308_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len)
+{
+	return spi_read_chunked(flash, buf, start, len, flash->page_size);
+}
+
+int mec1308_spi_write_256(struct flashchip *flash,
+                          uint8_t *buf, int start, int len)
+{
+	return spi_write_chunked(flash, buf, start, len, flash->page_size);
+}
+
+static int mec1308_chip_select(void)
+{
+	return mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_CS_EN);
+}
+
+static int mec1308_chip_deselect(void)
+{
+	return mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_CS_DIS);
+}
+
+/*
+ * MEC1308 will not allow direct access to SPI chip from host if EC is
+ * connected to LPC bus. This function will forward commands issued thru
+ * mailbox interface to the SPI flash chip.
+ */
+int mec1308_spi_send_command(unsigned int writecnt,
+                             unsigned int readcnt,
+                             const unsigned char *writearr,
+                             unsigned char *readarr)
+{
+	int i, rc = 0;
+
+	if (mec1308_chip_select())
+		return 1;
+
+	for (i = 0; i < writecnt; i++) {
+		if (mbx_write(MEC1308_MBX_DATA_START, writearr[i]) ||
+		    mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_SEND)) {
+			msg_pdbg("%s: failed to issue send command\n",__func__);
+			rc = 1;
+			goto mec1308_spi_send_command_exit;
+		}
+	}
+
+	for (i = 0; i < readcnt; i++) {
+		if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_READ)) {
+			msg_pdbg("%s: failed to issue read command\n",__func__);
+			rc = 1;
+			goto mec1308_spi_send_command_exit;
+		}
+		readarr[i] = mbx_read(MEC1308_MBX_DATA_START);
+	}
+
+mec1308_spi_send_command_exit:
+	rc |= mec1308_chip_deselect();
+	return rc;
+}
+
 static const struct spi_programmer spi_programmer_mec1308 = {
 	.type = SPI_CONTROLLER_MEC1308,
 	.max_data_read = 256,	/* FIXME: should be MAX_DATA_READ_UNLIMITED? */
@@ -420,64 +479,5 @@ int mec1308_probe_spi_flash(const char *name)
 	register_spi_programmer(&spi_programmer_mec1308);
 	msg_pdbg("%s(): successfully initialized mec1308\n", __func__);
 	return 0;
-}
-
-int mec1308_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len)
-{
-	return spi_read_chunked(flash, buf, start, len, flash->page_size);
-}
-
-int mec1308_spi_write_256(struct flashchip *flash,
-                          uint8_t *buf, int start, int len)
-{
-	return spi_write_chunked(flash, buf, start, len, flash->page_size);
-}
-
-static int mec1308_chip_select(void)
-{
-	return mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_CS_EN);
-}
-
-static int mec1308_chip_deselect(void)
-{
-	return mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_CS_DIS);
-}
-
-/*
- * MEC1308 will not allow direct access to SPI chip from host if EC is
- * connected to LPC bus. This function will forward commands issued thru
- * mailbox interface to the SPI flash chip.
- */
-int mec1308_spi_send_command(unsigned int writecnt,
-                             unsigned int readcnt,
-                             const unsigned char *writearr,
-                             unsigned char *readarr)
-{
-	int i, rc = 0;
-
-	if (mec1308_chip_select())
-		return 1;
-
-	for (i = 0; i < writecnt; i++) {
-		if (mbx_write(MEC1308_MBX_DATA_START, writearr[i]) ||
-		    mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_SEND)) {
-			msg_pdbg("%s: failed to issue send command\n",__func__);
-			rc = 1;
-			goto mec1308_spi_send_command_exit;
-		}
-	}
-
-	for (i = 0; i < readcnt; i++) {
-		if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_PASSTHRU_READ)) {
-			msg_pdbg("%s: failed to issue read command\n",__func__);
-			rc = 1;
-			goto mec1308_spi_send_command_exit;
-		}
-		readarr[i] = mbx_read(MEC1308_MBX_DATA_START);
-	}
-
-mec1308_spi_send_command_exit:
-	rc |= mec1308_chip_deselect();
-	return rc;
 }
 #endif
