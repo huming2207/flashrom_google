@@ -28,7 +28,7 @@ uint8_t *nicintel_control_bar;
 
 const struct pcidev_status nics_intel[] = {
 	{PCI_VENDOR_ID_INTEL, 0x1209, NT, "Intel", "8255xER/82551IT Fast Ethernet Controller"},
-	{PCI_VENDOR_ID_INTEL, 0x1229, NT, "Intel", "82557/8/9/0/1 Ethernet Pro 100"},
+	{PCI_VENDOR_ID_INTEL, 0x1229, OK, "Intel", "82557/8/9/0/1 Ethernet Pro 100"},
 
 	{},
 };
@@ -42,6 +42,17 @@ const struct pcidev_status nics_intel[] = {
 #define NICINTEL_CONTROL_MEMMAP_SIZE	0x10 
 
 #define CSR_FCR 0x0c
+
+static const struct par_programmer par_programmer_nicintel = {
+		.chip_readb		= nicintel_chip_readb,
+		.chip_readw		= fallback_chip_readw,
+		.chip_readl		= fallback_chip_readl,
+		.chip_readn		= fallback_chip_readn,
+		.chip_writeb		= nicintel_chip_writeb,
+		.chip_writew		= fallback_chip_writew,
+		.chip_writel		= fallback_chip_writel,
+		.chip_writen		= fallback_chip_writen,
+};
 
 static int nicintel_shutdown(void *data)
 {
@@ -93,9 +104,8 @@ int nicintel_init(void)
 	 */
 	pci_rmmio_writew(0x0001, nicintel_control_bar + CSR_FCR);
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
-
 	max_rom_decode.parallel = NICINTEL_MEMMAP_SIZE;
+	register_par_programmer(&par_programmer_nicintel, BUS_PARALLEL);
 
 	return 0;
 

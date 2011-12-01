@@ -25,15 +25,20 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "flash.h"
-#include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
 #include <ftdi.h>
 
+/* Please keep sorted by vendor ID, then device ID. */
+
 #define FTDI_VID		0x0403
 #define FTDI_FT2232H_PID	0x6010
 #define FTDI_FT4232H_PID	0x6011
+#define TIAO_TUMPA_PID		0x8a98
 #define AMONTEC_JTAGKEY_PID	0xCFF8
+
+#define GOEPEL_VID		0x096C
+#define GOEPEL_PICOTAP_PID	0x1449
 
 #define FIC_VID			0x1457
 #define OPENMOKO_DBGBOARD_PID	0x5118
@@ -50,7 +55,9 @@
 const struct usbdev_status devs_ft2232spi[] = {
 	{FTDI_VID, FTDI_FT2232H_PID, OK, "FTDI", "FT2232H"},
 	{FTDI_VID, FTDI_FT4232H_PID, OK, "FTDI", "FT4232H"},
+	{FTDI_VID, TIAO_TUMPA_PID, OK, "TIAO", "USB Multi-Protocol Adapter"},
 	{FTDI_VID, AMONTEC_JTAGKEY_PID, OK, "Amontec", "JTAGkey"},
+	{GOEPEL_VID, GOEPEL_PICOTAP_PID, OK, "GOEPEL", "PicoTAP"},
 	{FIC_VID, OPENMOKO_DBGBOARD_PID, OK, "FIC",
 		"OpenMoko Neo1973 Debug board (V2+)"},
 	{OLIMEX_VID, OLIMEX_ARM_OCD_PID, NT, "Olimex", "ARM-USB-OCD"},
@@ -145,18 +152,19 @@ static int ft2232_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr);
 
 static const struct spi_programmer spi_programmer_ft2232 = {
-	.type = SPI_CONTROLLER_FT2232,
-	.max_data_read = 64 * 1024,
-	.max_data_write = 256,
-	.command = ft2232_spi_send_command,
-	.multicommand = default_spi_send_multicommand,
-	.read = default_spi_read,
-	.write_256 = default_spi_write_256,
+	.type		= SPI_CONTROLLER_FT2232,
+	.max_data_read	= 64 * 1024,
+	.max_data_write	= 256,
+	.command	= ft2232_spi_send_command,
+	.multicommand	= default_spi_send_multicommand,
+	.read		= default_spi_read,
+	.write_256	= default_spi_write_256,
 };
 
+/* Returns 0 upon success, a negative number upon errors. */
 int ft2232_spi_init(void)
 {
-	int f;
+	int f, ret = 0;
 	struct ftdi_context *ftdic = &ftdic_context;
 	unsigned char buf[512];
 	int ft2232_vid = FTDI_VID;
@@ -173,6 +181,20 @@ int ft2232_spi_init(void)
 			ft2232_type = FTDI_FT4232H_PID;
 		else if (!strcasecmp(arg, "jtagkey")) {
 			ft2232_type = AMONTEC_JTAGKEY_PID;
+			ft2232_interface = INTERFACE_A;
+			cs_bits = 0x18;
+			pindir = 0x1b;
+		} else if (!strcasecmp(arg, "picotap")) {
+			ft2232_vid = GOEPEL_VID;
+			ft2232_type = GOEPEL_PICOTAP_PID;
+			ft2232_interface = INTERFACE_A;
+		} else if (!strcasecmp(arg, "tumpa")) {
+			/* Interface A is SPI1, B is SPI2. */
+			ft2232_type = TIAO_TUMPA_PID;
+			ft2232_interface = INTERFACE_A;
+		} else if (!strcasecmp(arg, "busblaster")) {
+			/* In its default configuration it is a jtagkey clone */
+			ft2232_type = FTDI_FT2232H_PID;
 			ft2232_interface = INTERFACE_A;
 			cs_bits = 0x18;
 			pindir = 0x1b;
@@ -203,7 +225,7 @@ int ft2232_spi_init(void)
 		} else {
 			msg_perr("Error: Invalid device type specified.\n");
 			free(arg);
-			return 1;
+			return -1;
 		}
 	}
 	free(arg);
@@ -219,7 +241,7 @@ int ft2232_spi_init(void)
 		default:
 			msg_perr("Error: Invalid port/interface specified.\n");
 			free(arg);
-			return 1;
+			return -2;
 		}
 	}
 	free(arg);
@@ -231,7 +253,7 @@ int ft2232_spi_init(void)
 
 	if (ftdi_init(ftdic) < 0) {
 		msg_perr("ftdi_init failed\n");
-		return EXIT_FAILURE; // TODO
+		return -3;
 	}
 
 	f = ftdi_usb_open(ftdic, ft2232_vid, ft2232_type);
@@ -239,7 +261,7 @@ int ft2232_spi_init(void)
 	if (f < 0 && f != -5) {
 		msg_perr("Unable to open FTDI device: %d (%s)\n", f,
 				ftdi_get_error_string(ftdic));
-		exit(-1); // TODO
+		return -4;
 	}
 
 	if (ftdic->type != TYPE_2232H && ftdic->type != TYPE_4232H) {
@@ -272,8 +294,10 @@ int ft2232_spi_init(void)
 	if (clock_5x) {
 		msg_pdbg("Disable divide-by-5 front stage\n");
 		buf[0] = 0x8a;		/* Disable divide-by-5. */
-		if (send_buf(ftdic, buf, 1))
-			return -1;
+		if (send_buf(ftdic, buf, 1)) {
+			ret = -5;
+			goto ftdi_err;
+		}
 		mpsse_clk = 60.0;
 	} else {
 		mpsse_clk = 12.0;
@@ -284,34 +308,48 @@ int ft2232_spi_init(void)
 	/* valueL/valueH are (desired_divisor - 1) */
 	buf[1] = (DIVIDE_BY - 1) & 0xff;
 	buf[2] = ((DIVIDE_BY - 1) >> 8) & 0xff;
-	if (send_buf(ftdic, buf, 3))
-		return -1;
+	if (send_buf(ftdic, buf, 3)) {
+		ret = -6;
+		goto ftdi_err;
+	}
 
 	msg_pdbg("MPSSE clock: %f MHz divisor: %d "
-		 "SPI clock: %f MHz\n",
-		 mpsse_clk, DIVIDE_BY,
+		 "SPI clock: %f MHz\n", mpsse_clk, DIVIDE_BY,
 		 (double)(mpsse_clk / (((DIVIDE_BY - 1) + 1) * 2)));
 
 	/* Disconnect TDI/DO to TDO/DI for loopback. */
 	msg_pdbg("No loopback of TDI/DO TDO/DI\n");
 	buf[0] = 0x85;
-	if (send_buf(ftdic, buf, 1))
-		return -1;
+	if (send_buf(ftdic, buf, 1)) {
+		ret = -7;
+		goto ftdi_err;
+	}
 
 	msg_pdbg("Set data bits\n");
 	buf[0] = SET_BITS_LOW;
 	buf[1] = cs_bits;
 	buf[2] = pindir;
-	if (send_buf(ftdic, buf, 3))
-		return -1;
+	if (send_buf(ftdic, buf, 3)) {
+		ret = -8;
+		goto ftdi_err;
+	}
 
 	// msg_pdbg("\nft2232 chosen\n");
 
 	register_spi_programmer(&spi_programmer_ft2232);
 
 	return 0;
+
+ftdi_err:
+	if ((f = ftdi_usb_close(ftdic)) < 0) {
+		msg_perr("Unable to close FTDI device: %d (%s)\n", f,
+		         ftdi_get_error_string(ftdic));
+	}
+
+	return ret;
 }
 
+/* Returns 0 upon success, a negative number upon errors. */
 static int ft2232_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr)
 {
@@ -332,7 +370,8 @@ static int ft2232_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		buf = realloc(buf, bufsize);
 		if (!buf) {
 			msg_perr("Out of memory!\n");
-			exit(1);
+			/* TODO: What to do with buf? */
+			return SPI_GENERIC_ERROR;
 		}
 		oldbufsize = bufsize;
 	}
@@ -368,8 +407,7 @@ static int ft2232_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		failed = ret;
 		/* We can't abort here, we still have to deassert CS#. */
 		if (ret)
-			msg_perr("send_buf failed before read: %i\n",
-				ret);
+			msg_perr("send_buf failed before read: %i\n", ret);
 		i = 0;
 		if (ret == 0) {
 			/*

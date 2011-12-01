@@ -34,7 +34,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "flash.h"
-#include "chipdrivers.h"
 #include "spi.h"
 #include "programmer.h"
 
@@ -88,20 +87,16 @@ unsigned char *ce_high, *ce_low;
 static int it85xx_scratch_rom_reenter = 0;
 
 /* This function will poll the keyboard status register until either
- *   an expected value shows up, or
- *   timeout reaches.
+ * an expected value shows up, or the timeout is reached.
+ * timeout is in usec.
  *
- * Returns: 0 -- the expected value has shown.
- *          1 -- timeout reached.
+ * Returns: 0 -- the expected value showed up.
+ *          1 -- timeout.
  */
-static int wait_for(
-		const unsigned int mask,
-		const unsigned int expected_value,
-		const int timeout,  /* in usec */
-		const char* error_message,
-		const char* function_name,
-		const int lineno
-) {
+static int wait_for(const unsigned int mask, const unsigned int expected_value,
+		    const int timeout, const char * error_message,
+		    const char * function_name, const int lineno)
+{
 	int time_passed;
 
 	for (time_passed = 0;; ++time_passed) {
@@ -116,21 +111,20 @@ static int wait_for(
 	return 1;
 }
 
-/* IT8502 employs a scratch ram when flash is being updated. Call the following
+/* IT8502 employs a scratch RAM when flash is being updated. Call the following
  * two functions before/after flash erase/program. */
-void it85xx_enter_scratch_rom()
+void it85xx_enter_scratch_rom(void)
 {
-	int ret;
-	int tries;
+	int ret, tries;
 
-	msg_pspew("%s():%d was called ...\n", __FUNCTION__, __LINE__);
-	if (it85xx_scratch_rom_reenter > 0) return;
-
+	msg_pdbg("%s():%d was called ...\n", __func__, __LINE__);
+	if (it85xx_scratch_rom_reenter > 0)
+		return;
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at waiting for IBF==0.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Copy EC firmware to SRAM. */
@@ -139,7 +133,7 @@ void it85xx_enter_scratch_rom()
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at taking command.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Waiting for OBF (output buffer) has data.
@@ -147,12 +141,12 @@ void it85xx_enter_scratch_rom()
 		 * ISR so that it is okay as long as the command is 0xFA. */
 		if (wait_for(KB_OBF, KB_OBF, MAX_TIMEOUT, NULL, NULL, 0))
 			msg_pdbg("%s():%d * timeout at waiting for OBF.\n",
-			         __FUNCTION__, __LINE__);
+			         __func__, __LINE__);
 		if ((ret = INB(LEGACY_KBC_PORT_DATA)) == 0xFA) {
 			break;
 		} else {
 			msg_perr("%s():%d * not run on SRAM ret=%d\n",
-			         __FUNCTION__, __LINE__, ret);
+			         __func__, __LINE__, ret);
 			continue;
 		}
 	}
@@ -160,25 +154,25 @@ void it85xx_enter_scratch_rom()
 	if (tries < MAX_TRY) {
 		/* EC already runs on SRAM */
 		it85xx_scratch_rom_reenter++;
-		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+		msg_pdbg("%s():%d * SUCCESS.\n", __func__, __LINE__);
 	} else {
-		msg_perr("%s():%d * Max try reached.\n",
-		         __FUNCTION__, __LINE__);
+		msg_perr("%s():%d * Max try reached.\n", __func__, __LINE__);
 	}
 }
 
-void it85xx_exit_scratch_rom()
+void it85xx_exit_scratch_rom(void)
 {
 	int tries;
 
-	msg_pdbg("%s():%d was called ...\n", __FUNCTION__, __LINE__);
-	if (it85xx_scratch_rom_reenter <= 0) return;
+	msg_pdbg("%s():%d was called ...\n", __func__, __LINE__);
+	if (it85xx_scratch_rom_reenter <= 0)
+		return;
 
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at waiting for IBF==0.\n",
-		             __FUNCTION__, __LINE__))
+		             __func__, __LINE__))
 			continue;
 
 		/* Exit SRAM. Run on flash. */
@@ -187,7 +181,7 @@ void it85xx_exit_scratch_rom()
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
 		             "* timeout at taking command.\n",
-		             __FUNCTION__, __LINE__)) {
+		             __func__, __LINE__)) {
 			/* We cannot ensure if EC has exited update mode.
 			 * If EC is in normal mode already, a further 0xFE
 			 * command will reboot system. So, exit loop here. */
@@ -200,10 +194,9 @@ void it85xx_exit_scratch_rom()
 
 	if (tries < MAX_TRY) {
 		it85xx_scratch_rom_reenter = 0;
-		msg_pdbg("%s():%d * SUCCESS.\n", __FUNCTION__, __LINE__);
+		msg_pdbg("%s():%d * SUCCESS.\n", __func__, __LINE__);
 	} else {
-		msg_perr("%s():%d * Max try reached.\n",
-		         __FUNCTION__, __LINE__);
+		msg_perr("%s():%d * Max try reached.\n", __func__, __LINE__);
 	}
 }
 
@@ -226,7 +219,7 @@ static int it85xx_spi_common_init(struct superio s)
 		return 1;
 
 #ifdef LPC_IO
-	/* Get LPCPNP of SHM. That's big-endian */
+	/* Get LPCPNP of SHM. That's big-endian. */
 	sio_write(s.port, LDNSEL, 0x0F); /* Set LDN to SHM (0x0F) */
 	shm_io_base = (sio_read(s.port, SHM_IO_BAR0) << 8) +
 	              sio_read(s.port, SHM_IO_BAR1);
@@ -236,8 +229,8 @@ static int it85xx_spi_common_init(struct superio s)
 	/* These pointers are not used directly. They will be send to EC's
 	 * register for indirect access. */
 	base = 0xFFFFF000;
-	ce_high = ((unsigned char*)base) + 0xE00;  /* 0xFFFFFE00 */
-	ce_low = ((unsigned char*)base) + 0xD00;  /* 0xFFFFFD00 */
+	ce_high = ((unsigned char *)base) + 0xE00;  /* 0xFFFFFE00 */
+	ce_low = ((unsigned char *)base) + 0xD00;  /* 0xFFFFFD00 */
 
 	/* pre-set indirect-access registers since in most of cases they are
 	 * 0xFFFFxx00. */
@@ -246,12 +239,14 @@ static int it85xx_spi_common_init(struct superio s)
 	INDIRECT_A3(shm_io_base, (base >> 24));
 #endif
 #ifdef LPC_MEMORY
-	base = (chipaddr)programmer_map_flash_region("it85 communication",
-						     0xFFFFF000, 0x1000);
+	/* FIXME: We should block accessing that region for anything else.
+	 * Major TODO here, and it will be a lot of work.
+	 */
+	base = (chipaddr)physmap("it85 communication", 0xFFFFF000, 0x1000);
 	msg_pdbg("%s():%d base=0x%08x\n", __func__, __LINE__,
 	         (unsigned int)base);
-	ce_high = (unsigned char*)(base + 0xE00);  /* 0xFFFFFE00 */
-	ce_low = (unsigned char*)(base + 0xD00);  /* 0xFFFFFD00 */
+	ce_high = (unsigned char *)(base + 0xE00);  /* 0xFFFFFE00 */
+	ce_low = (unsigned char *)(base + 0xD00);  /* 0xFFFFFD00 */
 #endif
 
 	return 0;
@@ -270,8 +265,9 @@ static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	int i;
 
 	it85xx_enter_scratch_rom();
-	/* exit scratch rom ONLY when programmer shuts down. Otherwise, the
-	 * temporary flash state may halt EC. */
+	/* Exit scratch ROM ONLY when programmer shuts down. Otherwise, the
+	 * temporary flash state may halt the EC.
+	 */
 
 #ifdef LPC_IO
 	INDIRECT_A1(shm_io_base, (((unsigned long int)ce_high) >> 8) & 0xff);
@@ -322,19 +318,27 @@ int it85xx_spi_init(struct superio s)
 {
 	int ret;
 
-	if (!(buses_supported & CHIP_BUSTYPE_FWH)) {
+	if (!(internal_buses_supported & BUS_FWH)) {
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
 	}
 	ret = it85xx_spi_common_init(s);
 	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
 	if (!ret) {
-		msg_pdbg("%s():%d buses_supported=0x%x\n", __func__, __LINE__,
-		          buses_supported);
-		if (buses_supported & CHIP_BUSTYPE_FWH)
-			msg_pdbg("Overriding chipset SPI with IT85 FWH|SPI.\n");
-		/* Really leave FWH enabled? */
-		/* Set this as spi controller. */
+		msg_pdbg("%s: internal_buses_supported=0x%x\n", __func__,
+		          internal_buses_supported);
+		/* Check for FWH because IT85 listens to FWH cycles.
+		 * FIXME: The big question is whether FWH cycles are necessary
+		 * for communication even if LPC_IO is defined.
+		 */
+		if (internal_buses_supported & BUS_FWH)
+			msg_pdbg("Registering IT85 SPI.\n");
+		/* FIXME: Really leave FWH enabled? We can't use this region
+		 * anymore since accessing it would mess up IT85 communication.
+		 * If we decide to disable FWH for this region, we should print
+		 * a debug message about it.
+		 */
+		/* Set this as SPI controller. */
 		register_spi_programmer(&spi_programmer_it85xx);
 	}
 	return ret;

@@ -41,6 +41,74 @@
 /* This variable is shared with doit() in flashrom.c */
 int set_ignore_fmap = 0;
 
+#if CONFIG_INTERNAL == 1
+static enum programmer default_programmer = PROGRAMMER_INTERNAL;
+#elif CONFIG_DUMMY == 1
+static enum programmer default_programmer = PROGRAMMER_DUMMY;
+#else
+/* If neither internal nor dummy are selected, we must pick a sensible default.
+ * Since there is no reason to prefer a particular external programmer, we fail
+ * if more than one of them is selected. If only one is selected, it is clear
+ * that the user wants that one to become the default.
+ */
+#if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_FT2232_SPI+CONFIG_SERPROG+CONFIG_BUSPIRATE_SPI+CONFIG_DEDIPROG+CONFIG_RAYER_SPI+CONFIG_NICINTEL+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI+CONFIG_SATAMV > 1
+#error Please enable either CONFIG_DUMMY or CONFIG_INTERNAL or disable support for all programmers except one.
+#endif
+static enum programmer default_programmer =
+#if CONFIG_NIC3COM == 1
+	PROGRAMMER_NIC3COM
+#endif
+#if CONFIG_NICREALTEK == 1
+	PROGRAMMER_NICREALTEK
+#endif
+#if CONFIG_NICNATSEMI == 1
+	PROGRAMMER_NICNATSEMI
+#endif
+#if CONFIG_GFXNVIDIA == 1
+	PROGRAMMER_GFXNVIDIA
+#endif
+#if CONFIG_DRKAISER == 1
+	PROGRAMMER_DRKAISER
+#endif
+#if CONFIG_SATASII == 1
+	PROGRAMMER_SATASII
+#endif
+#if CONFIG_ATAHPT == 1
+	PROGRAMMER_ATAHPT
+#endif
+#if CONFIG_FT2232_SPI == 1
+	PROGRAMMER_FT2232_SPI
+#endif
+#if CONFIG_SERPROG == 1
+	PROGRAMMER_SERPROG
+#endif
+#if CONFIG_BUSPIRATE_SPI == 1
+	PROGRAMMER_BUSPIRATE_SPI
+#endif
+#if CONFIG_DEDIPROG == 1
+	PROGRAMMER_DEDIPROG
+#endif
+#if CONFIG_RAYER_SPI == 1
+	PROGRAMMER_RAYER_SPI
+#endif
+#if CONFIG_NICINTEL == 1
+	PROGRAMMER_NICINTEL
+#endif
+#if CONFIG_NICINTEL_SPI == 1
+	PROGRAMMER_NICINTEL_SPI
+#endif
+#if CONFIG_OGP_SPI == 1
+	PROGRAMMER_OGP_SPI
+#endif
+#if CONFIG_SATAMV == 1
+	PROGRAMMER_SATAMV
+#endif
+#if CONFIG_LINUX_SPI == 1
+	PROGRAMMER_LINUX_SPI
+#endif
+;
+#endif
+
 void cli_mfg_usage(const char *name)
 {
 	const char *pname;
@@ -84,6 +152,7 @@ void cli_mfg_usage(const char *name)
 	       "   -f | --force                      force specific operations "
 	         "(see man page)\n"
 	       "   -n | --noverify                   don't auto-verify\n"
+	       "        --fast-verify                only verify -i part\n"
 	       "   -l | --layout <file>              read ROM layout from "
 	         "<file>\n"
 	       "   -i | --image <name>[:<file>]      only access image <name> "
@@ -128,6 +197,7 @@ void cli_mfg_usage(const char *name)
 	}
 
 	printf("Long-options:\n");
+	printf("   --diff <file>                     diff from file instead of ROM\n");
 	printf("   --get-size                        get chip size (bytes)\n");
 	printf("   --wp-status                       show write protect status\n");
 	printf("   --wp-range <start> <length>       set write protect range\n");
@@ -154,6 +224,7 @@ void cli_mfg_abort_usage(const char *name)
 enum LONGOPT_RETURN_VALUES {
 	/* start after ASCII chars */
 	LONGOPT_GET_SIZE = 256,
+	LONGOPT_DIFF,
 	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
 	LONGOPT_WP_ENABLE,
@@ -163,7 +234,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_FAST_VERIFY,
 };
 
-int cli_mfg(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	unsigned long size;
 	/* Probe for up to three flash chips. */
@@ -181,11 +252,13 @@ int cli_mfg(int argc, char *argv[])
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
 	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
 	int dont_verify_it = 0, list_supported = 0;
+	int diff = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
 	int operation_specified = 0;
 	int i;
+	enum programmer prog = PROGRAMMER_INVALID;
 	int rc = 0;
 
 	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhb";
@@ -207,6 +280,7 @@ int cli_mfg(int argc, char *argv[])
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'R'},
 		{"get-size", 0, 0, LONGOPT_GET_SIZE},
+		{"diff", 1, 0, LONGOPT_DIFF},
 		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
 		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
@@ -219,6 +293,7 @@ int cli_mfg(int argc, char *argv[])
 	};
 
 	char *filename = NULL;
+	char *diff_file = NULL;
 
 	char *tempstr = NULL;
 	char *pparam = NULL;
@@ -349,8 +424,16 @@ int cli_mfg(int argc, char *argv[])
 #endif
 			break;
 		case 'p':
-			for (programmer = 0; programmer < PROGRAMMER_INVALID; programmer++) {
-				name = programmer_table[programmer].name;
+			if (prog != PROGRAMMER_INVALID) {
+				fprintf(stderr, "Error: --programmer specified "
+					"more than once. You can separate "
+					"multiple\nparameters for a programmer "
+					"with \",\". Please see the man page "
+					"for details.\n");
+				cli_mfg_abort_usage(argv[0]);
+			}
+			for (prog = 0; prog < PROGRAMMER_INVALID; prog++) {
+				name = programmer_table[prog].name;
 				namelen = strlen(name);
 				if (strncmp(optarg, name, namelen) == 0) {
 					switch (optarg[namelen]) {
@@ -374,7 +457,7 @@ int cli_mfg(int argc, char *argv[])
 					break;
 				}
 			}
-			if (programmer == PROGRAMMER_INVALID) {
+			if (prog == PROGRAMMER_INVALID) {
 				fprintf(stderr, "Error: Unknown programmer "
 					"%s.\n", optarg);
 				cli_mfg_abort_usage(argv[0]);
@@ -416,6 +499,10 @@ int cli_mfg(int argc, char *argv[])
 		case LONGOPT_WP_DISABLE:
 			set_wp_disable = 1;
 			break;
+		case LONGOPT_DIFF:
+			diff = 1;
+			diff_file = strdup(optarg);
+			break;
 		case LONGOPT_IGNORE_FMAP:
 			set_ignore_fmap = 1;
 			break;
@@ -452,14 +539,6 @@ int cli_mfg(int argc, char *argv[])
 	}
 #endif
 
-#if CONFIG_INTERNAL == 1
-	if ((programmer != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
-		fprintf(stderr, "Error: --mainboard requires the internal "
-				"programmer. Aborting.\n");
-		cli_mfg_abort_usage(argv[0]);
-	}
-#endif
-
 	if (chip_to_probe) {
 		for (flash = flashchips; flash && flash->name; flash++)
 			if (!strcmp(flash->name, chip_to_probe))
@@ -474,6 +553,17 @@ int cli_mfg(int argc, char *argv[])
 		/* Clean up after the check. */
 		flash = NULL;
 	}
+
+	if (prog == PROGRAMMER_INVALID)
+		prog = default_programmer;
+
+#if CONFIG_INTERNAL == 1
+	if ((prog != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
+		fprintf(stderr, "Error: --mainboard requires the internal "
+				"programmer. Aborting.\n");
+		cli_mfg_abort_usage(argv[0]);
+	}
+#endif
 
 #if USE_BIG_LOCK == 1
 	/* get lock before doing any work that touches hardware */
@@ -496,7 +586,7 @@ int cli_mfg(int argc, char *argv[])
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
-	if (programmer_init(pparam)) {
+	if (programmer_init(prog, pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
 		rc = 1;
 		goto cli_mfg_release_lock_exit;
@@ -646,7 +736,8 @@ int cli_mfg(int argc, char *argv[])
 
 	if (read_it || write_it || erase_it || verify_it) {
 		rc = doit(fill_flash, force, filename,
-		          read_it, write_it, erase_it, verify_it);
+		          read_it, write_it, erase_it, verify_it,
+		          diff_file);
 	}
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");

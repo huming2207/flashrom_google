@@ -62,7 +62,7 @@ done:
 
 static int wbsio_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
-static int wbsio_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len);
+static int wbsio_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 
 static const struct spi_programmer spi_programmer_wbsio = {
 	.type = SPI_CONTROLLER_WBSIO,
@@ -82,10 +82,10 @@ int wbsio_check_for_spi(void)
 
 	msg_pspew("\nwbsio_spibase = 0x%x\n", wbsio_spibase);
 
-	register_spi_programmer(&spi_programmer_wbsio);
 	msg_pdbg("%s: Winbond saved on 4 register bits so max chip size is "
 		 "1024 kB!\n", __func__);
 	max_rom_decode.spi = 1024 * 1024;
+	register_spi_programmer(&spi_programmer_wbsio);
 
 	return 0;
 }
@@ -194,7 +194,7 @@ static int wbsio_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	return 0;
 }
 
-static int wbsio_spi_read(struct flashchip *flash, uint8_t *buf, int start, int len)
+static int wbsio_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	return read_memmapped(flash, buf, start, len);
 }

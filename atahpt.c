@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#if defined(__i386__) || defined(__x86_64__)
+
 #include <stdlib.h>
 #include <string.h>
 #include "flash.h"
@@ -36,6 +38,17 @@ const struct pcidev_status ata_hpt[] = {
 	{0x1103, 0x0006, NT, "Highpoint", "HPT302/302N"},
 
 	{},
+};
+
+static const struct par_programmer par_programmer_atahpt = {
+		.chip_readb		= atahpt_chip_readb,
+		.chip_readw		= fallback_chip_readw,
+		.chip_readl		= fallback_chip_readl,
+		.chip_readn		= fallback_chip_readn,
+		.chip_writeb		= atahpt_chip_writeb,
+		.chip_writew		= fallback_chip_writew,
+		.chip_writel		= fallback_chip_writel,
+		.chip_writen		= fallback_chip_writen,
 };
 
 static int atahpt_shutdown(void *data)
@@ -59,10 +72,11 @@ int atahpt_init(void)
 	reg32 |= (1 << 24);
 	rpci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
-
 	if (register_shutdown(atahpt_shutdown, NULL))
 		return 1;
+
+	register_par_programmer(&par_programmer_atahpt, BUS_PARALLEL);
+
 	return 0;
 }
 
@@ -77,3 +91,7 @@ uint8_t atahpt_chip_readb(const chipaddr addr)
 	OUTL((uint32_t)addr, io_base_addr + BIOS_ROM_ADDR);
 	return INB(io_base_addr + BIOS_ROM_DATA);
 }
+
+#else
+#error PCI port I/O access is not supported on this architecture yet.
+#endif

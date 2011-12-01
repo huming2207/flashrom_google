@@ -86,16 +86,29 @@ static int is_loongson(void)
 #include <string.h>
 #include <ctype.h>
 
-/* Returns true if the /proc/cpuinfo contains a line: "CPU part *: *0xc09".
+/* Returns true if the /proc/cpuinfo indicates we're a tegra2.
+ *
+ * This means that it contains the two lines:
+ *   CPU part *: *0xc09
+ *   CPU variant *: *0x1
+ *
+ * The "variant" is important because we don't yet support Tegra3 and Tegra3
+ * identifies itself as variant 0x2.
+ *
  * TODO: need to extend in future for same SPI controller in chip family.
  */
 static int is_tegra2(void)
 {
 	FILE *cpuinfo;
 	uint32_t impl = 0, architecture = 0, variant = 0, part = 0;
-	const char *name = "CPU part";
-	const char *value = "0xc09";
-	int ret = 0;
+	const char *part_name = "CPU part";
+	const char *part_value = "0xc09";
+	const char *variant_name = "CPU variant";
+	const char *variant_value = "0x1";
+	int found_part = 0;
+	int found_variant = 0;
+	const char *cur_value = NULL;
+	int *cur_found = NULL;
 
 	cpuinfo = fopen("/proc/cpuinfo", "rb");
 	if (!cpuinfo)
@@ -107,8 +120,15 @@ static int is_tegra2(void)
 		ptr = line;
 		while (*ptr && isspace((unsigned char)*ptr))
 			ptr++;
-		if (strncmp(ptr, name, strlen(name)) == 0)
-			ptr += strlen(name);
+		if (strncmp(ptr, variant_name, strlen(variant_name)) == 0) {
+			ptr += strlen(variant_name);
+			cur_value = variant_value;
+			cur_found = &found_variant;
+		} else if (strncmp(ptr, part_name, strlen(part_name)) == 0) {
+			ptr += strlen(part_name);
+			cur_value = part_value;
+			cur_found = &found_part;
+		}
 		while (*ptr && isspace((unsigned char)*ptr))
 			ptr++;
 		if (*ptr != ':')
@@ -116,10 +136,13 @@ static int is_tegra2(void)
 		ptr++;
 		while (*ptr && isspace((unsigned char)*ptr))
 			ptr++;
-		ret = (strncmp(ptr, value, strlen(value)) == 0);
+		if (cur_found)
+			*cur_found = (strncmp(ptr, cur_value,
+					      strlen(cur_value)) == 0);
+		cur_found = NULL;
 	}
 	fclose(cpuinfo);
-	return ret;
+	return found_part && found_variant;
 }
 #endif
 

@@ -19,6 +19,7 @@
  */
 
 /* Datasheets are not public (yet?) */
+#if defined(__i386__) || defined(__x86_64__)
 
 #include <stdlib.h>
 #include "flash.h"
@@ -39,6 +40,17 @@ const struct pcidev_status satas_mv[] = {
 #define EXPANSION_ROM_BAR_CONTROL	0x00d2c
 #define PCI_BAR2_CONTROL		0x00c08
 #define GPIO_PORT_CONTROL		0x104f0
+
+static const struct par_programmer par_programmer_satamv = {
+		.chip_readb		= satamv_chip_readb,
+		.chip_readw		= fallback_chip_readw,
+		.chip_readl		= fallback_chip_readl,
+		.chip_readn		= fallback_chip_readn,
+		.chip_writeb		= satamv_chip_writeb,
+		.chip_writew		= fallback_chip_writew,
+		.chip_writel		= fallback_chip_writel,
+		.chip_writen		= fallback_chip_writen,
+};
 
 static int satamv_shutdown(void *data)
 {
@@ -136,11 +148,10 @@ int satamv_init(void)
 	mv_iobar = tmp & 0xffff;
 	msg_pspew("Activating I/O BAR at 0x%04x\n", mv_iobar);
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
-
 	/* 512 kByte with two 8-bit latches, and
 	 * 4 MByte with additional 3-bit latch. */
 	max_rom_decode.parallel = 4 * 1024 * 1024;
+	register_par_programmer(&par_programmer_satamv, BUS_PARALLEL);
 
 	return 0;
 
@@ -182,3 +193,7 @@ uint8_t satamv_chip_readb(const chipaddr addr)
 {
 	return satamv_indirect_chip_readb(addr);
 }
+
+#else
+#error PCI port I/O access is not supported on this architecture yet.
+#endif

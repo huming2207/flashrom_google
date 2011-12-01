@@ -61,6 +61,17 @@ const struct pcidev_status gfx_nvidia[] = {
 	{},
 };
 
+static const struct par_programmer par_programmer_gfxnvidia = {
+		.chip_readb		= gfxnvidia_chip_readb,
+		.chip_readw		= fallback_chip_readw,
+		.chip_readl		= fallback_chip_readl,
+		.chip_readn		= fallback_chip_readn,
+		.chip_writeb		= gfxnvidia_chip_writeb,
+		.chip_writew		= fallback_chip_writew,
+		.chip_writel		= fallback_chip_writel,
+		.chip_writen		= fallback_chip_writen,
+};
+
 static int gfxnvidia_shutdown(void *data)
 {
 	physunmap(nvidia_bar, GFXNVIDIA_MEMMAP_SIZE);
@@ -85,7 +96,7 @@ int gfxnvidia_init(void)
 
 	nvidia_bar = physmap("NVIDIA", io_base_addr, GFXNVIDIA_MEMMAP_SIZE);
 
-	/* must be done before rpci calls */
+	/* Must be done before rpci calls. */
 	if (register_shutdown(gfxnvidia_shutdown, NULL))
 		return 1;
 
@@ -94,10 +105,9 @@ int gfxnvidia_init(void)
 	reg32 &= ~(1 << 0);
 	rpci_write_long(pcidev_dev, 0x50, reg32);
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
-
 	/* Write/erase doesn't work. */
 	programmer_may_write = 0;
+	register_par_programmer(&par_programmer_gfxnvidia, BUS_PARALLEL);
 
 	return 0;
 }

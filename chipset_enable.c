@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
+#include <errno.h>
 #include "flash.h"
 #include "programmer.h"
 
@@ -75,7 +77,8 @@ static int enable_flash_sis_mapping(struct pci_dev *dev, const char *name)
 	rpci_write_byte(dev, 0x40, new);
 	newer = pci_read_byte(dev, 0x40);
 	if (newer != new) {
-		msg_pinfo("tried to set register 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x40, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x40, new, name);
 		msg_pinfo("Stuck at 0x%x\n", newer);
 		return -1;
 	}
@@ -85,7 +88,7 @@ static int enable_flash_sis_mapping(struct pci_dev *dev, const char *name)
 static struct pci_dev *find_southbridge(uint16_t vendor, const char *name)
 {
 	struct pci_dev *sbdev;
-	
+
 	sbdev = pci_dev_find_vendorclass(vendor, 0x0601);
 	if (!sbdev)
 		sbdev = pci_dev_find_vendorclass(vendor, 0x0680);
@@ -95,8 +98,8 @@ static struct pci_dev *find_southbridge(uint16_t vendor, const char *name)
 		msg_perr("No southbridge found for %s!\n", name);
 	if (sbdev)
 		msg_pdbg("Found southbridge %04x:%04x at %02x:%02x:%01x\n",
-			     sbdev->vendor_id, sbdev->device_id,
-			     sbdev->bus, sbdev->dev, sbdev->func);
+			 sbdev->vendor_id, sbdev->device_id,
+			 sbdev->bus, sbdev->dev, sbdev->func);
 	return sbdev;
 }
 
@@ -163,7 +166,8 @@ static int enable_flash_sis530(struct pci_dev *dev, const char *name)
 	rpci_write_byte(sbdev, 0x45, new);
 	newer = pci_read_byte(sbdev, 0x45);
 	if (newer != new) {
-		msg_pinfo("tried to set register 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x45, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x45, new, name);
 		msg_pinfo("Stuck at 0x%x\n", newer);
 		ret = -1;
 	}
@@ -189,7 +193,8 @@ static int enable_flash_sis540(struct pci_dev *dev, const char *name)
 	rpci_write_byte(sbdev, 0x45, new);
 	newer = pci_read_byte(sbdev, 0x45);
 	if (newer != new) {
-		msg_pinfo("tried to set register 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x45, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x45, new, name);
 		msg_pinfo("Stuck at 0x%x\n", newer);
 		ret = -1;
 	}
@@ -208,7 +213,7 @@ static int enable_flash_piix4(struct pci_dev *dev, const char *name)
 	uint16_t old, new;
 	uint16_t xbcs = 0x4e;	/* X-Bus Chip Select register. */
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
+	internal_buses_supported = BUS_PARALLEL;
 
 	old = pci_read_word(dev, xbcs);
 
@@ -236,7 +241,8 @@ static int enable_flash_piix4(struct pci_dev *dev, const char *name)
 	rpci_write_word(dev, xbcs, new);
 
 	if (pci_read_word(dev, xbcs) != new) {
-		msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", xbcs, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", xbcs, new, name);
 		return -1;
 	}
 
@@ -250,19 +256,19 @@ static int enable_flash_piix4(struct pci_dev *dev, const char *name)
 static int enable_flash_ich(struct pci_dev *dev, const char *name,
 			    int bios_cntl)
 {
-	uint8_t old, new;
+	uint8_t old, new, wanted;
 
 	/*
 	 * Note: the ICH0-ICH5 BIOS_CNTL register is actually 16 bit wide, but
 	 * just treating it as 8 bit wide seems to work fine in practice.
 	 */
 	old = pci_read_byte(dev, bios_cntl);
-	new = old;
+	wanted = old;
 
 	msg_pdbg("\nBIOS Lock Enable: %sabled, ",
-		     (old & (1 << 1)) ? "en" : "dis");
+		 (old & (1 << 1)) ? "en" : "dis");
 	msg_pdbg("BIOS Write Enable: %sabled, ",
-		     (old & (1 << 0)) ? "en" : "dis");
+		 (old & (1 << 0)) ? "en" : "dis");
 	msg_pdbg("BIOS_CNTL is 0x%x\n", old);
 
 	/*
@@ -270,23 +276,26 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * "Bit 5: SMM BIOS Write Protect Disable (SMM_BWP)
 	 * 1 = BIOS region SMM protection is enabled.
 	 * The BIOS Region is not writable unless all processors are in SMM."
-	 * In earlier chipsets this bit is reserved. */
+	 * In earlier chipsets this bit is reserved.
+	 */
 	if (old & (1 << 5)) {
-		msg_pinfo("WARNING: BIOS region SMM protection is enabled!\n");
+		msg_pdbg("WARNING: BIOS region SMM protection is enabled!\n");
 		msg_pdbg("Trying to clear BIOS region SMM protection.\n");
-		new &= ~(1 << 5);
+		wanted &= ~(1 << 5);
 	}
 
-	new |= (1 << 0);
+	wanted |= (1 << 0);
 
 	/* Only write the register if it's necessary */
-	if (new == old)
+	if (wanted == old)
 		return 0;
 
-	rpci_write_byte(dev, bios_cntl, new);
+	rpci_write_byte(dev, bios_cntl, wanted);
 
-	if (pci_read_byte(dev, bios_cntl) != new) {
-		msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", bios_cntl, new, name);
+	if ((new = pci_read_byte(dev, bios_cntl)) != wanted) {
+		msg_pinfo("WARNING: Setting 0x%x from 0x%x to 0x%x on %s "
+			  "failed. New value is 0x%x.\n",
+			  bios_cntl, old, wanted, name, new);
 		return -1;
 	}
 
@@ -300,36 +309,48 @@ static int enable_flash_ich_4e(struct pci_dev *dev, const char *name)
 	 * FWH_DEC_EN1, but they are called FB_SEL1, FB_SEL2, FB_DEC_EN1 and
 	 * FB_DEC_EN2.
 	 */
-	buses_supported = CHIP_BUSTYPE_FWH;
+	internal_buses_supported = BUS_FWH;
 	return enable_flash_ich(dev, name, 0x4e);
 }
 
 static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 {
 	uint32_t fwh_conf;
-	int i;
+	int i, tmp;
 	char *idsel = NULL;
-	int tmp;
-	int max_decode_fwh_idsel = 0;
-	int max_decode_fwh_decode = 0;
+	int max_decode_fwh_idsel = 0, max_decode_fwh_decode = 0;
 	int contiguous = 1;
 
 	idsel = extract_programmer_param("fwh_idsel");
 	if (idsel && strlen(idsel)) {
-		fwh_conf = (uint32_t)strtoul(idsel, NULL, 0);
-
-		/* FIXME: Need to undo this on shutdown. */
-		msg_pinfo("\nSetting IDSEL=0x%x for top 16 MB", fwh_conf);
-		rpci_write_long(dev, 0xd0, fwh_conf);
-		rpci_write_word(dev, 0xd4, fwh_conf);
+		uint64_t fwh_idsel_old, fwh_idsel;
+		errno = 0;
+		/* Base 16, nothing else makes sense. */
+		fwh_idsel = (uint64_t)strtoull(idsel, NULL, 16);
+		if (errno) {
+			msg_perr("Error: fwh_idsel= specified, but value could "
+				 "not be converted.\n");
+			goto idsel_garbage_out;
+		}
+		if (fwh_idsel & 0xffff000000000000ULL) {
+			msg_perr("Error: fwh_idsel= specified, but value had "
+				 "unused bits set.\n");
+			goto idsel_garbage_out;
+		}
+		fwh_idsel_old = pci_read_long(dev, 0xd0);
+		fwh_idsel_old <<= 16;
+		fwh_idsel_old |= pci_read_word(dev, 0xd4);
+		msg_pdbg("\nSetting IDSEL from 0x%012" PRIx64 " to "
+			 "0x%012" PRIx64 " for top 16 MB.", fwh_idsel_old,
+			 fwh_idsel);
+		rpci_write_long(dev, 0xd0, (fwh_idsel >> 16) & 0xffffffff);
+		rpci_write_word(dev, 0xd4, fwh_idsel & 0xffff);
 		/* FIXME: Decode settings are not changed. */
 	} else if (idsel) {
-		msg_perr("Error: idsel= specified, but no number given.\n");
+		msg_perr("Error: fwh_idsel= specified, but no value given.\n");
+idsel_garbage_out:
 		free(idsel);
-		/* FIXME: Return failure here once internal_init() starts
-		 * to care about the return value of the chipset enable.
-		 */
-		exit(1);
+		return ERROR_FATAL;
 	}
 	free(idsel);
 
@@ -343,9 +364,9 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	for (i = 7; i >= 0; i--) {
 		tmp = (fwh_conf >> (i * 4)) & 0xf;
 		msg_pdbg("\n0x%08x/0x%08x FWH IDSEL: 0x%x",
-			     (0x1ff8 + i) * 0x80000,
-			     (0x1ff0 + i) * 0x80000,
-			     tmp);
+			 (0x1ff8 + i) * 0x80000,
+			 (0x1ff0 + i) * 0x80000,
+			 tmp);
 		if ((tmp == 0) && contiguous) {
 			max_decode_fwh_idsel = (8 - i) * 0x80000;
 		} else {
@@ -357,9 +378,9 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	for (i = 3; i >= 0; i--) {
 		tmp = (fwh_conf >> (i * 4)) & 0xf;
 		msg_pdbg("\n0x%08x/0x%08x FWH IDSEL: 0x%x",
-			     (0xff4 + i) * 0x100000,
-			     (0xff0 + i) * 0x100000,
-			     tmp);
+			 (0xff4 + i) * 0x100000,
+			 (0xff0 + i) * 0x100000,
+			 tmp);
 		if ((tmp == 0) && contiguous) {
 			max_decode_fwh_idsel = (8 - i) * 0x100000;
 		} else {
@@ -372,9 +393,9 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	for (i = 7; i >= 0; i--) {
 		tmp = (fwh_conf >> (i + 0x8)) & 0x1;
 		msg_pdbg("\n0x%08x/0x%08x FWH decode %sabled",
-			     (0x1ff8 + i) * 0x80000,
-			     (0x1ff0 + i) * 0x80000,
-			     tmp ? "en" : "dis");
+			 (0x1ff8 + i) * 0x80000,
+			 (0x1ff0 + i) * 0x80000,
+			 tmp ? "en" : "dis");
 		if ((tmp == 1) && contiguous) {
 			max_decode_fwh_decode = (8 - i) * 0x80000;
 		} else {
@@ -384,9 +405,9 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	for (i = 3; i >= 0; i--) {
 		tmp = (fwh_conf >> i) & 0x1;
 		msg_pdbg("\n0x%08x/0x%08x FWH decode %sabled",
-			     (0xff4 + i) * 0x100000,
-			     (0xff0 + i) * 0x100000,
-			     tmp ? "en" : "dis");
+			 (0xff4 + i) * 0x100000,
+			 (0xff0 + i) * 0x100000,
+			 tmp ? "en" : "dis");
 		if ((tmp == 1) && contiguous) {
 			max_decode_fwh_decode = (8 - i) * 0x100000;
 		} else {
@@ -397,57 +418,50 @@ static int enable_flash_ich_dc(struct pci_dev *dev, const char *name)
 	msg_pdbg("\nMaximum FWH chip size: 0x%x bytes", max_rom_decode.fwh);
 
 	/* If we're called by enable_flash_ich_dc_spi, it will override
-	 * buses_supported anyway.
+	 * internal_buses_supported anyway.
 	 */
-	buses_supported = CHIP_BUSTYPE_FWH;
+	internal_buses_supported = BUS_FWH;
 	return enable_flash_ich(dev, name, 0xdc);
 }
 
 static int enable_flash_poulsbo(struct pci_dev *dev, const char *name)
 {
-       uint16_t old, new;
-       int err;
+	uint16_t old, new;
+	int err;
 
-       if ((err = enable_flash_ich(dev, name, 0xd8)) != 0)
-               return err;
+	if ((err = enable_flash_ich(dev, name, 0xd8)) != 0)
+		return err;
 
-       old = pci_read_byte(dev, 0xd9);
-       msg_pdbg("BIOS Prefetch Enable: %sabled, ",
-                    (old & 1) ? "en" : "dis");
-       new = old & ~1;
+	old = pci_read_byte(dev, 0xd9);
+	msg_pdbg("BIOS Prefetch Enable: %sabled, ",
+		 (old & 1) ? "en" : "dis");
+	new = old & ~1;
 
-       if (new != old)
-               rpci_write_byte(dev, 0xd9, new);
+	if (new != old)
+		rpci_write_byte(dev, 0xd9, new);
 
-	buses_supported = CHIP_BUSTYPE_FWH;
-       return 0;
+	internal_buses_supported = BUS_FWH;
+	return 0;
 }
 
-
-#define ICH_STRAP_RSVD 0x00
-#define ICH_STRAP_SPI  0x01
-#define ICH_STRAP_PCI  0x02
-#define ICH_STRAP_LPC  0x03
-
-static int enable_flash_vt8237s_spi(struct pci_dev *dev, const char *name)
+static int enable_flash_tunnelcreek(struct pci_dev *dev, const char *name)
 {
-	/* Do we really need no write enable? */
-	return via_init_spi(dev);
-}
-
-static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
-				   int ich_generation)
-{
-	int ret;
-	uint8_t bbs, buc;
-	uint32_t tmp, gcs;
+	uint16_t old, new;
+	uint32_t tmp, bnt;
 	void *rcrb;
-	//TODO: These names are incorrect for EP80579. For that, the solution would look like the commented line
-	//static const char *straps_names[] = {"SPI", "reserved", "reserved", "LPC" };
-	static const char *straps_names[] = { "reserved", "SPI", "PCI", "LPC" };
+	int ret;
 
 	/* Enable Flash Writes */
-	ret = enable_flash_ich_dc(dev, name);
+	ret = enable_flash_ich(dev, name, 0xd8);
+	if (ret == ERROR_FATAL)
+		return ret;
+
+	/* Make sure BIOS prefetch mechanism is disabled */
+	old = pci_read_byte(dev, 0xd9);
+	msg_pdbg("BIOS Prefetch Enable: %sabled, ", (old & 1) ? "en" : "dis");
+	new = old & ~1;
+	if (new != old)
+		rpci_write_byte(dev, 0xd9, new);
 
 	/* Get physical address of Root Complex Register Block */
 	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
@@ -456,13 +470,89 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	/* Map RCBA to virtual memory */
 	rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
+	/* Test Boot BIOS Strap Status */
+	bnt = mmio_readl(rcrb + 0x3410);
+	if (bnt & 0x02) {
+		/* If strapped to LPC, no SPI initialization is required */
+		internal_buses_supported = BUS_FWH;
+		return 0;
+	}
+
+	/* This adds BUS_SPI */
+	if (ich_init_spi(dev, tmp, rcrb, 7) != 0) {
+		if (!ret)
+			ret = ERROR_NONFATAL;
+	}
+
+	return ret;
+}
+
+static int enable_flash_vt8237s_spi(struct pci_dev *dev, const char *name)
+{
+	/* Do we really need no write enable? */
+	return via_init_spi(dev);
+}
+
+static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
+				   enum ich_chipset ich_generation)
+{
+	int ret, ret_spi;
+	uint8_t bbs, buc;
+	uint32_t tmp, gcs;
+	void *rcrb;
+	const char *const *straps_names;
+
+	static const char *const straps_names_EP80579[] = { "SPI", "reserved", "reserved", "LPC" };
+	static const char *const straps_names_ich7_nm10[] = { "reserved", "SPI", "PCI", "LPC" };
+	static const char *const straps_names_ich8910[] = { "SPI", "SPI", "PCI", "LPC" };
+	static const char *const straps_names_pch56[] = { "LPC", "reserved", "PCI", "SPI" };
+	static const char *const straps_names_unknown[] = { "unknown", "unknown", "unknown", "unknown" };
+
+	switch (ich_generation) {
+	case CHIPSET_ICH7:
+		/* EP80579 may need further changes, but this is the least
+		 * intrusive way to get correct BOOT Strap printing without
+		 * changing the rest of its code path). */
+		if (strcmp(name, "EP80579") == 0)
+			straps_names = straps_names_EP80579;
+		else
+			straps_names = straps_names_ich7_nm10;
+		break;
+	case CHIPSET_ICH8:
+	case CHIPSET_ICH9:
+	case CHIPSET_ICH10:
+		straps_names = straps_names_ich8910;
+		break;
+	case CHIPSET_5_SERIES_IBEX_PEAK:
+	case CHIPSET_6_SERIES_COUGAR_POINT:
+		straps_names = straps_names_pch56;
+		break;
+	default:
+		msg_gerr("%s: unknown ICH generation. Please report!\n",
+			 __func__);
+		straps_names = straps_names_unknown;
+		break;
+	}
+
+	/* Enable Flash Writes */
+	ret = enable_flash_ich_dc(dev, name);
+	if (ret == ERROR_FATAL)
+		return ret;
+
+	/* Get physical address of Root Complex Register Block */
+	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+	msg_pdbg("Root Complex Register Block address = 0x%x\n", tmp);
+
+	/* Map RCBA to virtual memory */
+	rcrb = physmap("ICH RCRB", tmp, 0x4000);
+
 	/* Set BBS (Boot BIOS Straps) field of GCS register. */
 	gcs = mmio_readl(rcrb + 0x3410);
-	if (target_bus == CHIP_BUSTYPE_LPC) {
+	if (target_bus == BUS_LPC) {
 		msg_pdbg("Setting BBS to LPC\n");
 		gcs = (gcs & ~0xc00) | (0x3 << 10);
 		rmmio_writel(gcs, rcrb + 0x3410);
-	} else if (target_bus == CHIP_BUSTYPE_SPI) {
+	} else if (target_bus == BUS_SPI) {
 		msg_pdbg("Setting BBS to SPI\n");
 		gcs = (gcs & ~0xc00) | (0x1 << 10);
 		rmmio_writel(gcs, rcrb + 0x3410);
@@ -470,57 +560,71 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 
 	msg_pdbg("GCS = 0x%x: ", gcs);
 	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
-		     (gcs & 0x1) ? "en" : "dis");
+		 (gcs & 0x1) ? "en" : "dis");
 	bbs = (gcs >> 10) & 0x3;
-	msg_pdbg("BOOT BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
+	msg_pdbg("Boot BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
 
 	buc = mmio_readb(rcrb + 0x3414);
 	msg_pdbg("Top Swap : %s\n",
-		     (buc & 1) ? "enabled (A16 inverted)" : "not enabled");
+		 (buc & 1) ? "enabled (A16 inverted)" : "not enabled");
 
 	/* It seems the ICH7 does not support SPI and LPC chips at the same
 	 * time. At least not with our current code. So we prevent searching
 	 * on ICH7 when the southbridge is strapped to LPC
 	 */
-
-	buses_supported = CHIP_BUSTYPE_FWH;
-	if (ich_generation == 7) {
-		if(bbs == ICH_STRAP_LPC) {
-			/* No further SPI initialization required */
+	internal_buses_supported = BUS_FWH;
+	if (ich_generation == CHIPSET_ICH7) {
+		if (bbs == 0x03) {
+			/* If strapped to LPC, no further SPI initialization is
+			 * required. */
 			return ret;
-		}
-		else
+		} else {
 			/* Disable LPC/FWH if strapped to PCI or SPI */
-			buses_supported = 0;
+			internal_buses_supported = BUS_NONE;
+		}
 	}
 
-	/* this adds CHIP_BUSTYPE_SPI */
-	if (ich_init_spi(dev, tmp, rcrb, ich_generation) != 0) {
-	        if (!ret)
-		        ret = ERROR_NONFATAL;
-        }
+	/* This adds BUS_SPI */
+	ret_spi = ich_init_spi(dev, tmp, rcrb, ich_generation);
+	if (ret_spi == ERROR_FATAL)
+		return ret_spi;
+	
+	if (ret || ret_spi)
+		ret = ERROR_NONFATAL;
 
 	return ret;
 }
 
 static int enable_flash_ich7(struct pci_dev *dev, const char *name)
 {
-	return enable_flash_ich_dc_spi(dev, name, 7);
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_ICH7);
 }
 
 static int enable_flash_ich8(struct pci_dev *dev, const char *name)
 {
-	return enable_flash_ich_dc_spi(dev, name, 8);
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_ICH8);
 }
 
 static int enable_flash_ich9(struct pci_dev *dev, const char *name)
 {
-	return enable_flash_ich_dc_spi(dev, name, 9);
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_ICH9);
 }
 
 static int enable_flash_ich10(struct pci_dev *dev, const char *name)
 {
-	return enable_flash_ich_dc_spi(dev, name, 10);
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_ICH10);
+}
+
+/* Ibex Peak aka. 5 series & 3400 series */
+static int enable_flash_pch5(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_5_SERIES_IBEX_PEAK);
+}
+
+/* Cougar Point aka. 6 series & c200 series */
+static int enable_flash_pch6(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_6_SERIES_COUGAR_POINT);
 }
 
 static int via_no_byte_merge(struct pci_dev *dev, const char *name)
@@ -528,8 +632,7 @@ static int via_no_byte_merge(struct pci_dev *dev, const char *name)
 	uint8_t val;
 
 	val = pci_read_byte(dev, 0x71);
-	if (val & 0x40)
-	{
+	if (val & 0x40) {
 		msg_pdbg("Disabling byte merging\n");
 		val &= ~0x40;
 		rpci_write_byte(dev, 0x71, val);
@@ -541,7 +644,7 @@ static int enable_flash_vt823x(struct pci_dev *dev, const char *name)
 {
 	uint8_t val;
 
-	/* enable ROM decode range (1MB) FFC00000 - FFFFFFFF */
+	/* Enable ROM decode range (1MB) FFC00000 - FFFFFFFF. */
 	rpci_write_byte(dev, 0x41, 0x7f);
 
 	/* ROM write enable */
@@ -551,15 +654,15 @@ static int enable_flash_vt823x(struct pci_dev *dev, const char *name)
 
 	if (pci_read_byte(dev, 0x40) != val) {
 		msg_pinfo("\nWARNING: Failed to enable flash write on \"%s\"\n",
-		       name);
+			  name);
 		return -1;
 	}
 
 	if (dev->device_id == 0x3227) { /* VT8237R */
-	    /* All memory cycles, not just ROM ones, go to LPC. */
-	    val = pci_read_byte(dev, 0x59);
-	    val &= ~0x80;
-	    rpci_write_byte(dev, 0x59, val);
+		/* All memory cycles, not just ROM ones, go to LPC. */
+		val = pci_read_byte(dev, 0x59);
+		val &= ~0x80;
+		rpci_write_byte(dev, 0x59, val);
 	}
 
 	return 0;
@@ -582,7 +685,7 @@ static int enable_flash_cs5530(struct pci_dev *dev, const char *name)
 #define CS5530_ENABLE_SA2320		(1 << 2)
 #define CS5530_ENABLE_SA20		(1 << 6)
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
+	internal_buses_supported = BUS_PARALLEL;
 	/* Decode 0x000E0000-0x000FFFFF (128 kB), not just 64 kB, and
 	 * decode 0xFF000000-0xFFFFFFFF (16 MB), not just 256 kB.
 	 * FIXME: Should we really touch the low mapping below 1 MB? Flashrom
@@ -667,7 +770,8 @@ static int enable_flash_sc1100(struct pci_dev *dev, const char *name)
 	new = pci_read_byte(dev, 0x52);
 
 	if (new != 0xee) {
-		msg_pinfo("tried to set register 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x52, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x52, new, name);
 		return -1;
 	}
 
@@ -685,7 +789,8 @@ static int enable_flash_amd8111(struct pci_dev *dev, const char *name)
 	if (new != old) {
 		rpci_write_byte(dev, 0x43, new);
 		if (pci_read_byte(dev, 0x43) != new) {
-			msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x43, new, name);
+			msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+				  "(WARNING ONLY).\n", 0x43, new, name);
 		}
 	}
 
@@ -697,7 +802,8 @@ static int enable_flash_amd8111(struct pci_dev *dev, const char *name)
 	rpci_write_byte(dev, 0x40, new);
 
 	if (pci_read_byte(dev, 0x40) != new) {
-		msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x40, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x40, new, name);
 		return -1;
 	}
 
@@ -717,22 +823,22 @@ static int enable_flash_sb600(struct pci_dev *dev, const char *name)
 		if ((prot & 0x3) == 0)
 			continue;
 		msg_pinfo("SB600 %s%sprotected from 0x%08x to 0x%08x\n",
-			(prot & 0x1) ? "write " : "",
-			(prot & 0x2) ? "read " : "",
-			(prot & 0xfffff800),
-			(prot & 0xfffff800) + (((prot & 0x7fc) << 8) | 0x3ff));
+			  (prot & 0x1) ? "write " : "",
+			  (prot & 0x2) ? "read " : "",
+			  (prot & 0xfffff800),
+			  (prot & 0xfffff800) + (((prot & 0x7fc) << 8) | 0x3ff));
 		prot &= 0xfffffffc;
 		rpci_write_byte(dev, reg, prot);
 		prot = pci_read_long(dev, reg);
 		if (prot & 0x3)
 			msg_perr("SB600 %s%sunprotect failed from 0x%08x to 0x%08x\n",
-				(prot & 0x1) ? "write " : "",
-				(prot & 0x2) ? "read " : "",
-				(prot & 0xfffff800),
-				(prot & 0xfffff800) + (((prot & 0x7fc) << 8) | 0x3ff));
+				 (prot & 0x1) ? "write " : "",
+				 (prot & 0x2) ? "read " : "",
+				 (prot & 0xfffff800),
+				 (prot & 0xfffff800) + (((prot & 0x7fc) << 8) | 0x3ff));
 	}
 
-	buses_supported = CHIP_BUSTYPE_LPC | CHIP_BUSTYPE_FWH;
+	internal_buses_supported = BUS_LPC | BUS_FWH;
 
 	ret = sb600_probe_spi(dev);
 
@@ -791,12 +897,19 @@ static int enable_flash_ck804(struct pci_dev *dev, const char *name)
 {
 	uint8_t old, new;
 
+	pci_write_byte(dev, 0x92, 0x00);
+	if (pci_read_byte(dev, 0x92) != 0x00) {
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x92, 0x00, name);
+	}
+
 	old = pci_read_byte(dev, 0x88);
 	new = old | 0xc0;
 	if (new != old) {
 		rpci_write_byte(dev, 0x88, new);
 		if (pci_read_byte(dev, 0x88) != new) {
-			msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x88, new, name);
+			msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+				  "(WARNING ONLY).\n", 0x88, new, name);
 		}
 	}
 
@@ -807,7 +920,8 @@ static int enable_flash_ck804(struct pci_dev *dev, const char *name)
 	rpci_write_byte(dev, 0x6d, new);
 
 	if (pci_read_byte(dev, 0x6d) != new) {
-		msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x6d, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x6d, new, name);
 		return -1;
 	}
 
@@ -818,7 +932,7 @@ static int enable_flash_osb4(struct pci_dev *dev, const char *name)
 {
 	uint8_t tmp;
 
-	buses_supported = CHIP_BUSTYPE_PARALLEL;
+	internal_buses_supported = BUS_PARALLEL;
 
 	tmp = INB(0xc06);
 	tmp |= 0x1;
@@ -842,7 +956,7 @@ static int enable_flash_sb400(struct pci_dev *dev, const char *name)
 
 	if (!smbusdev) {
 		msg_perr("ERROR: SMBus device not found. Aborting.\n");
-		exit(1);
+		return ERROR_FATAL;
 	}
 
 	/* Enable some SMBus stuff. */
@@ -890,7 +1004,8 @@ static int enable_flash_mcp55(struct pci_dev *dev, const char *name)
 	rpci_write_byte(dev, 0x6d, new);
 
 	if (pci_read_byte(dev, 0x6d) != new) {
-		msg_pinfo("tried to set 0x%x to 0x%x on %s failed (WARNING ONLY)\n", 0x6d, new, name);
+		msg_pinfo("Setting register 0x%x to 0x%x on %s failed "
+			  "(WARNING ONLY).\n", 0x6d, new, name);
 		return -1;
 	}
 
@@ -904,8 +1019,7 @@ static int enable_flash_mcp55(struct pci_dev *dev, const char *name)
  */
 static int enable_flash_mcp6x_7x(struct pci_dev *dev, const char *name)
 {
-	int ret = 0;
-	int want_spi = 0;
+	int ret = 0, want_spi = 0;
 	uint8_t val;
 
 	msg_pinfo("This chipset is not really supported yet. Guesswork...\n");
@@ -918,7 +1032,7 @@ static int enable_flash_mcp6x_7x(struct pci_dev *dev, const char *name)
 	switch ((val >> 5) & 0x3) {
 	case 0x0:
 		ret = enable_flash_mcp55(dev, name);
-		buses_supported = CHIP_BUSTYPE_LPC;
+		internal_buses_supported = BUS_LPC;
 		msg_pdbg("Flash bus type is LPC\n");
 		break;
 	case 0x2:
@@ -926,14 +1040,15 @@ static int enable_flash_mcp6x_7x(struct pci_dev *dev, const char *name)
 		/* SPI is added in mcp6x_spi_init if it works.
 		 * Do we really want to disable LPC in this case?
 		 */
-		buses_supported = CHIP_BUSTYPE_NONE;
+		internal_buses_supported = BUS_NONE;
 		msg_pdbg("Flash bus type is SPI\n");
-		msg_perr("SPI on this chipset is WIP. Write is unsupported!\n");
-		programmer_may_write = 0;
+		msg_pinfo("SPI on this chipset is WIP. Please report any "
+			  "success or failure by mailing us the verbose "
+			  "output to flashrom@flashrom.org, thanks!\n");
 		break;
 	default:
 		/* Should not happen. */
-		buses_supported = CHIP_BUSTYPE_NONE;
+		internal_buses_supported = BUS_NONE;
 		msg_pdbg("Flash bus type is unknown (none)\n");
 		msg_pinfo("Something went wrong with bus type detection.\n");
 		goto out_msg;
@@ -947,9 +1062,9 @@ static int enable_flash_mcp6x_7x(struct pci_dev *dev, const char *name)
 	rpci_write_byte(dev, 0x8a, val);
 #endif
 
-	if (mcp6x_spi_init(want_spi)) {
+	if (mcp6x_spi_init(want_spi))
 		ret = 1;
-	}
+
 out_msg:
 	msg_pinfo("Please send the output of \"flashrom -V\" to "
 		  "flashrom@flashrom.org with\n"
@@ -1015,7 +1130,8 @@ static int get_flashbase_sc520(struct pci_dev *dev, const char *name)
 			flashbase = parx << 12;
 		}
 	} else {
-		msg_pinfo("AMD Elan SC520 detected, but no BOOTCS. Assuming flash at 4G\n");
+		msg_pinfo("AMD Elan SC520 detected, but no BOOTCS. "
+			  "Assuming flash at 4G.\n");
 	}
 
 	/* 4. Clean up */
@@ -1037,19 +1153,20 @@ const struct penable chipset_enables[] = {
 	{0x1022, 0x3000, OK, "AMD", "Elan SC520",	get_flashbase_sc520},
 	{0x1022, 0x7440, OK, "AMD", "AMD-768",		enable_flash_amd8111},
 	{0x1022, 0x7468, OK, "AMD", "AMD8111",		enable_flash_amd8111},
+	{0x1022, 0x780e, OK, "AMD", "Hudson",		enable_flash_sb600},
 	{0x1039, 0x0406, NT, "SiS", "501/5101/5501",	enable_flash_sis501},
 	{0x1039, 0x0496, NT, "SiS", "85C496+497",	enable_flash_sis85c496},
-	{0x1039, 0x0530, NT, "SiS", "530",		enable_flash_sis530},
+	{0x1039, 0x0530, OK, "SiS", "530",		enable_flash_sis530},
 	{0x1039, 0x0540, NT, "SiS", "540",		enable_flash_sis540},
 	{0x1039, 0x0620, NT, "SiS", "620",		enable_flash_sis530},
 	{0x1039, 0x0630, NT, "SiS", "630",		enable_flash_sis540},
 	{0x1039, 0x0635, NT, "SiS", "635",		enable_flash_sis540},
 	{0x1039, 0x0640, NT, "SiS", "640",		enable_flash_sis540},
 	{0x1039, 0x0645, NT, "SiS", "645",		enable_flash_sis540},
-	{0x1039, 0x0646, NT, "SiS", "645DX",		enable_flash_sis540},
+	{0x1039, 0x0646, OK, "SiS", "645DX",		enable_flash_sis540},
 	{0x1039, 0x0648, NT, "SiS", "648",		enable_flash_sis540},
 	{0x1039, 0x0650, NT, "SiS", "650",		enable_flash_sis540},
-	{0x1039, 0x0651, NT, "SiS", "651",		enable_flash_sis540},
+	{0x1039, 0x0651, OK, "SiS", "651",		enable_flash_sis540},
 	{0x1039, 0x0655, NT, "SiS", "655",		enable_flash_sis540},
 	{0x1039, 0x0661, OK, "SiS", "661",		enable_flash_sis540},
 	{0x1039, 0x0730, NT, "SiS", "730",		enable_flash_sis540},
@@ -1076,7 +1193,7 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x00e0, OK, "NVIDIA", "NForce3",	enable_flash_nvidia_nforce2},
 	/* Slave, should not be here, to fix known bug for A01. */
 	{0x10de, 0x00d3, OK, "NVIDIA", "CK804",		enable_flash_ck804},
-	{0x10de, 0x0260, NT, "NVIDIA", "MCP51",		enable_flash_ck804},
+	{0x10de, 0x0260, OK, "NVIDIA", "MCP51",		enable_flash_ck804},
 	{0x10de, 0x0261, NT, "NVIDIA", "MCP51",		enable_flash_ck804},
 	{0x10de, 0x0262, NT, "NVIDIA", "MCP51",		enable_flash_ck804},
 	{0x10de, 0x0263, NT, "NVIDIA", "MCP51",		enable_flash_ck804},
@@ -1097,7 +1214,7 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0366, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* LPC */
 	{0x10de, 0x0367, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* Pro */
 	{0x10de, 0x03e0, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
-	{0x10de, 0x03e1, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x03e1, OK, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x03e2, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x03e3, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0440, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
@@ -1106,7 +1223,7 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0443, NT, "NVIDIA", "MCP65",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0548, OK, "NVIDIA", "MCP67",		enable_flash_mcp6x_7x},
 	{0x10de, 0x075c, NT, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
-	{0x10de, 0x075d, NT, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
+	{0x10de, 0x075d, OK, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
 	{0x10de, 0x07d7, NT, "NVIDIA", "MCP73",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0aac, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0aad, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
@@ -1123,7 +1240,7 @@ const struct penable chipset_enables[] = {
 	{0x1106, 0x0586, OK, "VIA", "VT82C586A/B",	enable_flash_amd8111},
 	{0x1106, 0x0596, OK, "VIA", "VT82C596",		enable_flash_amd8111},
 	{0x1106, 0x0686, NT, "VIA", "VT82C686A/B",	enable_flash_amd8111},
-	{0x1106, 0x3074, NT, "VIA", "VT8233",		enable_flash_vt823x},
+	{0x1106, 0x3074, OK, "VIA", "VT8233",		enable_flash_vt823x},
 	{0x1106, 0x3147, OK, "VIA", "VT8233A",		enable_flash_vt823x},
 	{0x1106, 0x3177, OK, "VIA", "VT8235",		enable_flash_vt823x},
 	{0x1106, 0x3227, OK, "VIA", "VT8237",		enable_flash_vt823x},
@@ -1137,21 +1254,23 @@ const struct penable chipset_enables[] = {
 	{0x1166, 0x0205, OK, "Broadcom", "HT-1000",	enable_flash_ht1000},
 	{0x8086, 0x122e, OK, "Intel", "PIIX",		enable_flash_piix4},
 	{0x8086, 0x1234, NT, "Intel", "MPIIX",		enable_flash_piix4},
-	{0x8086, 0x1c44, NT, "Intel", "Z68",		enable_flash_ich10},
-	{0x8086, 0x1c46, NT, "Intel", "P67",		enable_flash_ich10},
-	{0x8086, 0x1c47, NT, "Intel", "UM67",		enable_flash_ich10},
-	{0x8086, 0x1c49, NT, "Intel", "HM65",		enable_flash_ich10},
-	{0x8086, 0x1c4a, NT, "Intel", "H67",		enable_flash_ich10},
-	{0x8086, 0x1c4b, NT, "Intel", "HM67",		enable_flash_ich10},
-	{0x8086, 0x1c4c, NT, "Intel", "Q65",		enable_flash_ich10},
-	{0x8086, 0x1c4d, NT, "Intel", "QS67",		enable_flash_ich10},
-	{0x8086, 0x1c4e, NT, "Intel", "Q67",		enable_flash_ich10},
-	{0x8086, 0x1c4f, NT, "Intel", "QM67",		enable_flash_ich10},
-	{0x8086, 0x1c50, NT, "Intel", "B65",		enable_flash_ich10},
-	{0x8086, 0x1c52, NT, "Intel", "C202",		enable_flash_ich10},
-	{0x8086, 0x1c54, NT, "Intel", "C204",		enable_flash_ich10},
-	{0x8086, 0x1c56, NT, "Intel", "C206",		enable_flash_ich10},
-	{0x8086, 0x1c5c, NT, "Intel", "H61",		enable_flash_ich10},
+	{0x8086, 0x1c44, OK, "Intel", "Z68",		enable_flash_pch6},
+	{0x8086, 0x1c46, OK, "Intel", "P67",		enable_flash_pch6},
+	{0x8086, 0x1c47, NT, "Intel", "UM67",		enable_flash_pch6},
+	{0x8086, 0x1c49, OK, "Intel", "HM65",		enable_flash_pch6},
+	{0x8086, 0x1c4a, OK, "Intel", "H67",		enable_flash_pch6},
+	{0x8086, 0x1c4b, NT, "Intel", "HM67",		enable_flash_pch6},
+	{0x8086, 0x1c4c, NT, "Intel", "Q65",		enable_flash_pch6},
+	{0x8086, 0x1c4d, NT, "Intel", "QS67",		enable_flash_pch6},
+	{0x8086, 0x1c4e, NT, "Intel", "Q67",		enable_flash_pch6},
+	{0x8086, 0x1c4f, NT, "Intel", "QM67",		enable_flash_pch6},
+	{0x8086, 0x1c50, NT, "Intel", "B65",		enable_flash_pch6},
+	{0x8086, 0x1c52, NT, "Intel", "C202",		enable_flash_pch6},
+	{0x8086, 0x1c54, NT, "Intel", "C204",		enable_flash_pch6},
+	{0x8086, 0x1c56, NT, "Intel", "C206",		enable_flash_pch6},
+	{0x8086, 0x1c5c, NT, "Intel", "H61",		enable_flash_pch6},
+	{0x8086, 0x1d40, OK, "Intel", "X79",		enable_flash_ich10}, /* FIXME: when datasheet is available */
+	{0x8086, 0x1d41, NT, "Intel", "X79",		enable_flash_ich10}, /* FIXME: when datasheet is available */
 	{0x8086, 0x2410, OK, "Intel", "ICH",		enable_flash_ich_4e},
 	{0x8086, 0x2420, OK, "Intel", "ICH0",		enable_flash_ich_4e},
 	{0x8086, 0x2440, OK, "Intel", "ICH2",		enable_flash_ich_4e},
@@ -1190,29 +1309,29 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x3a18, OK, "Intel", "ICH10",		enable_flash_ich10},
 	{0x8086, 0x3a1a, OK, "Intel", "ICH10D",		enable_flash_ich10},
 	{0x8086, 0x3a1e, NT, "Intel", "ICH10 Engineering Sample", enable_flash_ich10},
-	{0x8086, 0x3b00, NT, "Intel", "3400 Desktop",	enable_flash_ich10},
-	{0x8086, 0x3b01, NT, "Intel", "3400 Mobile",	enable_flash_ich10},
-	{0x8086, 0x3b02, NT, "Intel", "P55",		enable_flash_ich10},
-	{0x8086, 0x3b03, NT, "Intel", "PM55",		enable_flash_ich10},
-	{0x8086, 0x3b06, NT, "Intel", "H55",		enable_flash_ich10},
-	{0x8086, 0x3b07, OK, "Intel", "QM57",		enable_flash_ich10},
-	{0x8086, 0x3b08, NT, "Intel", "H57",		enable_flash_ich10},
-	{0x8086, 0x3b09, NT, "Intel", "HM55",		enable_flash_ich10},
-	{0x8086, 0x3b0a, NT, "Intel", "Q57",		enable_flash_ich10},
-	{0x8086, 0x3b0b, NT, "Intel", "HM57",		enable_flash_ich10},
-	{0x8086, 0x3b0d, NT, "Intel", "3400 Mobile SFF", enable_flash_ich10},
-	{0x8086, 0x3b0e, NT, "Intel", "B55",		enable_flash_ich10},
-	{0x8086, 0x3b0f, OK, "Intel", "QS57",		enable_flash_ich10},
-	{0x8086, 0x3b12, NT, "Intel", "3400",		enable_flash_ich10},
-	{0x8086, 0x3b14, NT, "Intel", "3420",		enable_flash_ich10},
-	{0x8086, 0x3b16, NT, "Intel", "3450",		enable_flash_ich10},
-	{0x8086, 0x3b1e, NT, "Intel", "B55",		enable_flash_ich10},
+	{0x8086, 0x3b00, NT, "Intel", "3400 Desktop",	enable_flash_pch5},
+	{0x8086, 0x3b01, NT, "Intel", "3400 Mobile",	enable_flash_pch5},
+	{0x8086, 0x3b02, NT, "Intel", "P55",		enable_flash_pch5},
+	{0x8086, 0x3b03, NT, "Intel", "PM55",		enable_flash_pch5},
+	{0x8086, 0x3b06, OK, "Intel", "H55",		enable_flash_pch5},
+	{0x8086, 0x3b07, OK, "Intel", "QM57",		enable_flash_pch5},
+	{0x8086, 0x3b08, NT, "Intel", "H57",		enable_flash_pch5},
+	{0x8086, 0x3b09, NT, "Intel", "HM55",		enable_flash_pch5},
+	{0x8086, 0x3b0a, NT, "Intel", "Q57",		enable_flash_pch5},
+	{0x8086, 0x3b0b, NT, "Intel", "HM57",		enable_flash_pch5},
+	{0x8086, 0x3b0d, NT, "Intel", "3400 Mobile SFF", enable_flash_pch5},
+	{0x8086, 0x3b0e, NT, "Intel", "B55",		enable_flash_pch5},
+	{0x8086, 0x3b0f, OK, "Intel", "QS57",		enable_flash_pch5},
+	{0x8086, 0x3b12, NT, "Intel", "3400",		enable_flash_pch5},
+	{0x8086, 0x3b14, NT, "Intel", "3420",		enable_flash_pch5},
+	{0x8086, 0x3b16, NT, "Intel", "3450",		enable_flash_pch5},
+	{0x8086, 0x3b1e, NT, "Intel", "B55",		enable_flash_pch5},
 	{0x8086, 0x5031, OK, "Intel", "EP80579",	enable_flash_ich7},
 	{0x8086, 0x7000, OK, "Intel", "PIIX3",		enable_flash_piix4},
 	{0x8086, 0x7110, OK, "Intel", "PIIX4/4E/4M",	enable_flash_piix4},
 	{0x8086, 0x7198, OK, "Intel", "440MX",		enable_flash_piix4},
 	{0x8086, 0x8119, OK, "Intel", "SCH Poulsbo",	enable_flash_poulsbo},
-	{0x8086, 0x8186, NT, "Intel", "Atom E6xx(T)/Tunnel Creek", enable_flash_poulsbo},
+	{0x8086, 0x8186, OK, "Intel", "Atom E6xx(T)/Tunnel Creek", enable_flash_tunnelcreek},
 #endif
 	{},
 };
@@ -1222,7 +1341,6 @@ int chipset_flash_enable(void)
 	struct pci_dev *dev = NULL;
 	int ret = -2;		/* Nothing! */
 	int i;
-	char *s;
 
 	/* Now let's try to find the chipset we have... */
 	for (i = 0; chipset_enables[i].vendor_name != NULL; i++) {
@@ -1241,13 +1359,22 @@ int chipset_flash_enable(void)
 					chipset_enables[i].device_name);
 			continue;
 		}
-		msg_pdbg("Found chipset \"%s %s\", enabling flash write... ",
-		       chipset_enables[i].vendor_name,
-		       chipset_enables[i].device_name);
-		msg_pdbg("chipset PCI ID is %04x:%04x, ",
+		msg_pdbg("Found chipset \"%s %s\"",
+			  chipset_enables[i].vendor_name,
+			  chipset_enables[i].device_name);
+		msg_pdbg(" with PCI ID %04x:%04x",
 			 chipset_enables[i].vendor_id,
 			 chipset_enables[i].device_id);
+		msg_pdbg(". ");
 
+		if (chipset_enables[i].status == NT) {
+			msg_pinfo("\nThis chipset is marked as untested. If "
+				  "you are using an up-to-date version\nof "
+				  "flashrom please email a report to "
+				  "flashrom@flashrom.org including a\nverbose "
+				  "(-V) log. Thank you!\n");
+		}
+		msg_pdbg("Enabling flash write... ");
 		ret = chipset_enables[i].doit(dev,
 					      chipset_enables[i].device_name);
 		if (ret == NOT_DONE_YET) {
@@ -1255,15 +1382,15 @@ int chipset_flash_enable(void)
 			msg_pdbg("OK - searching further chips.\n");
 		} else if (ret < 0)
 			msg_pinfo("FAILED!\n");
-		else if(ret == 0)
+		else if (ret == 0)
 			msg_pdbg("OK.\n");
-		else if(ret == ERROR_NONFATAL)
+		else if (ret == ERROR_NONFATAL)
 			msg_pinfo("PROBLEMS, continuing anyway\n");
+		if (ret == ERROR_FATAL) {
+			msg_perr("FATAL ERROR!\n");
+			return ret;
+		}
 	}
-
-	s = flashbuses_to_text(buses_supported);
-	msg_pdbg("This chipset supports the following protocols: %s.\n", s);
-	free(s);
 
 	return ret;
 }
@@ -1300,13 +1427,13 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			gcs = mmio_readl(rcrb + 0x3410);
 			switch ((gcs & 0xc00) >> 10) {
 			case 0x0:
-				*bus = CHIP_BUSTYPE_LPC;
+				*bus = BUS_LPC;
 				break;
 			case 0x3:
-				*bus = CHIP_BUSTYPE_SPI;
+				*bus = BUS_SPI;
 				break;
 			default:
-				*bus = CHIP_BUSTYPE_UNKNOWN;
+				*bus = BUS_NONE;
 				ret = -2;  /* unknown bus type. */
 				break;
 			}
@@ -1321,13 +1448,13 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			gcs = mmio_readl(rcrb + 0x3410);
 			switch ((gcs & 0xc00) >> 10) {
 			case 0x1:
-				*bus = CHIP_BUSTYPE_SPI;
+				*bus = BUS_SPI;
 				break;
 			case 0x3:
-				*bus = CHIP_BUSTYPE_LPC;
+				*bus = BUS_LPC;
 				break;
 			default:
-				*bus = CHIP_BUSTYPE_UNKNOWN;
+				*bus = BUS_NONE;
 				ret = -2;  /* unknown bus type. */
 				break;
 			}

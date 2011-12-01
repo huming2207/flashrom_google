@@ -37,9 +37,6 @@ ifeq ($(WARNERROR), yes)
 CFLAGS += -Werror
 endif
 
-# Determine the destination processor architecture
-override ARCH = $(strip $(shell LC_ALL=C $(CC) -E arch.h|grep -v '^\#'))
-
 # FIXME We have to differentiate between host and target OS architecture.
 OS_ARCH	?= $(shell uname)
 ifneq ($(OS_ARCH), SunOS)
@@ -202,10 +199,50 @@ override CONFIG_FT2232_SPI = no
 endif
 endif
 
+# Determine the destination processor architecture.
+# IMPORTANT: The following line must be placed before ARCH is ever used
+# (of course), but should come after any lines setting CC because the line
+# below uses CC itself. In some cases we set CC based on OS_ARCH, see above.
+override ARCH := $(strip $(shell LC_ALL=C $(CC) -E arch.h 2>/dev/null | grep -v '^\#'))
+
+ifeq ($(ARCH), "ppc")
+# There's no PCI port I/O support on PPC/PowerPC, yet.
+ifeq ($(CONFIG_NIC3COM), yes)
+UNSUPPORTED_FEATURES += CONFIG_NIC3COM=yes
+else
+override CONFIG_NIC3COM = no
+endif
+ifeq ($(CONFIG_NICREALTEK), yes)
+UNSUPPORTED_FEATURES += CONFIG_NICREALTEK=yes
+else
+override CONFIG_NICREALTEK = no
+endif
+ifeq ($(CONFIG_NICNATSEMI), yes)
+UNSUPPORTED_FEATURES += CONFIG_NICNATSEMI=yes
+else
+override CONFIG_NICNATSEMI = no
+endif
+ifeq ($(CONFIG_RAYER_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_RAYER_SPI=yes
+else
+override CONFIG_RAYER_SPI = no
+endif
+ifeq ($(CONFIG_ATAHPT), yes)
+UNSUPPORTED_FEATURES += CONFIG_ATAHPT=yes
+else
+override CONFIG_ATAHPT = no
+endif
+ifeq ($(CONFIG_SATAMV), yes)
+UNSUPPORTED_FEATURES += CONFIG_SATAMV=yes
+else
+override CONFIG_SATAMV = no
+endif
+endif
+
 CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 	sst28sf040.o m29f400bt.o 82802ab.o pm49fl00x.o \
 	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
-	a25.o at25.o writeprotect.o
+	a25.o at25.o opaque.o writeprotect.o
 
 LIB_OBJS = layout.o fmap.o power.o
 
@@ -215,7 +252,7 @@ LIB_OBJS += $(LOCK_OBJS)
 FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
 endif
 
-CLI_OBJS = flashrom.o cli_classic.o cli_mfg.o cli_output.o print.o
+CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
@@ -227,7 +264,7 @@ all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
 # will not require subversion. The downloadable snapshots are already exported.
 SVNVERSION := $(shell ./util/getversion.sh)
 
-RELEASE := 0.9.3
+RELEASE := 0.9.4
 VERSION := $(RELEASE) $(SVNVERSION)
 RELEASENAME ?= $(VERSION)
 
@@ -281,6 +318,10 @@ CONFIG_OGP_SPI ?= no
 
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= no
+
+# Disable Linux spidev interface support for now, until we check for a Linux
+# device (not host, as DOS binaries for example are built on a Linux host).
+CONFIG_LINUX_SPI ?= no
 
 # Disable Dediprog SF100 until support is complete and tested.
 CONFIG_DEDIPROG ?= no
@@ -422,6 +463,11 @@ PROGRAMMER_OBJS += buspirate_spi.o
 NEED_SERIAL := yes
 endif
 
+ifeq ($(CONFIG_LINUX_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_LINUX_SPI=1'
+PROGRAMMER_OBJS += linux_spi.o
+endif
+
 ifeq ($(CONFIG_DEDIPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_DEDIPROG=1'
 FEATURE_LIBS += -lusb
@@ -507,11 +553,23 @@ distclean: clean
 strip: $(PROGRAM)$(EXEC_SUFFIX)
 	$(STRIP) $(STRIP_ARGS) $(PROGRAM)$(EXEC_SUFFIX)
 
+# to define test programs we use verbatim variables, which get exported
+# to environment variables and are referenced with $$<varname> later
+
+define COMPILER_TEST
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	return 0;
+}
+endef
+export COMPILER_TEST
+
 compiler: featuresavailable
 	@printf "Checking for a C compiler... "
-	@$(shell ( echo "int main(int argc, char **argv)"; \
-		   echo "{ (void) argc; (void) argv; return 0; }"; ) > .test.c )
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .test.c -o .test$(EXEC_SUFFIX) >/dev/null &&	\
+	@echo "$$COMPILER_TEST" > .test.c
+	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .test.c -o .test$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
 		echo "found." || ( echo "not found."; \
 		rm -f .test.c .test$(EXEC_SUFFIX); exit 1)
 	@rm -f .test.c .test$(EXEC_SUFFIX)
@@ -521,15 +579,25 @@ compiler: featuresavailable
 		( echo "unknown. Aborting."; exit 1)
 	@printf "%s\n" '$(ARCH)'
 
+define LIBPCI_TEST
+/* Avoid a failing test due to libpci header symbol shadowing breakage */
+#define index shadow_workaround_index
+#include <pci/pci.h>
+struct pci_access *pacc;
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	pacc = pci_alloc();
+	return 0;
+}
+endef
+export LIBPCI_TEST
+
 ifeq ($(CHECK_LIBPCI), yes)
 pciutils: compiler
 	@printf "Checking for libpci headers... "
-	@# Avoid a failing test due to libpci header symbol shadowing breakage
-	@$(shell ( echo "#define index shadow_workaround_index"; \
-		   echo "#include <pci/pci.h>";		   \
-		   echo "struct pci_access *pacc;";	   \
-		   echo "int main(int argc, char **argv)"; \
-		   echo "{ (void) argc; (void) argv; pacc = pci_alloc(); return 0; }"; ) > .test.c )
+	@echo "$$LIBPCI_TEST" > .test.c
 	@$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >/dev/null 2>&1 &&		\
 		echo "found." || ( echo "not found."; echo;			\
 		echo "Please install libpci headers (package pciutils-devel).";	\
@@ -564,41 +632,47 @@ featuresavailable:
 	@false
 endif
 
-ifeq ($(CONFIG_FT2232_SPI), yes)
+define FTDI_TEST
+#include <ftdi.h>
+struct ftdi_context *ftdic = NULL;
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	return ftdi_init(ftdic);
+}
+endef
+export FTDI_TEST
+
+define UTSNAME_TEST
+#include <sys/utsname.h>
+struct utsname osinfo;
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	uname (&osinfo);
+	return 0;
+}
+endef
+export UTSNAME_TEST
+
 features: compiler
 	@echo "FEATURES := yes" > .features.tmp
+ifeq ($(CONFIG_FT2232_SPI), yes)
 	@printf "Checking for FTDI support... "
-	@$(shell ( echo "#include <ftdi.h>";		   \
-		   echo "struct ftdi_context *ftdic = NULL;";	   \
-		   echo "int main(int argc, char **argv)"; \
-		   echo "{ (void) argc; (void) argv; return ftdi_init(ftdic); }"; ) > .featuretest.c )
+	@echo "$$FTDI_TEST" > .featuretest.c
 	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >/dev/null 2>&1 &&	\
 		( echo "found."; echo "FTDISUPPORT := yes" >> .features.tmp ) ||	\
 		( echo "not found."; echo "FTDISUPPORT := no" >> .features.tmp )
-	@printf "Checking for utsname support... "
-	@$(shell ( echo "#include <sys/utsname.h>";		   \
-		   echo "struct utsname osinfo;";	   \
-		   echo "int main(int argc, char **argv)"; \
-		   echo "{ (void) argc; (void) argv; uname (&osinfo); return 0; }"; ) > .featuretest.c )
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
-		( echo "found."; echo "UTSNAME := yes" >> .features.tmp ) ||	\
-		( echo "not found."; echo "UTSNAME := no" >> .features.tmp )
-	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
-	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
-else
-features: compiler
-	@echo "FEATURES := yes" > .features.tmp
-	@printf "Checking for utsname support... "
-	@$(shell ( echo "#include <sys/utsname.h>";		   \
-		   echo "struct utsname osinfo;";	   \
-		   echo "int main(int argc, char **argv)"; \
-		   echo "{ (void) argc; (void) argv; uname (&osinfo); return 0; }"; ) > .featuretest.c )
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
-		( echo "found."; echo "UTSNAME := yes" >> .features.tmp ) ||	\
-		( echo "not found."; echo "UTSNAME := no" >> .features.tmp )
-	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
-	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 endif
+	@printf "Checking for utsname support... "
+	@echo "$$UTSNAME_TEST" > .featuretest.c
+	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
+		( echo "found."; echo "UTSNAME := yes" >> .features.tmp ) ||	\
+		( echo "not found."; echo "UTSNAME := no" >> .features.tmp )
+	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
+	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 
 install: $(PROGRAM)$(EXEC_SUFFIX)
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
