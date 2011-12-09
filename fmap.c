@@ -34,12 +34,40 @@
  * This is ported from the flashmap utility: http://flashmap.googlecode.com
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "flash.h"
 #include "fmap.h"
+
+
+/* Ceil a number to the minimum power of 2 value. For example,
+ *   ceiling(2) = 2
+ *   ceiling(5) = 8
+ *   ceiling(254K) = 256K
+ *
+ * Return -1 if the input value is invalid..
+ */
+long int ceiling(long int v) {
+	int shiftwidth;
+
+	if (v <= 0) return -1;
+
+	/* it is power of 2. */
+	if (!(v & (v - 1))) return v;
+
+	/* pollute all bits below MSB to 1. */
+	for (shiftwidth = (sizeof(v) * CHAR_BIT) / 2;
+	     shiftwidth > 0;
+	     shiftwidth /= 2) {
+		v = v | (v >> shiftwidth);
+	}
+
+	return v + 1;
+}
+
 
 /* invoke crossystem and parse the returned string.
  * returns 0xFFFFFFFF if failed to get the value. */
@@ -97,7 +125,7 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 
 extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 {
-	unsigned long int offset = 0;
+	long int offset = 0, ceiling_size;
 	uint64_t sig, tmp64;
 	struct fmap fmap;
 	int fmap_size, fmap_found = 0, stride;
@@ -106,10 +134,11 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 
 	offset = get_crossystem_fmap_base(flash);
 	if (CROSSYSTEM_FAIL != offset) {
-		if (flash->read(flash, (uint8_t *)&tmp64,
+		if (offset < 0 || offset >= flash->total_size * 1024 ||
+		    flash->read(flash, (uint8_t *)&tmp64,
 		                offset, sizeof(tmp64))) {
-			msg_gdbg("failed to read flash at "
-			         "offset 0x%lx\n", offset);
+			msg_gdbg("[L%d] failed to read flash at "
+			         "offset 0x%lx\n", __LINE__, offset);
 			return -1;
 		}
 		if (!memcmp(&tmp64, &sig, sizeof(sig))) {
@@ -134,27 +163,30 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	 * vector on x86 resides. Because of this, we will search from top
 	 * to bottom.
 	 */
-	for (stride = (flash->total_size * 1024) / 2;
+	ceiling_size = ceiling(flash->total_size * 1024);
+	for (stride = ceiling_size / 2;
 	     stride >= 16;
 	     stride /= 2) {
 		if (fmap_found)
 			break;
 
-		for (offset = flash->total_size * 1024 - stride;
+		for (offset = ceiling_size - stride;
 		     offset > 0;
 		     offset -= stride) {
 			int tmp;
 
-			if (offset % (stride * 2) == 0)
-					continue;
+			if (offset % (stride * 2) == 0 ||
+			    offset >= flash->total_size * 1024)
+				continue;
 			tmp = flash->read(flash, (uint8_t *)&tmp64,
 			                  offset, sizeof(tmp64));
 			if (tmp) {
 				if (ignore_error(tmp)) {
 					continue;
 				} else {
-					msg_gdbg("failed to read flash at "
-					         "offset 0x%lx\n", offset);
+					msg_gdbg("[L%d] failed to read flash "
+					         "at offset 0x%lx\n",
+					         __LINE__, offset);
 					return -1;
 				}
 			}
@@ -178,7 +210,7 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 		msg_gdbg("using brute force method to find fmap\n");
 		tmp = flash->read(flash, image, 0, flash->total_size * 1024);
 		if (tmp && !ignore_error(tmp)) {
-			msg_gdbg("failed to read flash\n");
+			msg_gdbg("[L%d] failed to read flash\n", __LINE__);
 			return -1;
 		}
 		for (offset = flash->total_size * 1024 - sizeof(sig);
@@ -195,8 +227,11 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	if (!fmap_found)
 		return 0;
 
+	if (offset < 0) return -1;
+
 	if (flash->read(flash, (uint8_t *)&fmap, offset, sizeof(fmap))) {
-		msg_gdbg("failed to read flash at offset 0x%lx\n", offset);
+		msg_gdbg("[L%d] failed to read flash at offset 0x%lx\n",
+		         __LINE__, offset);
 		return -1;
 	}
 
@@ -204,8 +239,8 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 	*buf = malloc(fmap_size);
 
 	if (flash->read(flash, *buf, offset, fmap_size)) {
-		msg_gdbg("failed to read %d bytes at offset 0x%lx\n",
-		         fmap_size, offset);
+		msg_gdbg("[L%d] failed to read %d bytes at offset 0x%lx\n",
+		         __LINE__, fmap_size, offset);
 		return -1;
 	}
 	return fmap_size;
