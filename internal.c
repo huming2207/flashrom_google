@@ -403,6 +403,11 @@ int internal_init(void)
 
 	board_flash_enable(lb_vendor, lb_part);
 
+	if (!(buses_supported & target_bus)) {
+		msg_perr("Programmer does not support specified bus\n");
+		return 1;
+	}
+
 	/* Even if chipset init returns an error code, we don't want to abort.
 	 * The error code might have been a warning only.
 	 * Besides that, we don't check the board enable return code either.
