@@ -273,13 +273,13 @@ int internal_init(void)
 	if (register_shutdown(internal_shutdown, NULL))
 		return 1;
 
+#if defined(__i386__) || defined(__x86_64__)
 	/* Default to Parallel/LPC/FWH flash devices. If a known host controller
 	 * is found, the host controller init routine sets the
 	 * internal_buses_supported bitfield.
 	 */
 	internal_buses_supported = BUS_NONSPI;
 
-#if defined(__i386__) || defined(__x86_64__)
 	/* Initialize PCI access for flash enables */
 	pacc = pci_alloc();	/* Get the pci_access structure */
 	pacc->error = pci_error;
@@ -289,6 +289,8 @@ int internal_init(void)
 	/* Set all options you want -- here we stick with the defaults */
 	pci_init(pacc);		/* Initialize the PCI library */
 	pci_scan_bus(pacc);	/* We want to get the list of devices */
+#else
+	internal_buses_supported = BUS_NONE;
 #endif
 
 	if (processor_flash_enable()) {
