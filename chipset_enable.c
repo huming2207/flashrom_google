@@ -548,15 +548,47 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 
 	/* Set BBS (Boot BIOS Straps) field of GCS register. */
 	gcs = mmio_readl(rcrb + 0x3410);
-	if (target_bus == BUS_LPC) {
-		msg_pdbg("Setting BBS to LPC\n");
-		gcs = (gcs & ~0xc00) | (0x3 << 10);
-		rmmio_writel(gcs, rcrb + 0x3410);
-	} else if (target_bus == BUS_SPI) {
-		msg_pdbg("Setting BBS to SPI\n");
-		gcs = (gcs & ~0xc00) | (0x1 << 10);
-		rmmio_writel(gcs, rcrb + 0x3410);
+	switch (ich_generation) {
+	case CHIPSET_5_SERIES_IBEX_PEAK:
+	case CHIPSET_6_SERIES_COUGAR_POINT:
+		/* ICH 10 BBS (Boot BIOS Straps) field of GCS register.
+		 *   00b: LPC.
+		 *   01b: reserved
+		 *   10b: PCI
+		 *   11b: SPI
+		 */
+		if (target_bus == BUS_LPC) {
+			msg_pdbg("Setting BBS to LPC\n");
+			gcs = (gcs & ~0xc00) | (0x0 << 10);
+		} else if (target_bus == BUS_SPI) {
+			msg_pdbg("Setting BBS to SPI\n");
+			gcs = (gcs & ~0xc00) | (0x3 << 10);
+		}
+		break;
+	case CHIPSET_ICH7:
+	case CHIPSET_ICH8:
+	case CHIPSET_ICH9:
+	case CHIPSET_ICH10:
+		/* Older BBS (Boot BIOS Straps) field of GCS register.
+		 *   00: reserved
+		 *   01: SPI
+		 *   02: PCI
+		 *   03: LPC
+		 */
+		if (target_bus == BUS_LPC) {
+			msg_pdbg("Setting BBS to LPC\n");
+			gcs = (gcs & ~0xc00) | (0x3 << 10);
+		} else if (target_bus == BUS_SPI) {
+			msg_pdbg("Setting BBS to SPI\n");
+			gcs = (gcs & ~0xc00) | (0x1 << 10);
+		}
+		break;
+	default:
+		msg_perr("Cannot determine what to set for BBS.\n");
+		return -1;
+		break;
 	}
+	rmmio_writel(gcs, rcrb + 0x3410);
 
 	msg_pdbg("GCS = 0x%x: ", gcs);
 	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
