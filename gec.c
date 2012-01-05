@@ -18,6 +18,7 @@
 #define GEC_DATA_ADDR 0x800
 #define GEC_DATA_SIZE 512
 
+static int ec_timeout_usec = 1000000;
 
 /* Waits for the EC to be unbusy. Returns 1 if busy, 0 if not busy. */
 static int ec_busy(int timeout_usec)
@@ -49,7 +50,7 @@ int ec_command(int command, const void *indata, int insize,
 		return -1;
 	}
 
-	if (ec_busy(1000000)) {
+	if (ec_busy(ec_timeout_usec)) {
 		fprintf(stderr, "Timeout waiting for EC ready\n");
 		return -1;
 	}
@@ -360,16 +361,23 @@ static int detect_ec(void) {
 	struct lpc_params_hello request;
 	struct lpc_response_hello response;
 	int rc = 0;
+	int old_timeout = ec_timeout_usec;
 
 	if (target_bus != BUS_LPC) {
 		msg_pdbg("%s():%d target_bus is not LPC.\n", __func__, __LINE__);
 		return 1;
 	}
 
+	/* reduce timeout period temporarily in case EC is not present */
+	ec_timeout_usec = 25000;
+
 	/* Say hello to EC. */
 	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
 	rc = ec_command(EC_LPC_COMMAND_HELLO, &request, sizeof(request),
 	                &response, sizeof(response));
+
+	ec_timeout_usec = old_timeout;
+
 	if (rc || response.out_data != 0xf1e2d3c4) {
 		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
 		         "rc=%d, request=0x%x response=0x%x\n",
