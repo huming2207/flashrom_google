@@ -595,7 +595,7 @@ int main(int argc, char *argv[])
 	if (programmer_init(prog, pparam)) {
 		fprintf(stderr, "Error: Programmer initialization failed.\n");
 		rc = 1;
-		goto cli_mfg_release_lock_exit;
+		goto cli_mfg_silent_exit;
 	}
 
 	/* FIXME: Delay calibration should happen in programmer code. */
@@ -760,7 +760,6 @@ int main(int argc, char *argv[])
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 cli_mfg_silent_exit:
 	programmer_shutdown();  /* must be done after chip_restore() */
-cli_mfg_release_lock_exit:
 #if USE_BIG_LOCK == 1
 	release_big_lock();
 #endif
