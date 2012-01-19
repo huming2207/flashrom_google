@@ -1730,11 +1730,11 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		if (tmp2 & HSFS_FDV)
 			desc_valid = 1;
 		if (!(tmp2 & HSFS_FDOPSS) && desc_valid)
-			msg_pinfo("The Flash Descriptor Security Override "
-				  "Strap-Pin is set. Restrictions implied\n"
-				  "by the FRAP and FREG registers are NOT in "
-				  "effect. Please note that Protected\n"
-				  "Range (PR) restrictions still apply.\n");
+			msg_perr("The Flash Descriptor Security Override "
+				 "Strap-Pin is set. Restrictions implied\n"
+				 "by the FRAP and FREG registers are NOT in "
+				 "effect. Please note that Protected\n"
+				 "Range (PR) restrictions still apply.\n");
 		ich_init_opcodes();
 
 		if (desc_valid) {
