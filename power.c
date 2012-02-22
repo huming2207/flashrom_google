@@ -50,12 +50,12 @@ int disable_power_management()
 
 	/* if the service terminates successfully, then it was running when
 	 * flashrom was invoked */
-	if (system("stop powerd >/dev/null") == 0)
+	if (system("stop powerd >/dev/null 2>&1") == 0)
 		pm_state_at_start.powerd = PM_ON;
 	else
 		pm_state_at_start.powerd = PM_OFF;
 
-	if (system("stop powerm >/dev/null") == 0)
+	if (system("stop powerm >/dev/null 2>&1") == 0)
 		pm_state_at_start.powerm = PM_ON;
 	else
 		pm_state_at_start.powerm = PM_OFF;
@@ -77,14 +77,14 @@ int restore_power_management()
 	msg_pdbg("%s: (Re-)Enabling power management services\n", __func__);
 
 	if (pm_state_at_start.powerd == PM_ON) {
-		if (system("start powerd >/dev/null") != 0) {
+		if (system("start powerd >/dev/null 2>&1") != 0) {
 			msg_perr("Cannot restart powerd service\n");
 			rc |= 1;
 		}
 	}
 
 	if (pm_state_at_start.powerm == PM_ON) {
-		if (system("start powerm >/dev/null") != 0) {
+		if (system("start powerm >/dev/null 2>&1") != 0) {
 			msg_perr("Cannot restart powerm service\n");
 			rc |= 1;
 		}
