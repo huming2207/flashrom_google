@@ -24,23 +24,39 @@
 #define EC_LPC_ADDR_KERNEL_PARAM 0x800
 #define EC_LPC_ADDR_USER_DATA    0x200
 #define EC_LPC_ADDR_USER_CMD     0x204
-#define EC_LPC_ADDR_USER_PARAM   0x900
-#define EC_LPC_PARAM_SIZE          256  /* Size of param areas in bytes */
+#define EC_LPC_ADDR_USER_PARAM   0x880
+#define EC_LPC_PARAM_SIZE          128  /* Size of param areas in bytes */
 
 /* LPC command status byte masks */
-/* EC is busy processing a command.  This covers both bit 0x04, which
- * is the busy-bit, and 0x02, which is the bit which indicates the
- * host has written a byte but the EC hasn't picked it up yet. */
-#define EC_LPC_BUSY_MASK   0x06
-#define EC_LPC_STATUS_MASK 0xF0  /* Mask for status codes in status byte */
-#define EC_LPC_GET_STATUS(x) (((x) & EC_LPC_STATUS_MASK) >> 4)
+/* EC has written a byte in the data register and host hasn't read it yet */
+#define EC_LPC_STATUS_TO_HOST     0x01
+/* Host has written a command/data byte and the EC hasn't read it yet */
+#define EC_LPC_STATUS_FROM_HOST   0x02
+/* EC is processing a command */
+#define EC_LPC_STATUS_PROCESSING  0x04
+/* Last write to EC was a command, not data */
+#define EC_LPC_STATUS_LAST_CMD    0x08
+/* EC is in burst mode.  Chrome EC doesn't support this, so this bit is never
+ * set. */
+#define EC_LPC_STATUS_BURST_MODE  0x10
+/* SCI event is pending (requesting SCI query) */
+#define EC_LPC_STATUS_SCI_PENDING 0x20
+/* SMI event is pending (requesting SMI query) */
+#define EC_LPC_STATUS_SMI_PENDING 0x40
+/* (reserved) */
+#define EC_LPC_STATUS_RESERVED    0x80
+
+/* EC is busy.  This covers both the EC processing a command, and the host has
+ * written a new command but the EC hasn't picked it up yet. */
+#define EC_LPC_STATUS_BUSY_MASK \
+      (EC_LPC_STATUS_FROM_HOST | EC_LPC_STATUS_PROCESSING)
 
 /* LPC command response codes */
 enum lpc_status {
-	EC_LPC_STATUS_SUCCESS = 0,
-	EC_LPC_STATUS_INVALID_COMMAND = 1,
-	EC_LPC_STATUS_ERROR = 2,
-	EC_LPC_STATUS_INVALID_PARAM = 3,
+	EC_LPC_RESULT_SUCCESS = 0,
+	EC_LPC_RESULT_INVALID_COMMAND = 1,
+	EC_LPC_RESULT_ERROR = 2,
+	EC_LPC_RESULT_INVALID_PARAM = 3,
 };
 
 
@@ -100,7 +116,7 @@ struct lpc_response_read_test {
 /* Flash commands */
 
 /* Maximum bytes that can be read/written in a single command */
-#define EC_LPC_FLASH_SIZE_MAX 128
+#define EC_LPC_FLASH_SIZE_MAX 64
 
 /* Get flash info */
 #define EC_LPC_COMMAND_FLASH_INFO 0x10

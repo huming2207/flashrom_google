@@ -13,11 +13,6 @@
 #include "writeprotect.h"
 
 
-/* Extracted from $gec/util/ectool.c */
-#define GEC_CMD_ADDR 0x66
-#define GEC_DATA_ADDR 0x800
-#define GEC_DATA_SIZE 512
-
 static int ec_timeout_usec = 1000000;
 
 /* Waits for the EC to be unbusy. Returns 1 if busy, 0 if not busy. */
@@ -26,15 +21,15 @@ static int ec_busy(int timeout_usec)
 	int i;
 	for (i = 0; i < timeout_usec; i += 10) {
 		usleep(10);  /* Delay first, in case we just sent a command */
-		if (!(inb(GEC_CMD_ADDR) & EC_LPC_BUSY_MASK))
+		if (!(inb(EC_LPC_ADDR_USER_CMD) & EC_LPC_STATUS_BUSY_MASK))
 			return 0;
 	}
 	return 1;  /* Timeout */
 }
 
 
-static enum lpc_status gec_get_status() {
-	return EC_LPC_GET_STATUS(inb(GEC_CMD_ADDR));
+static enum lpc_status gec_get_result() {
+	return inb(EC_LPC_ADDR_USER_DATA);
 }
 
 
@@ -45,13 +40,13 @@ int ec_command(int command, const void *indata, int insize,
 	uint8_t *d;
 	int i;
 
-	if (insize > GEC_DATA_SIZE || outsize > GEC_DATA_SIZE) {
-		fprintf(stderr, "Data size too big\n");
+	if ((insize + outsize) > EC_LPC_PARAM_SIZE) {
+		msg_pdbg2("Data size too big for buffer.\n");
 		return -1;
 	}
 
 	if (ec_busy(ec_timeout_usec)) {
-		fprintf(stderr, "Timeout waiting for EC ready\n");
+		msg_pdbg2("Timeout waiting for EC ready\n");
 		return -1;
 	}
 
@@ -59,29 +54,29 @@ int ec_command(int command, const void *indata, int insize,
 	/* TODO: optimized copy using outl() */
 	for (i = 0, d = (uint8_t *)indata; i < insize; i++, d++) {
 		msg_pdbg2("GEC: Port[0x%x] <-- 0x%x\n",
-		          GEC_DATA_ADDR + i, *d);
-		outb(*d, GEC_DATA_ADDR + i);
+		          EC_LPC_ADDR_USER_PARAM + i, *d);
+		outb(*d, EC_LPC_ADDR_USER_PARAM + i);
 	}
 
 	msg_pdbg2("GEC: Run EC Command: 0x%x ----\n", command);
-	outb(command, GEC_CMD_ADDR);
+	outb(command, EC_LPC_ADDR_USER_CMD);
 
 	if (ec_busy(1000000)) {
-		fprintf(stderr, "Timeout waiting for EC response\n");
+		msg_pdbg2("Timeout waiting for EC response\n");
 		return -1;
 	}
 
 	/* Check status */
-	if ((i = gec_get_status()) != EC_LPC_STATUS_SUCCESS) {
-		fprintf(stderr, "EC returned error status %d\n", i);
+	if ((i = gec_get_result()) != EC_LPC_RESULT_SUCCESS) {
+		msg_pdbg2("EC returned error status %d\n", i);
 		return i;
 	}
 
 	/* Read data, if any */
 	for (i = 0, d = (uint8_t *)outdata; i < outsize; i++, d++) {
-		*d = inb(GEC_DATA_ADDR + i);
+		*d = inb(EC_LPC_ADDR_USER_PARAM + i);
 		msg_pdbg2("GEC: Port[0x%x] ---> 0x%x\n",
-		          GEC_DATA_ADDR + i, *d);
+		          EC_LPC_ADDR_USER_PARAM + i, *d);
 	}
 
 	return 0;
