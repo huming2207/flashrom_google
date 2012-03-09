@@ -551,6 +551,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	switch (ich_generation) {
 	case CHIPSET_5_SERIES_IBEX_PEAK:
 	case CHIPSET_6_SERIES_COUGAR_POINT:
+	case CHIPSET_7_SERIES_PANTHER_POINT:
 		/* ICH 10 BBS (Boot BIOS Straps) field of GCS register.
 		 *   00b: LPC.
 		 *   01b: reserved
@@ -1428,72 +1429,83 @@ int chipset_flash_enable(void)
 	return ret;
 }
 
+#if defined(__i386__) || defined(__x86_64__)
 int get_target_bus_from_chipset(enum chipbustype *bus)
 {
 	int i;
 	struct pci_dev *dev = 0;
+	int is_new_ich = 0;
 	uint32_t tmp, gcs;
 	void *rcrb;
 	int ret = -1;  /* not found */
 
+	/* search dev */
 	for (i = 0; chipset_enables[i].vendor_name != NULL; i++) {
 		dev = pci_dev_find(chipset_enables[i].vendor_id,
-				   chipset_enables[i].device_id);
-		if (!dev)
-			continue;
-
-		/* Get physical address of Root Complex Register Block */
-		tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
-		msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
-
-		/* Map RCBA to virtual memory */
-		rcrb = physmap("ICH RCRB", tmp, 0x4000);
-
-		if (!strcmp(chipset_enables[i].vendor_name, "Intel") &&
-		    !strcmp(chipset_enables[i].device_name, "HM65")) {
-			/* ICH 10 BBS (Boot BIOS Straps) field of GCS register.
-			 *   00b: LPC.
-			 *   01b: reserved
-			 *   10b: PCI
-			 *   11b: SPI
-			 */
-			gcs = mmio_readl(rcrb + 0x3410);
-			switch ((gcs & 0xc00) >> 10) {
-			case 0x0:
-				*bus = BUS_LPC;
-				break;
-			case 0x3:
-				*bus = BUS_SPI;
-				break;
-			default:
-				*bus = BUS_NONE;
-				ret = -2;  /* unknown bus type. */
-				break;
+		                   chipset_enables[i].device_id);
+		if (dev) {
+			if (chipset_enables[i].doit == enable_flash_pch5 ||
+			    chipset_enables[i].doit == enable_flash_pch6
+			    /* TODO: add once enable_flash_ich_dc_spi(..., \
+			               CHIPSET_7_SERIES_PANTHER_POINT); */) {
+				is_new_ich = 1;
 			}
-			ret = 0;
-		} else {
-			/* Older BBS (Boot BIOS Straps) field of GCS register.
-			 *   00: reserved
-			 *   01: SPI
-			 *   02: PCI
-			 *   03: LPC
-			 */
-			gcs = mmio_readl(rcrb + 0x3410);
-			switch ((gcs & 0xc00) >> 10) {
-			case 0x1:
-				*bus = BUS_SPI;
-				break;
-			case 0x3:
-				*bus = BUS_LPC;
-				break;
-			default:
-				*bus = BUS_NONE;
-				ret = -2;  /* unknown bus type. */
-				break;
-			}
-			ret = 0;
+			break;
 		}
+	}
+	if (!dev) return -3;  /* unknown pci dev */
+
+	/* Get physical address of Root Complex Register Block */
+	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+	msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
+
+	/* Map RCBA to virtual memory */
+	rcrb = physmap("ICH RCRB", tmp, 0x4000);
+
+	if (is_new_ich) {
+		/* Newer BBS (Boot BIOS Straps) field of GCS register.
+		 *   00b: LPC.
+		 *   01b: reserved
+		 *   10b: PCI
+		 *   11b: SPI
+		 */
+		gcs = mmio_readl(rcrb + 0x3410);
+		switch ((gcs & 0xc00) >> 10) {
+		case 0x0:
+			*bus = BUS_LPC;
+			break;
+		case 0x3:
+			*bus = BUS_SPI;
+			break;
+		default:
+			*bus = BUS_NONE;
+			ret = -2;  /* unknown bus type. */
+			break;
+		}
+		ret = 0;
+	} else {
+		/* Older BBS (Boot BIOS Straps) field of GCS register.
+		 *   00: reserved
+		 *   01: SPI
+		 *   02: PCI
+		 *   03: LPC
+		 */
+		gcs = mmio_readl(rcrb + 0x3410);
+		switch ((gcs & 0xc00) >> 10) {
+		case 0x1:
+			*bus = BUS_SPI;
+			break;
+		case 0x3:
+			*bus = BUS_LPC;
+			break;
+		default:
+			*bus = BUS_NONE;
+			ret = -2;  /* unknown bus type. */
+			break;
+		}
+		ret = 0;
 	}
 
 	return ret;
 }
+#endif
