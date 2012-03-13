@@ -234,9 +234,9 @@ static int get_shaw2ba(chipaddr *shaw2ba)
 	 * most significant.
 	 */
 	*shaw2ba = sio_read(idx, WPCE775X_SHAW2BA_0) |
-	           (sio_read(idx, WPCE775X_SHAW2BA_1) << 8) |
-	           (sio_read(idx, WPCE775X_SHAW2BA_2) << 16) |
-	           (sio_read(idx, WPCE775X_SHAW2BA_3) << 24);
+	           ((chipaddr)sio_read(idx, WPCE775X_SHAW2BA_1) << 8) |
+	           ((chipaddr)sio_read(idx, WPCE775X_SHAW2BA_2) << 16) |
+	           ((chipaddr)sio_read(idx, WPCE775X_SHAW2BA_3) << 24);
 
 	/*
 	 * If SHWIN_ACC is cleared, then we're using LPC memory access
@@ -260,7 +260,7 @@ static int get_shaw2ba(chipaddr *shaw2ba)
 		}
 
 		*shaw2ba &= 0x0fffffff;
-		*shaw2ba |= idsel << 28;
+		*shaw2ba |= (chipaddr)idsel << 28;
 	}
 	
 	sio_write(idx, NUVOTON_SIOCFG_LDN, org_ldn);
@@ -823,9 +823,9 @@ int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		rc = wpce775x_spi_read_status_register(readcnt, readarr);
 		break;
 	case JEDEC_READ:{
-		int blockaddr = (writearr[1] << 16) |
-		                (writearr[2] <<  8) |
-		                 writearr[3];
+		int blockaddr = ((int)writearr[1] << 16) |
+		                ((int)writearr[2] <<  8) |
+		                      writearr[3];
 		rc = wpce775x_read(blockaddr, readarr, readcnt);
 		break;
 	}
@@ -844,17 +844,17 @@ int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	case JEDEC_BE_D8:
 	case JEDEC_CE_60:
 	case JEDEC_CE_C7:{
-		int blockaddr = (writearr[1] << 16) |
-		                (writearr[2] <<  8) |
-		                 writearr[3];
+		int blockaddr = ((int)writearr[1] << 16) |
+		                ((int)writearr[2] <<  8) |
+		                      writearr[3];
 
 		rc = wpce775x_erase_new(blockaddr, opcode);
 		break;
 	}
 	case JEDEC_BYTE_PROGRAM:{
-		int blockaddr = (writearr[1] << 16) |
-		                (writearr[2] <<  8) |
-		                 writearr[3];
+		int blockaddr = ((int)writearr[1] << 16) |
+		                ((int)writearr[2] <<  8) |
+		                      writearr[3];
 		int nbytes = writecnt - 4;
 
 		rc = wpce775x_nbyte_program(blockaddr, &writearr[4], nbytes);
@@ -938,8 +938,8 @@ int wpce775x_spi_common_init(void)
 		msg_pdbg("Cannot get the address of Shadow Window 2");
 		return 0;
 	}
-	msg_pdbg("Get the address of WCB(SHA WIN2) at 0x%08x\n",
-	         (uint32_t)wcb_physical_address);
+	msg_pdbg("Get the address of WCB(SHA WIN2) at 0x%08lx\n",
+	         wcb_physical_address);
 	wcb = (struct wpce775x_wcb *)
 	      programmer_map_flash_region("WPCE775X WCB",
 	                                  wcb_physical_address,

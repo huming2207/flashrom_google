@@ -441,7 +441,8 @@ int mec1308_probe_spi_flash(const char *name)
 	tmp8 |= 1;
 	sio_write(sio_port, 0x30, tmp8);	/* activate logical device */
 
-	mbx_idx = sio_read(sio_port, 0x60) << 8 | sio_read(sio_port, 0x61);
+	mbx_idx = (unsigned int)sio_read(sio_port, 0x60) << 8 |
+	                        sio_read(sio_port, 0x61);
 	mbx_data = mbx_idx + 1;
 	msg_pdbg("%s: mbx_idx: 0x%04x, mbx_data: 0x%04x\n",
 	         __func__, mbx_idx, mbx_data);
