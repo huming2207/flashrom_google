@@ -83,6 +83,10 @@ struct fmap {
  * returns size of fmap struct to indicate success
  * returns <0 to indicate failure
  */
-extern int fmap_find(struct flashchip *flash, uint8_t **buf);
+int fmap_find(struct flashchip *flash, uint8_t **buf);
+
+/* Like fmap_find, but give a memory location to search FMAP. */
+struct fmap *fmap_find_in_memory(uint8_t *image, int size);
+
 
 #endif	/* FLASHMAP_LIB_FMAP_H__*/

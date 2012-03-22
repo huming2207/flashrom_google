@@ -666,6 +666,8 @@ int wpce775x_probe_spi_flash(const char *name);
 
 /* gec.c */
 int gec_probe_programmer(const char *name);
+int gec_need_2nd_pass(void);
+int gec_prepare(uint8_t *image, int size);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

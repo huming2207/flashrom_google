@@ -123,7 +123,7 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 	return flash->total_size * 1024 - from_top;
 }
 
-extern int fmap_find(struct flashchip *flash, uint8_t **buf)
+int fmap_find(struct flashchip *flash, uint8_t **buf)
 {
 	long int offset = 0, ceiling_size;
 	uint64_t sig, tmp64;
@@ -244,4 +244,21 @@ extern int fmap_find(struct flashchip *flash, uint8_t **buf)
 		return -1;
 	}
 	return fmap_size;
+}
+
+
+/* Like fmap_find, but give a memory location to search FMAP. */
+struct fmap *fmap_find_in_memory(uint8_t *image, int size)
+{
+	long int offset = 0;
+	uint64_t sig;
+
+	memcpy(&sig, FMAP_SIGNATURE, strlen(FMAP_SIGNATURE));
+
+	for (offset = 0; offset < size; offset++) {
+		if (!memcmp(&image[offset], &sig, sizeof(sig))) {
+			return (struct fmap *)&image[offset];
+		}
+	}
+	return NULL;
 }

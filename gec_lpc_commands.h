@@ -57,6 +57,7 @@ enum lpc_status {
 	EC_LPC_RESULT_INVALID_COMMAND = 1,
 	EC_LPC_RESULT_ERROR = 2,
 	EC_LPC_RESULT_INVALID_PARAM = 3,
+	EC_LPC_RESULT_ACCESS_DENIED = 4,
 };
 
 
@@ -219,6 +220,12 @@ struct lpc_response_flash_checksum {
 		sum ^= (byte ^ 0x53);  \
 	} while (0)
 #endif  /* SUPPORT_CHECKSUM */
+
+#define EC_LPC_COMMAND_REBOOT_EC 0xd2
+struct lpc_params_reboot_ec {
+	uint8_t target;  /* enum lpc_current_image */
+} __attribute__ ((packed));
+
 
 
 #endif  /* __CROS_EC_LPC_COMMANDS_H */

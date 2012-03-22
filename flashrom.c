@@ -1921,6 +1921,14 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	// ////////////////////////////////////////////////////////////
 
 	if (write_it) {
+#if defined(__i386__) || defined(__x86_64__)
+		// parse the new fmap
+		if (ret = gec_prepare(newcontents, size)) {
+			msg_cerr("GEC prepare failed, ret=%d.\n", ret);
+			goto out;
+		}
+#endif
+
 		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
 			msg_cerr("Uh oh. Erase/write failed. Checking if "
 				 "anything changed.\n");
@@ -1937,6 +1945,35 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			ret = 1;
 			goto out;
 		}
+
+#if defined(__i386__) || defined(__x86_64__)
+		ret = gec_need_2nd_pass();
+		if (ret < 0) {
+			// Jump failed
+			msg_cerr("gec_need_2nd_pass() failed. Stop.\n");
+			emergency_help_message();
+			ret = 1;
+			goto out;
+		} else if (ret > 0) {
+			// Need 2nd pass. Get the just written content.
+			msg_pdbg("GEC needs 2nd pass.\n");
+			if (flash->read(flash, oldcontents, 0, size)) {
+				msg_cerr("Uh oh. Cannot get latest content.\n");
+				emergency_help_message();
+				ret = 1;
+				goto out;
+			}
+			// write 2nd pass
+			if (erase_and_write_flash(flash, oldcontents,
+			                          newcontents)) {
+				msg_cerr("Uh oh. GEC 2nd pass failed.\n");
+				emergency_help_message();
+				ret = 1;
+				goto out;
+			}
+			ret = 0;
+		}
+#endif
 	}
 
 	if (verify_it) {
