@@ -51,7 +51,8 @@
 
 #define GOOGLE_VID		0x18D1
 #define GOOGLE_SERVO_PID	0x5001
-#define GOOGLE_SERVO_V2_PID	0x5003
+#define GOOGLE_SERVO_V2_PID0	0x5002
+#define GOOGLE_SERVO_V2_PID1	0x5003
 
 const struct usbdev_status devs_ft2232spi[] = {
 	{FTDI_VID, FTDI_FT2232H_PID, OK, "FTDI", "FT2232H"},
@@ -66,7 +67,8 @@ const struct usbdev_status devs_ft2232spi[] = {
 	{OLIMEX_VID, OLIMEX_ARM_OCD_H_PID, NT, "Olimex", "ARM-USB-OCD-H"},
 	{OLIMEX_VID, OLIMEX_ARM_TINY_H_PID, NT, "Olimex", "ARM-USB-TINY-H"},
 	{GOOGLE_VID, GOOGLE_SERVO_PID, OK, "Google", "Servo"},
-	{GOOGLE_VID, GOOGLE_SERVO_V2_PID, OK, "Google", "Servo V2"},
+	{GOOGLE_VID, GOOGLE_SERVO_V2_PID0, OK, "Google", "Servo V2 Legacy"},
+	{GOOGLE_VID, GOOGLE_SERVO_V2_PID1, OK, "Google", "Servo V2"},
 	{},
 };
 
@@ -226,7 +228,11 @@ int ft2232_spi_init(void)
 			ft2232_interface = INTERFACE_A;
 		} else if (!strcasecmp(arg, "servo-v2")) {
 			ft2232_vid = GOOGLE_VID;
-			ft2232_type = GOOGLE_SERVO_V2_PID;
+			ft2232_type = GOOGLE_SERVO_V2_PID1;
+			ft2232_interface = INTERFACE_A;
+		} else if (!strcasecmp(arg, "servo-v2-legacy")) {
+			ft2232_vid = GOOGLE_VID;
+			ft2232_type = GOOGLE_SERVO_V2_PID0;
 			ft2232_interface = INTERFACE_A;
 		} else {
 			msg_perr("Error: Invalid device type specified.\n");
