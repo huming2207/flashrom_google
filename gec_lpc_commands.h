@@ -13,9 +13,8 @@
 
 /* During the development stage, the LPC bus has high error bit rate.
  * Using checksum can detect the error and trigger re-transmit.
- * FIXME: remove this after mass production.
  */
-#define SUPPORT_CHECKSUM
+#undef SUPPORT_CHECKSUM
 
 
 /* I/O addresses for LPC commands */
