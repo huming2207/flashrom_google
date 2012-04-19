@@ -174,6 +174,9 @@ int ft2232_spi_init(void)
 	int ft2232_vid = FTDI_VID;
 	int ft2232_type = FTDI_FT4232H_PID;
 	enum ftdi_interface ft2232_interface = INTERFACE_B;
+	char *endp;
+	double spi_mhz = 0;
+	uint16_t divide_by = DIVIDE_BY;
 	char *arg;
 	double mpsse_clk;
 
@@ -257,6 +260,16 @@ int ft2232_spi_init(void)
 		}
 	}
 	free(arg);
+	arg = extract_programmer_param("spi_mhz");
+        if (arg) {
+		spi_mhz = strtod(arg, &endp);
+		if (arg == endp) {
+			msg_perr("%s: Invalid clock %s MHz.  Will use "
+				 "default\n", __func__, arg);
+		}
+		msg_pdbg("Clock %f MHz\n", spi_mhz);
+	}
+	free(arg);
 	msg_pdbg("Using device type %s %s ",
 		 get_ft2232_vendorname(ft2232_vid, ft2232_type),
 		 get_ft2232_devicename(ft2232_vid, ft2232_type));
@@ -311,23 +324,32 @@ int ft2232_spi_init(void)
 			goto ftdi_err;
 		}
 		mpsse_clk = 60.0;
+		if (spi_mhz)
+			divide_by = (uint16_t)(mpsse_clk / (spi_mhz * 2));
 	} else {
 		mpsse_clk = 12.0;
+		if (spi_mhz)
+			divide_by = (uint16_t)((mpsse_clk * 5) / (spi_mhz * 2));
+	}
+	if (divide_by < 1) {
+		msg_perr("Can't set SPI clock to %f MHz, will be %f MHz\n",
+			 spi_mhz, mpsse_clk / 2);
+		divide_by = 1;
 	}
 
 	msg_pdbg("Set clock divisor\n");
 	buf[0] = 0x86;		/* command "set divisor" */
 	/* valueL/valueH are (desired_divisor - 1) */
-	buf[1] = (DIVIDE_BY - 1) & 0xff;
-	buf[2] = ((DIVIDE_BY - 1) >> 8) & 0xff;
+	buf[1] = (divide_by - 1) & 0xff;
+	buf[2] = ((divide_by - 1) >> 8) & 0xff;
 	if (send_buf(ftdic, buf, 3)) {
 		ret = -6;
 		goto ftdi_err;
 	}
 
 	msg_pdbg("MPSSE clock: %f MHz divisor: %d "
-		 "SPI clock: %f MHz\n", mpsse_clk, DIVIDE_BY,
-		 (double)(mpsse_clk / (((DIVIDE_BY - 1) + 1) * 2)));
+		 "SPI clock: %f MHz\n", mpsse_clk, divide_by,
+		 (double)(mpsse_clk / (((divide_by - 1) + 1) * 2)));
 
 	/* Disconnect TDI/DO to TDO/DI for loopback. */
 	msg_pdbg("No loopback of TDI/DO TDO/DI\n");
