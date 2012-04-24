@@ -504,7 +504,11 @@ ifeq ($(OS_ARCH), DOS)
 # FIXME There needs to be a better way to do this
 LIBS += ../libpci/lib/libpci.a
 else
+ifeq ($(CONFIG_STATIC), yes)
+LIBS += -static -lpci -lz  # -lz must be after -lpci for symbol resolve
+else
 LIBS += -lpci
+endif
 ifeq ($(OS_ARCH), OpenBSD)
 # For (i386|amd64)_iopl(2).
 LIBS += -l$(shell uname -m)
