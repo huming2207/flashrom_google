@@ -505,7 +505,8 @@ ifeq ($(OS_ARCH), DOS)
 LIBS += ../libpci/lib/libpci.a
 else
 ifeq ($(CONFIG_STATIC), yes)
-LIBS += -static -lpci -lz  # -lz must be after -lpci for symbol resolve
+LIBS_PCI := $(shell $(PKG_CONFIG) --libs --static libpci)
+LIBS += -static $(LIBS_PCI)
 else
 LIBS += -lpci
 endif
