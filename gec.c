@@ -173,6 +173,7 @@ static int gec_jump_copy(enum lpc_current_image target) {
 	struct lpc_params_reboot_ec p;
 	int rc;
 
+	memset(&p, 0, sizeof(p));
 	p.target = target != EC_LPC_IMAGE_UNKNOWN ? target :
 	           fwcopy[EC_LPC_IMAGE_RO].flags ? EC_LPC_IMAGE_RO :
 	           fwcopy[EC_LPC_IMAGE_RW_A].flags ? EC_LPC_IMAGE_RW_A :
