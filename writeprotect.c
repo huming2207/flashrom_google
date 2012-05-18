@@ -515,6 +515,7 @@ static int w25_range_table(const struct flashchip *flash,
 			*num_entries = ARRAY_SIZE(w25q16_ranges);
 			break;
 		case WINBOND_NEX_W25Q32:
+		case WINBOND_NEX_W25Q32DW:
 			*w25q_ranges = w25q32_ranges;
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
