@@ -413,7 +413,7 @@ int internal_init(void)
 	if (target_bus == BUS_LPC ||
 	    target_bus == BUS_FWH) {
 		/* note: it85xx init done along with it87* init */
-		gec_probe_programmer(NULL);
+		gec_probe_lpc(NULL);
 		wpce775x_probe_spi_flash(NULL);
 		mec1308_probe_spi_flash(NULL);
 	}
