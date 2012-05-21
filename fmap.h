@@ -40,6 +40,8 @@
 
 #include <inttypes.h>
 
+struct flashchip;
+
 #define FMAP_SIGNATURE		"__FMAP__"
 #define FMAP_VER_MAJOR		1	/* this header's FMAP minor version */
 #define FMAP_VER_MINOR		1	/* this header's FMAP minor version */

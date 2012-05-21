@@ -225,7 +225,6 @@ int main(int argc, char *argv[])
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
 	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
 	int dont_verify_it = 0, list_supported = 0;
-	int diff = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -477,7 +476,6 @@ int main(int argc, char *argv[])
 			flash_name = 1;
 			break;
 		case LONGOPT_DIFF:
-			diff = 1;
 			diff_file = strdup(optarg);
 			break;
 		case LONGOPT_IGNORE_FMAP:

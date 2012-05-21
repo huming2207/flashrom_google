@@ -214,7 +214,7 @@ int gec_prepare(uint8_t *image, int size) {
 	for (i = 0; i < fmap->nareas; i++) {
 		struct fmap_area *fa = &fmap->areas[i];
 		for (j = EC_LPC_IMAGE_RO; j < ARRAY_SIZE(sections); j++) {
-			if (!strcmp(sections[j], fa->name)) {
+			if (!strcmp(sections[j], (const char *)fa->name)) {
 				msg_pdbg("Found '%s' in image.\n", fa->name);
 				memcpy(&fwcopy[j], fa, sizeof(*fa));
 				fwcopy[j].flags = 1;  // mark as new
@@ -283,7 +283,9 @@ static int gec_block_erase(struct flashchip *flash,
                            unsigned int len) {
 	struct lpc_params_flash_erase erase;
 	int rc;
+#ifdef SUPPORT_CHECKSUM
 	uint8_t *blank;
+#endif
 
 #ifdef SUPPORT_CHECKSUM
 re_erase:
@@ -531,8 +533,6 @@ static int detect_ec(void) {
 
 /* Called by internal_init() */
 int gec_probe_programmer(const char *name) {
-	struct pci_dev *dev;
-
 	msg_pdbg("%s():%d ...\n", __func__, __LINE__);
 
 	if (detect_ec()) return 1;

@@ -1923,7 +1923,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	if (write_it) {
 #if defined(__i386__) || defined(__x86_64__)
 		// parse the new fmap
-		if (ret = gec_prepare(newcontents, size)) {
+		if ((ret = gec_prepare(newcontents, size))) {
 			msg_cerr("GEC prepare failed, ret=%d.\n", ret);
 			goto out;
 		}
