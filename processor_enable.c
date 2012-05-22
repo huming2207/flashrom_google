@@ -156,6 +156,9 @@ int processor_flash_enable(void)
 	}
 #endif
 #if defined (__arm__)
+	/* FIXME(yjlou): 0xc09 seems ARMv7, not tegra* specified.
+	 *               Also, the tegra2_spi_init() should move out of
+	 *               the processor enable code logic. */
 	if (is_tegra2()) {
 		msg_pdbg("Detected NVIDIA Tegra 2.\n");
 		return tegra2_spi_init();

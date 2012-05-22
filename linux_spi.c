@@ -26,10 +26,13 @@
 #include <unistd.h>
 #include <linux/spi/spidev.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
+
 
 
 /* TODO: this information should come from the SPI master driver. */
@@ -56,12 +59,62 @@ static const struct spi_programmer spi_programmer_linux = {
 	.write_256	= linux_spi_write_256,
 };
 
+
+/* Detect the SPI chip behind /dev/spidevX.Y.
+ * We scan every /dev/spidevX.0 and if it's /dev/spidevX.1 is a MTD device
+ * (by looking /sys/bus/spi/devices/spidevX.1/modalias), then we assume the
+ * spidevX.0 is the SPI flash.
+ */
+static char* linux_spi_probe(void)
+{
+	char name0[] = "/sys/bus/spi/devices/spiX.0";
+	char name1[] = "/sys/bus/spi/devices/spiX.1/modalias";
+	int X = strchr(name0, 'X') - name0;  /* point to the X char */
+	int x;  /* for for-loop */
+	struct stat sb;
+
+	for (x = '0'; x <= '9'; x++) {
+		name0[X] = x;
+		if (stat(name0, &sb) < 0) {
+			msg_pdbg("stat(%s) < 0, stop scanning.\n", name0);
+			return NULL;
+		}
+
+		if ((sb.st_mode & S_IFMT) == S_IFDIR) {
+			int fd;
+			char buf[8];  // 8 is long enough for modalias
+
+			name1[X] = x;
+			if ((fd = open(name1, O_RDONLY)) < 0 ||
+			    read(fd, buf, sizeof(buf)) < 0) {
+				msg_pdbg("read(%s) < 0, try next.\n", name0);
+				continue;
+			}
+
+			if (!strncmp(buf, "m25p80", 6)) {
+				static char name[] = "/dev/spidevX.0";
+				*strchr(name, 'X') = x;
+				msg_pdbg("Detected linux_spi:dev=%s\n", name);
+				return name;
+			}
+
+			close(fd);
+		}
+	}
+
+	return NULL;
+}
+
+
 int linux_spi_init(void)
 {
 	char *p, *endp, *dev;
 	uint32_t speed = 0;
 
 	dev = extract_programmer_param("dev");
+	if (!dev) {
+		dev = linux_spi_probe();
+	}
 	if (!dev || !strlen(dev)) {
 		msg_perr("No SPI device given. Use flashrom -p "
 			 "linux_spi:dev=/dev/spidevX.Y\n");
