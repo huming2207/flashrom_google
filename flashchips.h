@@ -297,6 +297,9 @@
 #define FUJITSU_MBM29LV800BA	0x5B	/* Same as MBM29LV800BE */
 #define FUJITSU_MBM29LV800TA	0xDA	/* Same as MBM29LV800TE */
 
+#define GIGADEVICE_ID		0xC8	/* GigaDevice */
+#define GIGADEVICE_GD25LQ32	0x6016
+
 #define HYUNDAI_ID		0xAD	/* Hyundai */
 #define HYUNDAI_HY29F400T	0x23	/* Same as HY29F400AT */
 #define HYUNDAI_HY29F800B	0x58	/* Same as HY29F800AB */

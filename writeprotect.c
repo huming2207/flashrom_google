@@ -604,6 +604,19 @@ static int w25_range_table(const struct flashchip *flash,
 			return -1;
 		}
 		break;
+	case GIGADEVICE_ID:
+		switch(flash->model_id) {
+		case GIGADEVICE_GD25LQ32:
+			*w25q_ranges = w25q32_ranges;
+			*num_entries = ARRAY_SIZE(w25q32_ranges);
+			break;
+		default:
+			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->model_id);
+			return -1;
+		}
+		break;
 	default:
 		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
 		         __func__, flash->manufacture_id);
