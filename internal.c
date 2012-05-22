@@ -293,6 +293,24 @@ int internal_init(void)
 	internal_buses_supported = BUS_NONE;
 #endif
 
+#if defined(__arm__) && CONFIG_LINUX_SPI == 1
+	/* On the ARM platform, we prefer /dev/spidev if it is supported.
+	 * That means, if user specifies
+	 *
+	 *   1. -p internal programmer
+	 *   2. without -p (the default programmer, which is internal too)
+	 *
+	 * This code would try to auto-detect the /dev/spidevX.Y.
+	 * If failed, try processor_flash_enable() then (which will register
+	 * tegra2 spi programmer).
+	 *
+	 * The -p linux_spi still works because the programmer_init() would
+	 * call the linux_spi_init() in flashrom.c.
+	 */
+	if (!programmer_init(PROGRAMMER_LINUX_SPI, NULL)) {
+		return 0;
+	} else /* if failed, fall through */
+#endif
 	if (processor_flash_enable()) {
 		msg_perr("Processor detection/init failed.\n"
 			 "Aborting.\n");
