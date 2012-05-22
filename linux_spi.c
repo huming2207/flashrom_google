@@ -131,22 +131,20 @@ static int linux_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		return -1;
 
 	/* Only pass necessary msg[] to ioctl() to avoid the empty message
-	 * drives un-expected CS line and clocks. */
+	 * which drives an un-expected CS line and clocks. */
 	if (writecnt) {
 		msg_start = 0;  /* tx: msg[0] */
 		msg_count++;
 		if (readcnt) {
 			msg_count++;
 		}
+	} else if (readcnt) {
+		msg_start = 1;  /* rx: msg[1] */
+		msg_count++;
 	} else {
-		if (readcnt) {
-			msg_start = 1;  /* rx: msg[1] */
-			msg_count++;
-		} else {
-			msg_cerr("%s: both writecnt and readcnt are 0.\n",
-				 __func__);
-			return -1;
-		}
+		msg_cerr("%s: both writecnt and readcnt are 0.\n",
+			 __func__);
+		return -1;
 	}
 
 	if (ioctl(fd, SPI_IOC_MESSAGE(msg_count), &msg[msg_start]) == -1) {
