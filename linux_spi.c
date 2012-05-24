@@ -76,8 +76,8 @@ static char* linux_spi_probe(void)
 	for (x = '0'; x <= '9'; x++) {
 		name0[X] = x;
 		if (stat(name0, &sb) < 0) {
-			msg_pdbg("stat(%s) < 0, stop scanning.\n", name0);
-			return NULL;
+			msg_pdbg("stat(%s) < 0, try next.\n", name0);
+			continue;
 		}
 
 		if ((sb.st_mode & S_IFMT) == S_IFDIR) {
