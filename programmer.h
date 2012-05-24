@@ -641,6 +641,7 @@ struct opaque_programmer {
 	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*erase) (struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
+	const void *data;
 };
 extern const struct opaque_programmer *opaque_programmer;
 void register_opaque_programmer(const struct opaque_programmer *pgm);
