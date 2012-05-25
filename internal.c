@@ -257,6 +257,8 @@ int internal_init(void)
 			target_bus = BUS_FWH;
 		} else if (!strcasecmp(arg,"spi")) {
 			target_bus = BUS_SPI;
+		} else if (!strcasecmp(arg,"i2c")) {
+			target_bus = BUS_PROG;
 		} else {
 			msg_perr("Unsupported bus: %s\n", arg);
 			free(arg);
@@ -291,6 +293,18 @@ int internal_init(void)
 	pci_scan_bus(pacc);	/* We want to get the list of devices */
 #else
 	internal_buses_supported = BUS_NONE;
+#endif
+
+#if defined(__arm__)
+	/* FIXME: This should not need to be covered by the "#if defined",
+	 * and should not check BUS_LPC. Those are hacks until we can
+	 * fix up any scripts which depend on "-p internal:bus=lpc" for
+	 * flashing EC firmware.
+	 */
+	if ((target_bus == BUS_PROG) || (target_bus == BUS_LPC)) {
+		if (!gec_probe_i2c(NULL))
+			return 0;
+	}
 #endif
 
 #if defined(__arm__) && CONFIG_LINUX_SPI == 1
