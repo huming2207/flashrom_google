@@ -319,6 +319,9 @@ CONFIG_OGP_SPI ?= no
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= no
 
+# Enable Linux I2C for ChromeOS EC
+CONFIG_LINUX_I2C ?= no
+
 # Disable Linux spidev interface support for now, until we check for a Linux
 # device (not host, as DOS binaries for example are built on a Linux host).
 CONFIG_LINUX_SPI ?= no
@@ -353,13 +356,13 @@ endif
 
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
-PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o
+PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o gec.o
 ifeq ($(ARCH),"x86")
-PROGRAMMER_OBJS += gec.o gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o
+PROGRAMMER_OBJS += gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o
 else
 ifeq ($(ARCH),"arm")
-PROGRAMMER_OBJS += tegra2_spi.o
+PROGRAMMER_OBJS += gec_i2c.o tegra2_spi.o
 endif
 NEED_PCI := yes
 endif
@@ -461,6 +464,11 @@ ifeq ($(CONFIG_BUSPIRATE_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_BUSPIRATE_SPI=1'
 PROGRAMMER_OBJS += buspirate_spi.o
 NEED_SERIAL := yes
+endif
+
+ifeq ($(CONFIG_LINUX_I2C), yes)
+FEATURE_CFLAGS += -D'CONFIG_LINUX_I2C=1'
+PROGRAMMER_OBJS += linux_i2c.o
 endif
 
 ifeq ($(CONFIG_LINUX_SPI), yes)
