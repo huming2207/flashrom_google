@@ -164,7 +164,7 @@ int gec_prepare(uint8_t *image, int size) {
 	struct fmap *fmap;
 	int i, j;
 
-	if (!priv->detected) return 0;
+	if (!(priv && priv->detected)) return 0;
 
 	// Parse the fmap in the image file and cache the firmware ranges.
 	fmap = fmap_find_in_memory(image, size);
@@ -195,7 +195,7 @@ int gec_prepare(uint8_t *image, int size) {
 int gec_need_2nd_pass(void) {
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 
-	if (!priv->detected) return 0;
+	if (!(priv && priv->detected)) return 0;
 
 	if (need_2nd_pass) {
 		if (gec_jump_copy(EC_LPC_IMAGE_UNKNOWN)) {
