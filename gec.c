@@ -214,10 +214,11 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 	struct lpc_params_flash_read p;
 	struct lpc_response_flash_read r;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	int maxlen = opaque_programmer->max_data_read;
 
-	for (i = 0; i < readcnt; i += EC_LPC_FLASH_SIZE_MAX) {
+	for (i = 0; i < readcnt; i += maxlen) {
 		p.offset = blockaddr + i;
-		p.size = min(readcnt - i, EC_LPC_FLASH_SIZE_MAX);
+		p.size = min(readcnt - i, maxlen);
 		rc = priv->ec_command(EC_LPC_COMMAND_FLASH_READ,
 				      &p, sizeof(p), &r, sizeof(r));
 		if (rc) {
@@ -289,9 +290,10 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	unsigned int written = 0;
 	struct lpc_params_flash_write p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	int maxlen = opaque_programmer->max_data_write;
 
 	for (i = 0; i < nbytes; i += written) {
-		written = min(nbytes - i, EC_LPC_FLASH_SIZE_MAX);
+		written = min(nbytes - i, maxlen);
 		p.offset = addr + i;
 		p.size = written;
 		memcpy(p.data, &buf[i], written);
