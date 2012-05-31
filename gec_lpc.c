@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
@@ -43,16 +44,25 @@
 #include "spi.h"
 #include "writeprotect.h"
 
+#define INITIAL_DELAY 10     /* 10 us */
+#define MAXIMUM_DELAY 10000  /* 10 ms */
 static int ec_timeout_usec = 1000000;
 
 /* Waits for the EC to be unbusy. Returns 1 if busy, 0 if not busy. */
 static int ec_busy(int timeout_usec)
 {
 	int i;
-	for (i = 0; i < timeout_usec; i += 10) {
-		usleep(10);  /* Delay first, in case we just sent a command */
+	int delay = INITIAL_DELAY;
+
+	for (i = 0; i < timeout_usec; i += delay) {
+		/* Delay first. In case that another command is just send to
+		 * the EC and the hardware hasn't set the busy bit. */
+		usleep(MIN(delay, timeout_usec - i));
+
 		if (!(inb(EC_LPC_ADDR_USER_CMD) & EC_LPC_STATUS_BUSY_MASK))
 			return 0;
+
+		delay = MIN(delay * 2, MAXIMUM_DELAY);
 	}
 	return 1;  /* Timeout */
 }
