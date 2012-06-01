@@ -1921,13 +1921,11 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	// ////////////////////////////////////////////////////////////
 
 	if (write_it) {
-#if defined(__i386__) || defined(__x86_64__)
 		// parse the new fmap
 		if ((ret = gec_prepare(newcontents, size))) {
 			msg_cerr("GEC prepare failed, ret=%d.\n", ret);
 			goto out;
 		}
-#endif
 
 		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
 			msg_cerr("Uh oh. Erase/write failed. Checking if "
@@ -1946,7 +1944,6 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			goto out;
 		}
 
-#if defined(__i386__) || defined(__x86_64__)
 		ret = gec_need_2nd_pass();
 		if (ret < 0) {
 			// Jump failed
@@ -1973,7 +1970,6 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			}
 			ret = 0;
 		}
-#endif
 	}
 
 	if (verify_it) {
