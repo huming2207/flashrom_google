@@ -418,6 +418,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 int gec_probe_size(struct flashchip *flash) {
 	int rc;
 	struct lpc_response_flash_info info;
+	struct lpc_response_flash_burst_info burst;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
@@ -427,14 +428,29 @@ int gec_probe_size(struct flashchip *flash) {
 		.disable        = gec_disable_writeprotect,
 		.wp_status      = gec_wp_status,
 	};
+	int page_size;
 
 	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_INFO,
 			      NULL, 0, &info, sizeof(info));
 	if (rc) return 0;
 
+	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_BURST_INFO,
+			      NULL, 0, &burst, sizeof(burst));
+	if (rc) {
+		/* The EC doesn't provide the burst size, use conservative
+		 * length instead. */
+		page_size = min(info.write_block_size, info.erase_block_size);
+		msg_pdbg("EC doesn't provide busrt info. Set page_size=%d\n",
+			 page_size);
+	} else {
+		page_size = min(burst.read_burst_size, burst.write_burst_size);
+		msg_pdbg("EC read/write burst size: %d/%d. Set page_size=%d\n",
+			 burst.read_burst_size, burst.write_burst_size,
+			 page_size);
+	}
+
 	flash->total_size = info.flash_size / 1024;
-	flash->page_size = min(info.write_block_size,
-	                       info.erase_block_size);
+	flash->page_size = page_size;
 	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
 	eraser->eraseblocks[0].size = info.erase_block_size;

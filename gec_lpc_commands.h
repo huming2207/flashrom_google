@@ -234,6 +234,15 @@ struct lpc_response_flash_wp_gpio {
 	uint32_t value;
 } __attribute__ ((packed));
 
+/* For optimization, get burst size of flash read/write. */
+#define EC_LPC_COMMAND_FLASH_BURST_INFO 0x1e
+struct lpc_response_flash_burst_info {
+	/* The maximum length used for EC_CMD_FLASH_READ */
+	uint32_t read_burst_size;
+	/* The maximum length used for EC_CMD_FLASH_WRITE */
+	uint32_t write_burst_size;
+} __attribute__ ((packed));
+
 #ifdef SUPPORT_CHECKSUM
 /* Checksum a range of flash datq */
 #define EC_LPC_COMMAND_FLASH_CHECKSUM 0x1f
