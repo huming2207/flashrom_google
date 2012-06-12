@@ -68,7 +68,7 @@ static const struct spi_programmer spi_programmer_linux = {
 static char* linux_spi_probe(void)
 {
 	char name0[] = "/sys/bus/spi/devices/spiX.0";
-	char name1[] = "/sys/bus/spi/devices/spiX.1/modalias";
+	char name1[] = "/sys/bus/spi/devices/spiX.0/modalias";
 	int X = strchr(name0, 'X') - name0;  /* point to the X char */
 	int x;  /* for for-loop */
 	struct stat sb;
@@ -91,7 +91,7 @@ static char* linux_spi_probe(void)
 				continue;
 			}
 
-			if (!strncmp(buf, "m25p80", 6)) {
+			if (!strncmp(buf, "spidev", 6)) {
 				static char name[] = "/dev/spidevX.0";
 				*strchr(name, 'X') = x;
 				msg_pdbg("Detected linux_spi:dev=%s\n", name);
