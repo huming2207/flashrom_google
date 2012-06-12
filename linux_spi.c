@@ -67,39 +67,29 @@ static const struct spi_programmer spi_programmer_linux = {
  */
 static char* linux_spi_probe(void)
 {
-	char name0[] = "/sys/bus/spi/devices/spiX.0";
-	char name1[] = "/sys/bus/spi/devices/spiX.1/modalias";
-	int X = strchr(name0, 'X') - name0;  /* point to the X char */
-	int x;  /* for for-loop */
-	struct stat sb;
+	char filename[] = "/sys/bus/spi/devices/spiX.0/modalias";
+	int X = strchr(filename, 'X') - filename;  /* offset to the X char */
+	int i;  /* for for-loop */
 
-	for (x = '0'; x <= '9'; x++) {
-		name0[X] = x;
-		if (stat(name0, &sb) < 0) {
-			msg_pdbg("stat(%s) < 0, try next.\n", name0);
+	for (i = '0'; i <= '9'; i++) {
+		int fd;
+		char buf[8];  // 8 is long enough for modalias
+
+		filename[X] = i;
+		if ((fd = open(filename, O_RDONLY)) < 0 ||
+		    read(fd, buf, sizeof(buf)) < 0) {
+			msg_pdbg("read(%s) < 0, try next.\n", filename);
 			continue;
 		}
 
-		if ((sb.st_mode & S_IFMT) == S_IFDIR) {
-			int fd;
-			char buf[8];  // 8 is long enough for modalias
-
-			name1[X] = x;
-			if ((fd = open(name1, O_RDONLY)) < 0 ||
-			    read(fd, buf, sizeof(buf)) < 0) {
-				msg_pdbg("read(%s) < 0, try next.\n", name0);
-				continue;
-			}
-
-			if (!strncmp(buf, "m25p80", 6)) {
-				static char name[] = "/dev/spidevX.0";
-				*strchr(name, 'X') = x;
-				msg_pdbg("Detected linux_spi:dev=%s\n", name);
-				return name;
-			}
-
-			close(fd);
+		if (!strncmp(buf, "spidev", 6)) {
+			static char name[] = "/dev/spidevX.0";
+			*strchr(name, 'X') = i;
+			msg_pdbg("Detected linux_spi:dev=%s\n", name);
+			return name;
 		}
+
+		close(fd);
 	}
 
 	return NULL;
