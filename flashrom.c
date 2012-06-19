@@ -1874,9 +1874,16 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			goto out;
 		}
 
+#if 0
+		/*
+		 * FIXME: show_id() causes failure if vendor:mainboard do not
+		 * match. This may happen if codenames are in flux.
+		 * See chrome-os-partner:10414.
+		 */
 #if CONFIG_INTERNAL == 1
 		if (programmer == PROGRAMMER_INTERNAL)
 			show_id(newcontents, size, force);
+#endif
 #endif
 	}
 
