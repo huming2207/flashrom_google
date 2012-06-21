@@ -536,6 +536,7 @@ enum spi_controller {
 	SPI_CONTROLLER_VIA,
 	SPI_CONTROLLER_WBSIO,
 	SPI_CONTROLLER_WPCE775X,
+	SPI_CONTROLLER_ENE,
 #endif
 #if defined(__arm__)
 	SPI_CONTROLLER_TEGRA2,
@@ -606,6 +607,9 @@ extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
 int via_init_spi(struct pci_dev *dev);
+
+/* ene_lpc.c */
+int ene_probe_spi_flash(const char *name);
 
 /* it85spi.c */
 int it85xx_spi_init(struct superio s);
