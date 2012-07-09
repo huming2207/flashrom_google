@@ -78,7 +78,7 @@ static int gec_command_lpc(int command, const void *indata, int insize,
 	uint8_t *d;
 	int i;
 
-	if ((insize + outsize) > EC_LPC_PARAM_SIZE) {
+	if ((insize > EC_LPC_PARAM_SIZE) || (outsize > EC_LPC_PARAM_SIZE)) {
 		msg_pdbg2("Data size too big for buffer.\n");
 		return -1;
 	}
@@ -172,8 +172,8 @@ static struct gec_priv gec_lpc_priv = {
 };
 
 static const struct opaque_programmer opaque_programmer_gec = {
-	.max_data_read	= EC_LPC_FLASH_SIZE_MAX,
-	.max_data_write	= EC_LPC_FLASH_SIZE_MAX,
+	.max_data_read	= EC_LPC_PARAM_SIZE,
+	.max_data_write	= 64,
 	.probe		= gec_probe_size,
 	.read		= gec_read,
 	.write		= gec_write,

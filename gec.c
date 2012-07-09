@@ -229,9 +229,9 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 
 #ifdef SUPPORT_CHECKSUM
 		if (verify_checksum(r.data, blockaddr + i,
-			            min(readcnt - i, EC_LPC_FLASH_SIZE_MAX))) {
+			            min(readcnt - i, sizeof(r.data)))) {
 			msg_pdbg("GEC: re-read...\n");
-			i -= EC_LPC_FLASH_SIZE_MAX;
+			i -= sizeof(r.data);
 			continue;
 		}
 #endif
@@ -433,7 +433,7 @@ int gec_probe_size(struct flashchip *flash) {
 	if (rc) return 0;
 
 	flash->total_size = info.flash_size / 1024;
-	flash->page_size = EC_LPC_FLASH_SIZE_MAX;
+	flash->page_size = 64;
 	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
 	eraser->eraseblocks[0].size = info.erase_block_size;

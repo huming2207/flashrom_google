@@ -172,7 +172,7 @@ struct lpc_params_flash_read {
 	uint32_t size;     /* Size to read in bytes */
 } __attribute__ ((packed));
 struct lpc_response_flash_read {
-	uint8_t data[EC_LPC_FLASH_SIZE_MAX];
+	uint8_t data[EC_LPC_PARAM_SIZE];
 } __attribute__ ((packed));
 
 
@@ -181,7 +181,7 @@ struct lpc_response_flash_read {
 struct lpc_params_flash_write {
 	uint32_t offset;   /* Byte offset to erase */
 	uint32_t size;     /* Size to erase in bytes */
-	uint8_t data[EC_LPC_FLASH_SIZE_MAX];
+	uint8_t data[64];
 } __attribute__ ((packed));
 
 
