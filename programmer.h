@@ -526,7 +526,6 @@ enum spi_controller {
 	SPI_CONTROLLER_NONE,
 #if CONFIG_INTERNAL == 1
 #if defined(__i386__) || defined(__x86_64__)
-	SPI_CONTROLLER_ENE,
 	SPI_CONTROLLER_ICH7,
 	SPI_CONTROLLER_ICH9,
 	SPI_CONTROLLER_ICH_HWSEQ,
@@ -607,9 +606,6 @@ extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
 int via_init_spi(struct pci_dev *dev);
-
-/* ene_lpc.c */
-int ene_probe_spi_flash(const char *name);
 
 /* it85spi.c */
 int it85xx_spi_init(struct superio s);

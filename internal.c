@@ -430,7 +430,6 @@ int internal_init(void)
 		gec_probe_lpc(NULL);
 		wpce775x_probe_spi_flash(NULL);
 		mec1308_probe_spi_flash(NULL);
-		ene_probe_spi_flash(NULL);
 	}
 
 #endif

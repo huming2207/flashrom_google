@@ -358,7 +358,7 @@ ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
 PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o gec.o
 ifeq ($(ARCH),"x86")
-PROGRAMMER_OBJS += gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
+PROGRAMMER_OBJS += gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o
 else
 ifeq ($(ARCH),"arm")
