@@ -673,6 +673,7 @@ int wpce775x_probe_spi_flash(const char *name);
 int gec_probe_i2c(const char *name);
 int gec_probe_lpc(const char *name);
 int gec_need_2nd_pass(void);
+int gec_finish(void);
 int gec_prepare(uint8_t *image, int size);
 struct gec_priv {
 	int detected;

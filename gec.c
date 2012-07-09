@@ -46,6 +46,9 @@
 /* 1 if we want the flashrom to call erase_and_write_flash() again. */
 static int need_2nd_pass = 0;
 
+/* 1 if we want the flashrom to try jumping to new firmware after update. */
+static int try_latest_firmware = 0;
+
 /* The range of each firmware copy from the image file to update.
  * But re-define the .flags as the valid flag to indicate the firmware is
  * new or not (if flags = 1).
@@ -182,6 +185,9 @@ int gec_prepare(uint8_t *image, int size) {
 		}
 	}
 
+	/* Warning: before update, we jump the EC to RO copy. If you want to
+	 *          change this behavior, please also check the gec_finish().
+	 */
 	return gec_jump_copy(EC_LPC_IMAGE_RO);
 }
 
@@ -204,6 +210,31 @@ int gec_need_2nd_pass(void) {
 	}
 
 	return need_2nd_pass;
+}
+
+
+/* Returns 0 for success.
+ *
+ * Try latest firmware: B > A > RO
+ *
+ * This function assumes the EC jumps to RO at gec_prepare() so that
+ * the fwcopy[RO].flags is old (0) and A/B are new. Please also refine
+ * this code logic if you change the gec_prepare() behavior.
+ */
+int gec_finish(void) {
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+
+	if (!(priv && priv->detected)) return 0;
+
+	if (try_latest_firmware) {
+		if (fwcopy[EC_LPC_IMAGE_RW_B].flags &&
+		    gec_jump_copy(EC_LPC_IMAGE_RW_B) == 0) return 0;
+		if (fwcopy[EC_LPC_IMAGE_RW_A].flags &&
+		    gec_jump_copy(EC_LPC_IMAGE_RW_A) == 0) return 0;
+		return gec_jump_copy(EC_LPC_IMAGE_RO);
+	}
+
+	return 0;
 }
 
 
@@ -280,6 +311,7 @@ re_erase:
 	}
 #endif
 
+	try_latest_firmware = 1;
 	return rc;
 }
 
@@ -317,6 +349,7 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		if (rc) break;
 	}
 
+	try_latest_firmware = 1;
 	return rc;
 }
 

@@ -1977,6 +1977,13 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			}
 			ret = 0;
 		}
+
+		if (gec_finish() < 0) {
+			msg_cerr("gec_finish() failed. Stop.\n");
+			emergency_help_message();
+			ret = 1;
+			goto out;
+		}
 	}
 
 	if (verify_it) {
