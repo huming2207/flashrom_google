@@ -64,47 +64,6 @@ static const char *sections[4] = {
 };
 
 
-#ifdef SUPPORT_CHECKSUM
-static verify_checksum(uint8_t* expected,
-                       unsigned int addr,
-                       unsigned int count) {
-	int rc;
-	struct lpc_params_flash_checksum csp;
-	struct lpc_response_flash_checksum csr;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	uint8_t cs;
-	int j;
-
-	csp.offset = addr;
-	csp.size = count;
-
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_CHECKSUM,
-			      &csp, sizeof(csp), &csr, sizeof(csr));
-	if (rc) {
-		msg_perr("GEC: verify_checksum() error.\n");
-		return rc;
-	}
-
-	for (cs = 0, j = 0; j < count; ++j) {
-		BYTE_IN(cs, expected[j]);
-	}
-	if (cs != csr.checksum) {
-		msg_pdbg("GEC: checksum dismatch at 0x%02x "
-		         "(ec: 0x%02x, local: 0x%02x). Retry.\n",
-		         addr, csr.checksum, cs);
-		msg_pdbg("GEC: ");
-		for (j = 0; j < count; ++j) {
-			msg_pdbg("%02x-", expected[j]);
-			if ((j & 15) == 15) msg_pdbg("\nGEC: ");
-		}
-		programmer_delay(1000);
-		return 1;
-	}
-	return 0;
-}
-#endif  /* SUPPORT_CHECKSUM */
-
-
 /* Given the range not able to update, mark the corresponding
  * firmware as old.
  */
@@ -259,12 +218,6 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 			return rc;
 		}
 
-#ifdef SUPPORT_CHECKSUM
-		if (verify_checksum(r.data, blockaddr + offset, count)) {
-			msg_pdbg("GEC: re-read...\n");
-			continue;
-		}
-#endif
 		memcpy(readarr + offset, r.data, count);
 		offset += count;
 	}
@@ -279,13 +232,7 @@ int gec_block_erase(struct flashchip *flash,
 	struct lpc_params_flash_erase erase;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int rc;
-#ifdef SUPPORT_CHECKSUM
-	uint8_t *blank;
-#endif
 
-#ifdef SUPPORT_CHECKSUM
-re_erase:
-#endif
 	erase.offset = blockaddr;
 	erase.size = len;
 	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_ERASE,
@@ -301,15 +248,6 @@ re_erase:
 		         blockaddr, rc);
 		return rc;
 	}
-
-#ifdef SUPPORT_CHECKSUM
-	blank = malloc(len);
-	memset(blank, 0xff, len);
-	if (verify_checksum(blank, blockaddr, len)) {
-		msg_pdbg("GEC: Re-erase...\n");
-		goto re_erase;
-	}
-#endif
 
 	try_latest_firmware = 1;
 	return rc;
@@ -338,14 +276,6 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 			return ACCESS_DENIED;
 		}
 
-#ifdef SUPPORT_CHECKSUM
-		if (verify_checksum(&buf[i], addr + i, written)) {
-			msg_pdbg("GEC: re-write...\n");
-			i -= written;
-			continue;
-		}
-#endif
-
 		if (rc) break;
 	}
 
@@ -357,92 +287,45 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 static int gec_list_ranges(const struct flashchip *flash) {
 	msg_pinfo("You can specify any range:\n");
 	msg_pinfo("  from: 0x%06x, to: 0x%06x\n", 0, flash->total_size * 1024);
-	msg_pinfo("  unit: 0x%06x (%dKB)\n", 2048, 2048);
+	msg_pinfo("  unit: 0x%06x (%dKB)\n", 2048, 2);
 	return 0;
 }
 
 
 static int gec_set_range(const struct flashchip *flash,
                          unsigned int start, unsigned int len) {
-	struct lpc_params_flash_wp_range p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	int rc;
 
-	p.offset = start;
-	p.size = len;
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WP_SET_RANGE,
-			      &p, sizeof(p), NULL, 0);
-	if (rc) {
-		msg_perr("GEC: wp_set_range error: rc=%d\n", rc);
-		return rc;
-	}
-
-	return 0;
+	/* TODO: update to latest ec_commands.h and reimplement. */
+	msg_perr("GEC: set_range unimplemented\n");
+	return -1;
 }
 
 
 static int gec_enable_writeprotect(const struct flashchip *flash) {
-	struct lpc_params_flash_wp_enable p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	int rc;
-
-	p.enable_wp = 1;
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WP_ENABLE,
-			      &p, sizeof(p), NULL, 0);
-	if (rc) {
-		msg_perr("GEC: wp_enable_wp error: rc=%d\n", rc);
-	}
-
-	return rc;
+	/* TODO: update to latest ec_commands.h and reimplement. */
+	msg_perr("GEC: enable_writeprotect unimplemented\n");
+	return -1;
 }
 
 
 static int gec_disable_writeprotect(const struct flashchip *flash) {
-	struct lpc_params_flash_wp_enable p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	int rc;
-
-	p.enable_wp = 0;
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WP_ENABLE,
-			      &p, sizeof(p), NULL, 0);
-	if (rc) {
-		msg_perr("GEC: wp_disable_wp error: rc=%d\n", rc);
-	} else {
-		msg_pinfo("Disabled WP. Reboot EC and de-assert #WP.\n");
-	}
-
-	return rc;
+	/* TODO: update to latest ec_commands.h and reimplement. */
+	msg_perr("GEC: disable_writeprotect unimplemented\n");
+	return -1;
 }
 
 
 static int gec_wp_status(const struct flashchip *flash) {
-	int rc;
-	struct lpc_response_flash_wp_range range;
-	struct lpc_response_flash_wp_enable en;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	uint8_t value;
-
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WP_GET_RANGE,
-			      NULL, 0, &range, sizeof(range));
-	if (rc) {
-		msg_perr("GEC: wp_get_wp_range error: rc=%d\n", rc);
-		return rc;
-	}
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WP_GET_STATE,
-			      NULL, 0, &en, sizeof(en));
-	if (rc) {
-		msg_perr("GEC: wp_get_wp_state error: rc=%d\n", rc);
-		return rc;
-	}
+	/*
+	 * TODO: update to latest ec_commands.h and reimplement.  For now,
+	 * just claim chip is unprotected.
+	 */
 
 	/* TODO: Fix scripts which rely on SPI-specific terminology. */
-	value = (en.enable_wp << 7);
-	msg_pinfo("WP: status: 0x%02x\n", value);
-	msg_pinfo("WP: status.srp0: %x\n", en.enable_wp);
-	msg_pinfo("WP: write protect is %s.\n",
-	          en.enable_wp ? "enabled" : "disabled");
-	msg_pinfo("WP: write protect range: start=0x%08x, len=0x%08x\n",
-	          range.offset, range.size);
+	msg_pinfo("WP: status: 0x%02x\n", 0);
+	msg_pinfo("WP: status.srp0: %x\n", 0);
+	msg_pinfo("WP: write protect is %s.\n", "disabled");
+	msg_pinfo("WP: write protect range: start=0x%08x, len=0x%08x\n", 0, 0);
 
 	return 0;
 }
