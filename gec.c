@@ -240,33 +240,33 @@ int gec_finish(void) {
 
 int gec_read(struct flashchip *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
-	int i;
 	int rc = 0;
 	struct lpc_params_flash_read p;
 	struct lpc_response_flash_read r;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_read;
+	int offset = 0, count;
 
-	for (i = 0; i < readcnt; i += maxlen) {
-		p.offset = blockaddr + i;
-		p.size = min(readcnt - i, maxlen);
+	while (offset < readcnt) {
+		count = min(maxlen, readcnt - offset);
+		p.offset = blockaddr + offset;
+		p.size = count;
 		rc = priv->ec_command(EC_LPC_COMMAND_FLASH_READ,
-				      &p, sizeof(p), &r, sizeof(r));
+				      &p, sizeof(p), &r, count);
 		if (rc) {
 			msg_perr("GEC: Flash read error at offset 0x%x\n",
-			         blockaddr + i);
+			         blockaddr + offset);
 			return rc;
 		}
 
 #ifdef SUPPORT_CHECKSUM
-		if (verify_checksum(r.data, blockaddr + i,
-			            min(readcnt - i, sizeof(r.data)))) {
+		if (verify_checksum(r.data, blockaddr + offset, count)) {
 			msg_pdbg("GEC: re-read...\n");
-			i -= sizeof(r.data);
 			continue;
 		}
 #endif
-		memcpy(readarr + i, r.data, p.size);
+		memcpy(readarr + offset, r.data, count);
+		offset += count;
 	}
 
 	return rc;
