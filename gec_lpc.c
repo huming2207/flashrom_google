@@ -150,16 +150,6 @@ static int detect_ec(void) {
 		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
 		         "rc=%d, request=0x%x response=0x%x\n",
 		         rc, request.in_data, response.out_data);
-#ifdef SUPPORT_CHECKSUM
-		/* In this mode, we can tolerate some bit errors. */
-		{
-			int diff = response.out_data ^ 0xf1e2d3c4;
-			if (!(diff = (diff - 1) & diff)) return 0;// 1-bit error
-			if (!(diff = (diff - 1) & diff)) return 0;// 2-bit error
-			if (!(diff = (diff - 1) & diff)) return 0;// 3-bit error
-			if (!(diff = (diff - 1) & diff)) return 0;// 4-bit error
-		}
-#endif
 		return 1;
 	}
 
