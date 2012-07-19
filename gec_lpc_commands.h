@@ -114,8 +114,7 @@ struct lpc_response_hello {
 enum lpc_current_image {
 	EC_LPC_IMAGE_UNKNOWN = 0,
 	EC_LPC_IMAGE_RO,
-	EC_LPC_IMAGE_RW_A,
-	EC_LPC_IMAGE_RW_B
+	EC_LPC_IMAGE_RW,
 };
 struct lpc_response_get_version {
 	/* Null-terminated version strings for RO, RW-A, RW-B */

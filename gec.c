@@ -56,11 +56,10 @@ static int try_latest_firmware = 0;
 static struct fmap_area fwcopy[4];  // [0] is not used.
 
 /* The names of enum lpc_current_image to match in FMAP area names. */
-static const char *sections[4] = {
-	"UNKNOWN SECTION",  // EC_LPC_IMAGE_UNKNOWN -- never matches
-	"RO_SECTION",       // EC_LPC_IMAGE_RO
-	"RW_SECTION_A",     // EC_LPC_IMAGE_RW_A
-	"RW_SECTION_B",     // EC_LPC_IMAGE_RW_B
+static const char *sections[3] = {
+	"UNKNOWN SECTION",  // EC_IMAGE_UNKNOWN -- never matches
+	"EC_RO",
+	"EC_RW",
 };
 
 
@@ -97,8 +96,7 @@ static int gec_jump_copy(enum lpc_current_image target) {
 	memset(&p, 0, sizeof(p));
 	p.target = target != EC_LPC_IMAGE_UNKNOWN ? target :
 	           fwcopy[EC_LPC_IMAGE_RO].flags ? EC_LPC_IMAGE_RO :
-	           fwcopy[EC_LPC_IMAGE_RW_A].flags ? EC_LPC_IMAGE_RW_A :
-	           fwcopy[EC_LPC_IMAGE_RW_B].flags ? EC_LPC_IMAGE_RW_B :
+	           fwcopy[EC_LPC_IMAGE_RW].flags ? EC_LPC_IMAGE_RW :
 	           EC_LPC_IMAGE_UNKNOWN;
 	msg_pdbg("GEC is jumping to [%s]\n", sections[p.target]);
 	if (p.target == EC_LPC_IMAGE_UNKNOWN) return 1;
@@ -186,10 +184,8 @@ int gec_finish(void) {
 	if (!(priv && priv->detected)) return 0;
 
 	if (try_latest_firmware) {
-		if (fwcopy[EC_LPC_IMAGE_RW_B].flags &&
-		    gec_jump_copy(EC_LPC_IMAGE_RW_B) == 0) return 0;
-		if (fwcopy[EC_LPC_IMAGE_RW_A].flags &&
-		    gec_jump_copy(EC_LPC_IMAGE_RW_A) == 0) return 0;
+		if (fwcopy[EC_LPC_IMAGE_RW].flags &&
+		    gec_jump_copy(EC_LPC_IMAGE_RW) == 0) return 0;
 		return gec_jump_copy(EC_LPC_IMAGE_RO);
 	}
 
