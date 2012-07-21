@@ -69,6 +69,7 @@
 /* Configurable ec command/status */
 static unsigned int port_ec_command = 0x6c;
 static unsigned int port_ec_data    = 0x68;
+static unsigned int port_ec_bios    = 0x66;
 
 static uint8_t ec_reset_cmd         = 0x59;
 static uint8_t ec_reset_data        = 0xf2;
@@ -284,6 +285,10 @@ static int ene_leave_flash_mode(void *data)
 
 	msg_pdbg("%s: send ec restart\n", __func__);
 	ec_command(ec_restart_cmd, ec_restart_data);
+
+	/* Trigger ec to bios interrupt */
+	sleep(1);
+	OUTB(0x80, port_ec_bios);
 
 	return 0;
 }
