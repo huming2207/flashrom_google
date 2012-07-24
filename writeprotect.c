@@ -319,6 +319,35 @@ static struct w25q_range mx25l6406e_ranges[] = {
 	{ X, 1, 0x7, {0x000000, 64 * 128 * 1024} },	/* all */
 };
 
+static struct w25q_range n25q064_ranges[] = {
+	{ X, 0, 0, {0, 0} },	/* none */
+
+	{ 0, 0, 0x1, {0x7f0000,       64 * 1024} },	/* block 127 */
+	{ 0, 0, 0x2, {0x7e0000,   2 * 64 * 1024} },	/* blocks 126-127 */
+	{ 0, 0, 0x3, {0x7c0000,   4 * 64 * 1024} },	/* blocks 124-127 */
+	{ 0, 0, 0x4, {0x780000,   8 * 64 * 1024} },	/* blocks 120-127 */
+	{ 0, 0, 0x5, {0x700000,  16 * 64 * 1024} },	/* blocks 112-127 */
+	{ 0, 0, 0x6, {0x600000,  32 * 64 * 1024} },	/* blocks 96-127 */
+	{ 0, 0, 0x7, {0x400000,  64 * 64 * 1024} },	/* blocks 64-127 */
+
+	{ 1, 0, 0x1, {0x000000,       64 * 1024} },	/* block 0 */
+	{ 1, 0, 0x2, {0x000000,   2 * 64 * 1024} },	/* blocks 0-1 */
+	{ 1, 0, 0x3, {0x000000,   4 * 64 * 1024} },	/* blocks 0-3 */
+	{ 1, 0, 0x4, {0x000000,   8 * 64 * 1024} },	/* blocks 0-7 */
+	{ 1, 0, 0x5, {0x000000,  16 * 64 * 1024} },	/* blocks 0-15 */
+	{ 1, 0, 0x6, {0x000000,  32 * 64 * 1024} },	/* blocks 0-31 */
+	{ 1, 0, 0x7, {0x000000,  64 * 64 * 1024} },	/* blocks 0-63 */
+
+	{ X, 1, 0x0, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x1, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x2, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x3, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x4, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x5, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x6, {0x000000, 128 * 64 * 1024} },	/* all */
+	{ X, 1, 0x7, {0x000000, 128 * 64 * 1024} },	/* all */
+};
+
 static struct w25q_range w25q16_ranges[] = {
 	{ X, X, 0, {0, 0} },	/* none */
 	{ 0, 0, 0x1, {0x1f0000, 64 * 1024} },
@@ -601,6 +630,20 @@ static int w25_range_table(const struct flashchip *flash,
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
 			         flash->model_id);
+			return -1;
+		}
+		break;
+	case ST_ID:
+		switch(flash->model_id) {
+		case ST_N25Q064__1E:
+		case ST_N25Q064__3E:
+			*w25q_ranges = n25q064_ranges;
+			*num_entries = ARRAY_SIZE(n25q064_ranges);
+			break;
+		default:
+			msg_cerr("%s() %d: Micron flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->model_id);
 			return -1;
 		}
 		break;
