@@ -36,6 +36,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include "chipdrivers.h"
 #include "flash.h"
@@ -74,9 +75,6 @@ static uint8_t ec_reset_data        = 0xf2;
 
 static uint8_t ec_restart_cmd       = 0x59;
 static uint8_t ec_restart_data      = 0xf9;
-
-static uint8_t ec_reboot_cmd        = 0x59;
-static uint8_t ec_reboot_data       = 0xf6;
 
 static const uint16_t ec_status_buf = 0xf554;
 static const uint8_t ec_is_stopping = 0xa5;
@@ -205,7 +203,6 @@ static int ene_spi_send_command(unsigned int writecnt,
 				const unsigned char *writearr,
 				unsigned char *readarr)
 {
-	int spicfg;
 	int i;
 
 	ene_spi_start();
@@ -238,7 +235,7 @@ static int ene_spi_send_command(unsigned int writecnt,
 
 static int ene_enter_flash_mode(void)
 {
-	uint8_t reg, spicfg;
+	uint8_t reg;
 
 	struct timeval begin, now;
 	gettimeofday(&begin, NULL);
@@ -268,7 +265,7 @@ static int ene_enter_flash_mode(void)
 
 static int ene_leave_flash_mode(void *data)
 {
-	uint8_t reg, spicfg;
+	uint8_t reg;
 	struct timeval begin, now;
 
 	reg = ene_read(REG_8051_CTRL);
