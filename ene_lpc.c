@@ -42,13 +42,59 @@
 #include "programmer.h"
 #include "spi.h"
 
+/* Supported ENE ECs, ENE_LAST should always be LAST member */
+enum ene_chip_id {
+	ENE_KB932 = 0,
+	ENE_KB94X,
+	ENE_LAST
+};
+
+/* chip-specific parameters */
+typedef struct {
+	enum ene_chip_id chip_id;
+	uint8_t          hwver;
+	uint8_t          ediid;
+	uint32_t         port_ec_command;
+	uint32_t         port_ec_data;
+	uint8_t          ec_reset_cmd;
+	uint8_t          ec_reset_data;
+	uint8_t          ec_restart_cmd;
+	uint8_t          ec_restart_data;
+	uint16_t         ec_status_buf;
+	uint8_t          ec_is_stopping;
+	uint8_t          ec_is_running;
+	uint32_t         port_io_base;
+} ene_chip;
+
+/* table of supported chips + parameters */
+static ene_chip ene_chips[] = {
+	{ ENE_KB932,       /* chip_id */
+	  0xa2, 0x02,      /* hwver + ediid */
+	  0x6c, 0x68,      /* port_ec_{command,data} */
+	  0x59, 0xf2,      /* ec_reset_{cmd,data} */
+	  0x59, 0xf9,      /* ec_restart_{cmd,data} */
+	  0xf554,          /* ec_status_buf */
+	  0xa5, 0x00,      /* ec_is_{stopping,running} masks */
+	  0xfd60 },        /* port_io_base */
+
+	{ ENE_KB932,       /* chip_id */
+	  0xa3, 0x05,      /* hwver + ediid */
+	  0x66, 0x68,      /* port_ec_{command,data} */
+	  0x7d, 0x10,      /* ec_reset_{cmd,data} */
+	  0x7f, 0x10,      /* ec_restart_{cmd,data} */
+	  0xf710,          /* ec_status_buf */
+	  0x02, 0x00,      /* ec_is_{stopping,running} masks */
+	  0x0380 },        /* port_io_base */
+};
+
+/* pointer to table entry of identified chip */
+static ene_chip *found_chip;
+
 #define REG_EC_HWVER    0xff00
 #define REG_EC_FWVER    0xff01
 #define REG_EC_EDIID    0xff24
 #define REG_8051_CTRL   0xff14
 
-#define HWVER 0xa2
-#define EDIID 0x02
 #define CPU_RESET 1
 
 /* Hwardware registers */
@@ -65,28 +111,9 @@
 #define EC_RESTART_TIMEOUT 10
 #define ENE_SPI_DELAY_CYCLE 4
 
-/* Configurable ec command/status */
-static unsigned int port_ec_command = 0x6c;
-static unsigned int port_ec_data    = 0x68;
-static unsigned int port_ec_bios    = 0x66;
-
-static uint8_t ec_reset_cmd         = 0x59;
-static uint8_t ec_reset_data        = 0xf2;
-
-static uint8_t ec_restart_cmd       = 0x59;
-static uint8_t ec_restart_data      = 0xf9;
-
-static uint8_t ec_reboot_cmd        = 0x59;
-static uint8_t ec_reboot_data       = 0xf6;
-
-static const uint16_t ec_status_buf = 0xf554;
-static const uint8_t ec_is_stopping = 0xa5;
-static const uint8_t ec_is_running  = 0;
-
 static const uint8_t mask_input_buffer_full    = 2;
 static const uint8_t mask_output_buffer_full   = 1;
 
-static unsigned int port_io_base = 0xfd60;
 const int port_ene_bank   = 1;
 const int port_ene_offset = 2;
 const int port_ene_data   = 3;
@@ -97,7 +124,7 @@ static void ec_command(uint8_t cmd, uint8_t data)
 
 	/* Spin wait for EC input buffer empty */
 	gettimeofday(&begin, NULL);
-	while (INB(port_ec_command) & mask_input_buffer_full) {
+	while (INB(found_chip->port_ec_command) & mask_input_buffer_full) {
 		gettimeofday(&now, NULL);
 		if ((now.tv_sec - begin.tv_sec) >= EC_COMMAND_TIMEOUT) {
 			msg_pdbg("%s: buf not empty\n", __func__);
@@ -105,29 +132,35 @@ static void ec_command(uint8_t cmd, uint8_t data)
 		}
 	}
 	/* Write command */
-	OUTB(cmd, port_ec_command);
+	OUTB(cmd, found_chip->port_ec_command);
 
-	/* Spin wait for EC input buffer empty */
-	gettimeofday(&begin, NULL);
-	while (INB(port_ec_command) & mask_input_buffer_full) {
-		gettimeofday(&now, NULL);
-		if ((now.tv_sec - begin.tv_sec) >= EC_COMMAND_TIMEOUT) {
-			msg_pdbg("%s: buf not empty\n", __func__);
-			return;
+	if (found_chip->chip_id == ENE_KB932) {
+		/* Spin wait for EC input buffer empty */
+		gettimeofday(&begin, NULL);
+		while (INB(found_chip->port_ec_command) &
+		       mask_input_buffer_full) {
+			gettimeofday(&now, NULL);
+			if ((now.tv_sec - begin.tv_sec) >=
+			     EC_COMMAND_TIMEOUT) {
+				msg_pdbg("%s: buf not empty\n", __func__);
+				return;
+			}
 		}
+		/* Write data */
+		OUTB(data, found_chip->port_ec_data);
 	}
-	/* Write data */
-	OUTB(data, port_ec_data);
 }
 
 static uint8_t ene_read(uint16_t addr)
 {
-	uint8_t bank;
-	uint8_t offset;
-	uint8_t data;
+	uint8_t  bank;
+	uint8_t  offset;
+	uint8_t  data;
+	uint32_t port_io_base;
 
 	bank   = addr >> 8;
 	offset = addr & 0xff;
+	port_io_base = found_chip->port_io_base;
 
 	OUTB(bank,   port_io_base + port_ene_bank);
 	OUTB(offset, port_io_base + port_ene_offset);
@@ -138,11 +171,13 @@ static uint8_t ene_read(uint16_t addr)
 
 static void ene_write(uint16_t addr, uint8_t data)
 {
-	uint8_t bank;
-	uint8_t offset;
+	uint8_t  bank;
+	uint8_t  offset;
+	uint32_t port_io_base;
 
 	bank   = addr >> 8;
 	offset = addr & 0xff;
+	port_io_base = found_chip->port_io_base;
 
 	OUTB(bank,   port_io_base + port_ene_bank);
 	OUTB(offset, port_io_base + port_ene_offset);
@@ -159,7 +194,7 @@ static void ene_write(uint16_t addr, uint8_t data)
 void wait_cycles(int n)
 {
 	while (n--)
-		INB(port_io_base + port_ene_bank);
+		INB(found_chip->port_io_base + port_ene_bank);
 }
 
 static void ene_spi_start(void)
@@ -245,14 +280,29 @@ static int ene_enter_flash_mode(void)
 	gettimeofday(&begin, NULL);
 
 	/* EC prepare reset */
-	ec_command(ec_reset_cmd, ec_reset_data);
+	ec_command(found_chip->ec_reset_cmd, found_chip->ec_reset_data);
 
 	/* Spin wait for EC ready */
-	while (ene_read(ec_status_buf) != ec_is_running) {
-		gettimeofday(&now, NULL);
-		if ((now.tv_sec - begin.tv_sec) >= EC_COMMAND_TIMEOUT) {
-			msg_pdbg("%s: ec reset busy\n", __func__);
-			return -1;
+	if (found_chip->chip_id == ENE_KB932) {
+		while (ene_read(found_chip->ec_status_buf) !=
+		       found_chip->ec_is_running) {
+			gettimeofday(&now, NULL);
+			if ((now.tv_sec - begin.tv_sec) >=
+			     EC_COMMAND_TIMEOUT) {
+				msg_pdbg("%s: ec reset busy\n", __func__);
+				return -1;
+			}
+		}
+	}
+	else {
+		while (ene_read(found_chip->ec_status_buf) !=
+		       found_chip->ec_is_stopping) {
+			gettimeofday(&now, NULL);
+			if ((now.tv_sec - begin.tv_sec) >=
+			     EC_COMMAND_TIMEOUT) {
+				msg_pdbg("%s: ec reset busy\n", __func__);
+				return -1;
+			}
 		}
 	}
 
@@ -278,7 +328,8 @@ static int ene_leave_flash_mode(void *data)
 
 	gettimeofday(&begin, NULL);
 	/* EC restart */
-	while (ene_read(ec_status_buf) != ec_is_running) {
+	while (ene_read(found_chip->ec_status_buf) !=
+	       found_chip->ec_is_running) {
 		gettimeofday(&now, NULL);
 		if ((now.tv_sec - begin.tv_sec) >= EC_RESTART_TIMEOUT) {
 			msg_pdbg("%s: ec restart busy\n", __func__);
@@ -287,11 +338,7 @@ static int ene_leave_flash_mode(void *data)
 	}
 
 	msg_pdbg("%s: send ec restart\n", __func__);
-	ec_command(ec_restart_cmd, ec_restart_data);
-
-	/* Trigger ec to bios interrupt */
-	sleep(1);
-	OUTB(0x80, port_ec_bios);
+	ec_command(found_chip->ec_restart_cmd, found_chip->ec_restart_data);
 
 	return 0;
 }
@@ -308,15 +355,24 @@ static const struct spi_programmer spi_programmer_ene = {
 
 int ene_probe_spi_flash(const char *name)
 {
-	uint8_t hwver, ediid;
+	uint8_t hwver, ediid, i;
 
 	msg_pdbg("%s\n", __func__);
-	hwver = ene_read(REG_EC_HWVER);
-	ediid = ene_read(REG_EC_EDIID);
 
-	if (hwver != HWVER || ediid != EDIID) {
-		msg_pdbg("ENE EC not found (probe failed) : hwver %02x ediid %02x\n",
-				hwver, ediid);
+	for (i = 0; i < ENE_LAST; ++i) {
+		found_chip = &ene_chips[i];
+
+		hwver = ene_read(REG_EC_HWVER);
+		ediid = ene_read(REG_EC_EDIID);
+
+		if(hwver == ene_chips[i].hwver &&
+		   ediid == ene_chips[i].ediid) {
+			break;
+		}
+	}
+
+	if (i == ENE_LAST) {
+		msg_pdbg("ENE EC not found (probe failed)\n");
 		return 0;
 	}
 
