@@ -221,6 +221,9 @@ int init_superio_ite(void)
 			 */
 			it85xx_spi_init(superios[i]);
 			break;
+		case 0x8518:
+			it8518_spi_init(superios[i]);
+			break;
 		case 0x8705:
 			ret |= it8705f_write_enable(superios[i].port);
 			break;

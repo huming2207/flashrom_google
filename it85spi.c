@@ -37,16 +37,51 @@
 #include "spi.h"
 #include "programmer.h"
 
+/* Supported ECs, ITE_LAST should always be LAST member */
+enum ite_chip_id {
+	ITE_IT85XX,
+	ITE_IT8518,
+	ITE_LAST
+};
+
+/* chip-specific parameters */
+typedef struct {
+	enum ite_chip_id   chip_id;
+	uint8_t            port_data;
+	uint8_t            port_cmd;
+	uint8_t            copy_to_sram_cmd;
+	uint8_t            exit_sram_cmd;
+	uint32_t           exit_sram_delay;
+} ite_chip;
+
+/* table of supported chips + parameters, order by ite_chip_id index */
+static ite_chip ite_chips[] = {
+	{ ITE_IT85XX,
+	  0x60,
+	  0x64,
+	  0xB4,
+	  0xFE,
+	  0,
+	},
+
+	{ ITE_IT8518,
+	  0x62,
+	  0x66,
+	  0xD8,
+	  0xFF,
+	  500000,
+	}
+};
+
+/* pointer to table entry of identified chip */
+static ite_chip *found_chip;
+
 #define MAX_TIMEOUT 100000
 #define MAX_TRY 5
 
 /* Constants for I/O ports */
 #define ITE_SUPERIO_PORT1	0x2e
 #define ITE_SUPERIO_PORT2	0x4e
-
-/* Legacy I/O */
-#define LEGACY_KBC_PORT_DATA	0x60
-#define LEGACY_KBC_PORT_CMD	0x64
 
 /* Constants for Logical Device registers */
 #define LDNSEL			0x07
@@ -100,7 +135,7 @@ static int wait_for(const unsigned int mask, const unsigned int expected_value,
 	int time_passed;
 
 	for (time_passed = 0;; ++time_passed) {
-		if ((INB(LEGACY_KBC_PORT_CMD) & mask) == expected_value)
+		if ((INB(found_chip->port_cmd) & mask) == expected_value)
 			return 0;
 		if (time_passed >= timeout)
 			break;
@@ -117,9 +152,11 @@ void it85xx_enter_scratch_rom(void)
 {
 	int ret, tries;
 
-	msg_pdbg("%s():%d was called ...\n", __func__, __LINE__);
 	if (it85xx_scratch_rom_reenter > 0)
 		return;
+
+	msg_pdbg("%s: entering scratch rom mode\n", __func__);
+
 	for (tries = 0; tries < MAX_TRY; ++tries) {
 		/* Wait until IBF (input buffer) is not full. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
@@ -128,7 +165,7 @@ void it85xx_enter_scratch_rom(void)
 			continue;
 
 		/* Copy EC firmware to SRAM. */
-		OUTB(0xb4, LEGACY_KBC_PORT_CMD);
+		OUTB(found_chip->copy_to_sram_cmd, found_chip->port_cmd);
 
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
@@ -142,7 +179,7 @@ void it85xx_enter_scratch_rom(void)
 		if (wait_for(KB_OBF, KB_OBF, MAX_TIMEOUT, NULL, NULL, 0))
 			msg_pdbg("%s():%d * timeout at waiting for OBF.\n",
 			         __func__, __LINE__);
-		if ((ret = INB(LEGACY_KBC_PORT_DATA)) == 0xFA) {
+		if ((ret = INB(found_chip->port_data)) == 0xFA) {
 			break;
 		} else {
 			msg_perr("%s():%d * not run on SRAM ret=%d\n",
@@ -176,7 +213,7 @@ void it85xx_exit_scratch_rom(void)
 			continue;
 
 		/* Exit SRAM. Run on flash. */
-		OUTB(0xFE, LEGACY_KBC_PORT_CMD);
+		OUTB(found_chip->exit_sram_cmd, found_chip->port_cmd);
 
 		/* Confirm EC has taken away the command. */
 		if (wait_for(KB_IBF, 0, MAX_TIMEOUT,
@@ -198,6 +235,8 @@ void it85xx_exit_scratch_rom(void)
 	} else {
 		msg_perr("%s():%d * Max try reached.\n", __func__, __LINE__);
 	}
+
+	programmer_delay(found_chip->exit_sram_delay);
 }
 
 static int it85xx_shutdown(void *data)
@@ -304,6 +343,16 @@ static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	return 0;
 }
 
+static const struct spi_programmer spi_programmer_it8518 = {
+	.type = SPI_CONTROLLER_IT85XX,
+	.max_data_read = 256,
+	.max_data_write = 256,
+	.command = it85xx_spi_send_command,
+	.multicommand = default_spi_send_multicommand,
+	.read = default_spi_read,
+	.write_256 = default_spi_write_256,
+};
+
 static const struct spi_programmer spi_programmer_it85xx = {
 	.type = SPI_CONTROLLER_IT85XX,
 	.max_data_read = 1,
@@ -314,6 +363,56 @@ static const struct spi_programmer spi_programmer_it85xx = {
 	.write_256 = default_spi_write_256,
 };
 
+/* it8518-specific i/o initialization */
+void setup_it8518_io_base()
+{
+	OUTB(0x07, 0x2e); /* Set LDN to SHM */
+	OUTB(0x0f, 0x2f);
+	OUTB(0x60, 0x2e); /* Set IO space to 0x3F0 */
+	OUTB(0x03, 0x2f);
+	OUTB(0x61, 0x2e);
+	OUTB(0xf0, 0x2f);
+	OUTB(0x30, 0x2e); /* Enable this Logical Device */
+	OUTB(0x01, 0x2f);
+}
+
+int it8518_spi_init(struct superio s)
+{
+	int ret;
+	if (!(internal_buses_supported & BUS_FWH)) {
+		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
+		return 1;
+	}
+
+	found_chip = &ite_chips[ITE_IT8518];
+
+#ifdef LPC_IO
+        setup_it8518_io_base();
+#endif
+
+	ret = it85xx_spi_common_init(s);
+	if (!ret) {
+		msg_pdbg("%s: internal_buses_supported=0x%x\n", __func__,
+		          internal_buses_supported);
+		/* Check for FWH because IT85 listens to FWH cycles.
+		 * FIXME: The big question is whether FWH cycles are necessary
+		 * for communication even if LPC_IO is defined.
+		 */
+		if (internal_buses_supported & BUS_FWH)
+			msg_pdbg("Registering IT85 SPI.\n");
+		/* FIXME: Really leave FWH enabled? We can't use this region
+		 * anymore since accessing it would mess up IT85 communication.
+		 * If we decide to disable FWH for this region, we should print
+		 * a debug message about it.
+		 */
+		/* Set this as SPI controller and add FWH | LPC to
+		 * supported buses. */
+		buses_supported |= BUS_LPC | BUS_FWH;
+		register_spi_programmer(&spi_programmer_it8518);
+	}
+	return ret;
+}
+
 int it85xx_spi_init(struct superio s)
 {
 	int ret;
@@ -322,6 +421,9 @@ int it85xx_spi_init(struct superio s)
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
 	}
+
+	found_chip = &ite_chips[ITE_IT85XX];
+
 	ret = it85xx_spi_common_init(s);
 	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
 	if (!ret) {

@@ -613,6 +613,7 @@ int ene_probe_spi_flash(const char *name);
 
 /* it85spi.c */
 int it85xx_spi_init(struct superio s);
+int it8518_spi_init(struct superio s);
 
 /* it87spi.c */
 void enter_conf_mode_ite(uint16_t port);
