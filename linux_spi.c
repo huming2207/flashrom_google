@@ -38,6 +38,10 @@
 /* TODO: this information should come from the SPI master driver. */
 #define SPI_DMA_SIZE 64
 
+#ifndef SPIDEV_MAJOR
+#define SPIDEV_MAJOR 153  /* refer to kernel/files/drivers/spi/spidev.c */
+#endif
+
 
 static int fd = -1;
 
@@ -96,6 +100,31 @@ static char* linux_spi_probe(void)
 }
 
 
+/*
+ * This is used when /dev/spidevX.Y is not created yet, for example, when
+ * udev is not started.
+ */
+static int manual_mknod(const char *dev)
+{
+	char cmd[256];
+
+	msg_pdbg("Creating SPI device node %s...\n", dev);
+	strcpy(cmd, "modprobe spidev");
+	msg_pdbg("CMD: [%s]\n", cmd);
+	system(cmd);
+	snprintf(cmd, sizeof(cmd), "mknod %s c %d 0", dev, SPIDEV_MAJOR);
+	msg_pdbg("CMD: [%s]\n", cmd);
+	system(cmd);
+
+	if ((fd = open(dev, O_RDWR)) == -1) {
+		msg_perr("%s: failed to open %s: %s\n", __func__,
+			 dev, strerror(errno));
+	}
+
+	return fd;
+}
+
+
 int linux_spi_init(void)
 {
 	char *p, *endp, *dev;
@@ -122,9 +151,12 @@ int linux_spi_init(void)
 
 	msg_pdbg("Using device %s\n", dev);
 	if ((fd = open(dev, O_RDWR)) == -1) {
-		msg_perr("%s: failed to open %s: %s\n", __func__,
+		msg_pdbg("%s: failed to open %s: %s\n", __func__,
 			 dev, strerror(errno));
-		return 1;
+
+		if (manual_mknod(dev) == -1) {  // global fd is effected.
+			return 1;
+		}
 	}
 
 	if (speed > 0) {
