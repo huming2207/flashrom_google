@@ -49,20 +49,32 @@ enum ene_chip_id {
 	ENE_LAST
 };
 
+/* EC state */
+enum ene_ec_state {
+	EC_STATE_NORMAL,
+	EC_STATE_IDLE,
+	EC_STATE_RESET,
+	EC_STATE_UNKNOWN
+};
+
 /* chip-specific parameters */
 typedef struct {
 	enum ene_chip_id chip_id;
 	uint8_t          hwver;
 	uint8_t          ediid;
+	uint32_t         port_bios;
 	uint32_t         port_ec_command;
 	uint32_t         port_ec_data;
 	uint8_t          ec_reset_cmd;
 	uint8_t          ec_reset_data;
 	uint8_t          ec_restart_cmd;
 	uint8_t          ec_restart_data;
+	uint8_t          ec_pause_cmd;
+	uint8_t          ec_pause_data;
 	uint16_t         ec_status_buf;
 	uint8_t          ec_is_stopping;
 	uint8_t          ec_is_running;
+	uint8_t          ec_is_pausing;
 	uint32_t         port_io_base;
 } ene_chip;
 
@@ -70,30 +82,42 @@ typedef struct {
 static ene_chip ene_chips[] = {
 	{ ENE_KB932,       /* chip_id */
 	  0xa2, 0x02,      /* hwver + ediid */
+	  0x66,            /* port_bios */
 	  0x6c, 0x68,      /* port_ec_{command,data} */
 	  0x59, 0xf2,      /* ec_reset_{cmd,data} */
 	  0x59, 0xf9,      /* ec_restart_{cmd,data} */
+	  0x59, 0xf1,      /* ec_pause_{cmd,data} */
 	  0xf554,          /* ec_status_buf */
 	  0xa5, 0x00,      /* ec_is_{stopping,running} masks */
+	  0x33,            /* ec_is_pausing mask */
 	  0xfd60 },        /* port_io_base */
 
-	{ ENE_KB932,       /* chip_id */
+	{ ENE_KB94X,       /* chip_id */
 	  0xa3, 0x05,      /* hwver + ediid */
+	  0x66,            /* port_bios */
 	  0x66, 0x68,      /* port_ec_{command,data} */
 	  0x7d, 0x10,      /* ec_reset_{cmd,data} */
 	  0x7f, 0x10,      /* ec_restart_{cmd,data} */
+	  	/*
+		 * TODO(rongchang): Add KB94X pause mode support
+		 */
+	  0,0,             /* ec_pause_{cmd,data} */
 	  0xf710,          /* ec_status_buf */
 	  0x02, 0x00,      /* ec_is_{stopping,running} masks */
+	  0,               /* ec_is_pausing mask */
 	  0x0380 },        /* port_io_base */
 };
 
 /* pointer to table entry of identified chip */
 static ene_chip *found_chip;
+/* current ec state */
+static enum ene_ec_state ec_state = EC_STATE_NORMAL;
 
 #define REG_EC_HWVER    0xff00
 #define REG_EC_FWVER    0xff01
 #define REG_EC_EDIID    0xff24
 #define REG_8051_CTRL   0xff14
+#define REG_EC_EXTCMD   0xff10
 
 #define CPU_RESET 1
 
@@ -197,6 +221,30 @@ void wait_cycles(int n)
 		INB(found_chip->port_io_base + port_ene_bank);
 }
 
+static int is_spicmd_write(uint8_t cmd)
+{
+	switch (cmd) {
+	case JEDEC_CE_60:
+		/* Chip Erase 0x60 */
+	case JEDEC_CE_C7:
+		/* Chip Erase 0xc7 */
+	case JEDEC_BE_52:
+		/* Block Erase 0x52 */
+	case JEDEC_BE_D8:
+		/* Block Erase 0xd8 */
+	case JEDEC_BE_D7:
+		/* Block Erase 0xd7 */
+	case JEDEC_SE:
+		/* Sector Erase */
+	case JEDEC_BYTE_PROGRAM:
+		/* Write memory byte */
+	case JEDEC_AAI_WORD_PROGRAM:
+		/* Write AAI word */
+		return 1;
+	}
+	return 0;
+}
+
 static void ene_spi_start(void)
 {
 	int cfg;
@@ -236,6 +284,87 @@ static int ene_spi_wait(void)
 	return 0;
 }
 
+static int ene_pause_ec(void)
+{
+	struct timeval begin, now;
+
+	if (!found_chip->ec_pause_cmd)
+		return -1;
+
+	/* EC prepare pause */
+	ec_command(found_chip->ec_pause_cmd, found_chip->ec_pause_data);
+
+	gettimeofday(&begin, NULL);
+	/* Spin wait for EC ready */
+	while (ene_read(found_chip->ec_status_buf) !=
+	       found_chip->ec_is_pausing) {
+		gettimeofday(&now, NULL);
+		if ((now.tv_sec - begin.tv_sec) >=
+		     EC_COMMAND_TIMEOUT) {
+			msg_pdbg("%s: unable to pause ec\n", __func__);
+			return -1;
+		}
+	}
+
+	ec_state = EC_STATE_IDLE;
+	return 0;
+}
+
+static int ene_resume_ec(void)
+{
+	struct timeval begin, now;
+
+	/* Trigger 8051 interrupt to resume */
+	ene_write(REG_EC_EXTCMD, 0xff);
+
+	gettimeofday(&begin, NULL);
+	while (ene_read(found_chip->ec_status_buf) !=
+	       found_chip->ec_is_running) {
+		gettimeofday(&now, NULL);
+		if ((now.tv_sec - begin.tv_sec) >=
+		     EC_COMMAND_TIMEOUT) {
+			msg_pdbg("%s: unable to resume ec\n", __func__);
+			return -1;
+		}
+	}
+
+	ec_state = EC_STATE_NORMAL;
+	return 0;
+}
+
+static int ene_reset_ec(void)
+{
+	uint8_t reg;
+
+	struct timeval begin, now;
+	gettimeofday(&begin, NULL);
+
+	/* EC prepare reset */
+	ec_command(found_chip->ec_reset_cmd, found_chip->ec_reset_data);
+
+	/* Spin wait for EC ready */
+	while (ene_read(found_chip->ec_status_buf) !=
+	       found_chip->ec_is_stopping) {
+		gettimeofday(&now, NULL);
+		if ((now.tv_sec - begin.tv_sec) >=
+		     EC_COMMAND_TIMEOUT) {
+			msg_pdbg("%s: unable to reset ec\n", __func__);
+			return -1;
+		}
+	}
+
+	/* Wait 1 second */
+	sleep(1);
+
+	/* Reset 8051 */
+	reg = ene_read(REG_8051_CTRL);
+	reg |= CPU_RESET;
+	ene_write(REG_8051_CTRL, reg);
+
+	ec_state = EC_STATE_RESET;
+	return 0;
+}
+
 static int ene_spi_send_command(unsigned int writecnt,
 				unsigned int readcnt,
 				const unsigned char *writearr,
@@ -243,6 +372,12 @@ static int ene_spi_send_command(unsigned int writecnt,
 {
 	int spicfg;
 	int i;
+
+	if (ec_state == EC_STATE_IDLE && is_spicmd_write(writearr[0])) {
+		/* Enter reset mode if we need to write/erase */
+		ene_resume_ec();
+		ene_reset_ec();
+	}
 
 	ene_spi_start();
 
@@ -274,73 +409,52 @@ static int ene_spi_send_command(unsigned int writecnt,
 
 static int ene_enter_flash_mode(void)
 {
-	uint8_t reg, spicfg;
-
-	struct timeval begin, now;
-	gettimeofday(&begin, NULL);
-
-	/* EC prepare reset */
-	ec_command(found_chip->ec_reset_cmd, found_chip->ec_reset_data);
-
-	/* Spin wait for EC ready */
-	if (found_chip->chip_id == ENE_KB932) {
-		while (ene_read(found_chip->ec_status_buf) !=
-		       found_chip->ec_is_running) {
-			gettimeofday(&now, NULL);
-			if ((now.tv_sec - begin.tv_sec) >=
-			     EC_COMMAND_TIMEOUT) {
-				msg_pdbg("%s: ec reset busy\n", __func__);
-				return -1;
-			}
-		}
-	}
-	else {
-		while (ene_read(found_chip->ec_status_buf) !=
-		       found_chip->ec_is_stopping) {
-			gettimeofday(&now, NULL);
-			if ((now.tv_sec - begin.tv_sec) >=
-			     EC_COMMAND_TIMEOUT) {
-				msg_pdbg("%s: ec reset busy\n", __func__);
-				return -1;
-			}
-		}
-	}
-
-	/* Wait 1 second */
-	sleep(1);
-
-	/* Reset 8051 */
-	reg = ene_read(REG_8051_CTRL);
-	reg |= CPU_RESET;
-	ene_write(REG_8051_CTRL, reg);
-
+	if (ene_pause_ec())
+		return ene_reset_ec();
 	return 0;
 }
 
 static int ene_leave_flash_mode(void *data)
 {
-	uint8_t reg, spicfg;
+	int rv = 0;
+	uint8_t reg;
 	struct timeval begin, now;
 
-	reg = ene_read(REG_8051_CTRL);
-	reg &= ~CPU_RESET;
-	ene_write(REG_8051_CTRL, reg);
+	if (ec_state == EC_STATE_RESET) {
+		reg = ene_read(REG_8051_CTRL);
+		reg &= ~CPU_RESET;
+		ene_write(REG_8051_CTRL, reg);
 
-	gettimeofday(&begin, NULL);
-	/* EC restart */
-	while (ene_read(found_chip->ec_status_buf) !=
-	       found_chip->ec_is_running) {
-		gettimeofday(&now, NULL);
-		if ((now.tv_sec - begin.tv_sec) >= EC_RESTART_TIMEOUT) {
-			msg_pdbg("%s: ec restart busy\n", __func__);
-			return 1;
+		gettimeofday(&begin, NULL);
+		/* EC restart */
+		while (ene_read(found_chip->ec_status_buf) !=
+		       found_chip->ec_is_running) {
+			gettimeofday(&now, NULL);
+			if ((now.tv_sec - begin.tv_sec) >=
+			     EC_RESTART_TIMEOUT) {
+				msg_pdbg("%s: ec restart busy\n", __func__);
+				rv = 1;
+				goto exit;
+			}
 		}
+		msg_pdbg("%s: send ec restart\n", __func__);
+		ec_command(found_chip->ec_restart_cmd,
+		           found_chip->ec_restart_data);
+
+		ec_state = EC_STATE_NORMAL;
+		rv = 0;
+		goto exit;
 	}
 
-	msg_pdbg("%s: send ec restart\n", __func__);
-	ec_command(found_chip->ec_restart_cmd, found_chip->ec_restart_data);
+	rv = ene_resume_ec();
 
-	return 0;
+exit:
+	/*
+	 * Trigger ec interrupt after pause/reset by sending 0x80
+	 * to bios command port.
+	 */
+	OUTB(0x80, found_chip->port_bios);
+	return rv;
 }
 
 static const struct spi_programmer spi_programmer_ene = {
