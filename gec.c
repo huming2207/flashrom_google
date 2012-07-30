@@ -38,7 +38,7 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
-#include "gec_lpc_commands.h"
+#include "gec_ec_commands.h"
 #include "programmer.h"
 #include "spi.h"
 #include "writeprotect.h"
@@ -70,7 +70,7 @@ static void gec_invalidate_copy(unsigned int addr, unsigned int len)
 {
 	int i;
 
-	for (i = EC_LPC_IMAGE_RO; i < ARRAY_SIZE(fwcopy); i++) {
+	for (i = EC_IMAGE_RO; i < ARRAY_SIZE(fwcopy); i++) {
 		struct fmap_area *fw = &fwcopy[i];
 		if ((addr >= fw->offset && (addr < fw->offset + fw->size)) ||
 		    (fw->offset >= addr && (fw->offset < addr + len))) {
@@ -82,31 +82,33 @@ static void gec_invalidate_copy(unsigned int addr, unsigned int len)
 }
 
 
-/* Asks EC to jump to a firmware copy. If target is EC_LPC_IMAGE_UNKNOWN,
+/* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
  * then this functions picks a NEW firmware copy and jumps to it. Note that
  * RO is preferred, then A, finally B.
  *
  * Returns 0 for success.
  */
-static int gec_jump_copy(enum lpc_current_image target) {
-	struct lpc_params_reboot_ec p;
+static int gec_jump_copy(enum ec_current_image target) {
+	struct ec_params_reboot_ec p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int rc;
 
 	memset(&p, 0, sizeof(p));
-	p.target = target != EC_LPC_IMAGE_UNKNOWN ? target :
-	           fwcopy[EC_LPC_IMAGE_RO].flags ? EC_LPC_IMAGE_RO :
-	           fwcopy[EC_LPC_IMAGE_RW].flags ? EC_LPC_IMAGE_RW :
-	           EC_LPC_IMAGE_UNKNOWN;
-	msg_pdbg("GEC is jumping to [%s]\n", sections[p.target]);
-	if (p.target == EC_LPC_IMAGE_UNKNOWN) return 1;
+	p.cmd = target != EC_IMAGE_UNKNOWN ? target :
+	        fwcopy[EC_IMAGE_RO].flags ? EC_IMAGE_RO :
+	        fwcopy[EC_IMAGE_RW].flags ? EC_IMAGE_RW :
+	        EC_IMAGE_UNKNOWN;
+	msg_pdbg("GEC is jumping to [%s]\n", sections[p.cmd]);
+	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
-	rc = priv->ec_command(EC_LPC_COMMAND_REBOOT_EC,
+	rc = priv->ec_command(EC_CMD_REBOOT_EC, 0,
 			      &p, sizeof(p), NULL, 0);
-	if (rc) {
-		msg_perr("GEC cannot jump to [%s]\n", sections[p.target]);
+	if (rc < 0) {
+		msg_perr("GEC cannot jump to [%s]:%d\n",
+			 sections[p.cmd], rc);
 	} else {
-		msg_pdbg("GEC has jumped to [%s]\n", sections[p.target]);
+		msg_pdbg("GEC has jumped to [%s]\n", sections[p.cmd]);
+		rc = EC_RES_SUCCESS;
 	}
 
 	/* Sleep 1 sec to wait the EC re-init. */
@@ -133,7 +135,7 @@ int gec_prepare(uint8_t *image, int size) {
 	// Lookup RO/A/B sections in FMAP.
 	for (i = 0; i < fmap->nareas; i++) {
 		struct fmap_area *fa = &fmap->areas[i];
-		for (j = EC_LPC_IMAGE_RO; j < ARRAY_SIZE(sections); j++) {
+		for (j = EC_IMAGE_RO; j < ARRAY_SIZE(sections); j++) {
 			if (!strcmp(sections[j], (const char *)fa->name)) {
 				msg_pdbg("Found '%s' in image.\n", fa->name);
 				memcpy(&fwcopy[j], fa, sizeof(*fa));
@@ -145,7 +147,7 @@ int gec_prepare(uint8_t *image, int size) {
 	/* Warning: before update, we jump the EC to RO copy. If you want to
 	 *          change this behavior, please also check the gec_finish().
 	 */
-	return gec_jump_copy(EC_LPC_IMAGE_RO);
+	return gec_jump_copy(EC_IMAGE_RO);
 }
 
 
@@ -161,7 +163,7 @@ int gec_need_2nd_pass(void) {
 	if (!(priv && priv->detected)) return 0;
 
 	if (need_2nd_pass) {
-		if (gec_jump_copy(EC_LPC_IMAGE_UNKNOWN)) {
+		if (gec_jump_copy(EC_IMAGE_UNKNOWN)) {
 			return -1;
 		}
 	}
@@ -184,9 +186,9 @@ int gec_finish(void) {
 	if (!(priv && priv->detected)) return 0;
 
 	if (try_latest_firmware) {
-		if (fwcopy[EC_LPC_IMAGE_RW].flags &&
-		    gec_jump_copy(EC_LPC_IMAGE_RW) == 0) return 0;
-		return gec_jump_copy(EC_LPC_IMAGE_RO);
+		if (fwcopy[EC_IMAGE_RW].flags &&
+		    gec_jump_copy(EC_IMAGE_RW) == 0) return 0;
+		return gec_jump_copy(EC_IMAGE_RO);
 	}
 
 	return 0;
@@ -196,25 +198,27 @@ int gec_finish(void) {
 int gec_read(struct flashchip *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
 	int rc = 0;
-	struct lpc_params_flash_read p;
-	struct lpc_response_flash_read r;
+	struct ec_params_flash_read p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_read;
+	uint8_t buf[maxlen];
 	int offset = 0, count;
 
 	while (offset < readcnt) {
 		count = min(maxlen, readcnt - offset);
 		p.offset = blockaddr + offset;
 		p.size = count;
-		rc = priv->ec_command(EC_LPC_COMMAND_FLASH_READ,
-				      &p, sizeof(p), &r, count);
-		if (rc) {
+		rc = priv->ec_command(EC_CMD_FLASH_READ, 0,
+				      &p, sizeof(p), buf, count);
+		if (rc < 0) {
 			msg_perr("GEC: Flash read error at offset 0x%x\n",
 			         blockaddr + offset);
 			return rc;
+		} else {
+			rc = EC_RES_SUCCESS;
 		}
 
-		memcpy(readarr + offset, r.data, count);
+		memcpy(readarr + offset, buf, count);
 		offset += count;
 	}
 
@@ -225,24 +229,26 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 int gec_block_erase(struct flashchip *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
-	struct lpc_params_flash_erase erase;
+	struct ec_params_flash_erase erase;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int rc;
 
 	erase.offset = blockaddr;
 	erase.size = len;
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_ERASE,
+	rc = priv->ec_command(EC_CMD_FLASH_ERASE, 0,
 			      &erase, sizeof(erase), NULL, 0);
-	if (rc == EC_LPC_RESULT_ACCESS_DENIED) {
+	if (rc == -EC_RES_ACCESS_DENIED) {
 		// this is active image.
 		gec_invalidate_copy(blockaddr, len);
 		need_2nd_pass = 1;
 		return ACCESS_DENIED;
 	}
-	if (rc) {
+	if (rc < 0) {
 		msg_perr("GEC: Flash erase error at address 0x%x, rc=%d\n",
 		         blockaddr, rc);
 		return rc;
+	} else {
+		rc = EC_RES_SUCCESS;
 	}
 
 	try_latest_firmware = 1;
@@ -254,7 +260,7 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0;
-	struct lpc_params_flash_write p;
+	struct ec_params_flash_write p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_write;
 
@@ -263,16 +269,17 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		p.offset = addr + i;
 		p.size = written;
 		memcpy(p.data, &buf[i], written);
-		rc = priv->ec_command(EC_LPC_COMMAND_FLASH_WRITE,
+		rc = priv->ec_command(EC_CMD_FLASH_WRITE, 0,
 				      &p, sizeof(p), NULL, 0);
-		if (rc == EC_LPC_RESULT_ACCESS_DENIED) {
+		if (rc == -EC_RES_ACCESS_DENIED) {
 			// this is active image.
 			gec_invalidate_copy(addr, nbytes);
 			need_2nd_pass = 1;
 			return ACCESS_DENIED;
 		}
 
-		if (rc) break;
+		if (rc < 0) break;
+		rc = EC_RES_SUCCESS;
 	}
 
 	try_latest_firmware = 1;
@@ -329,7 +336,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 
 int gec_probe_size(struct flashchip *flash) {
 	int rc;
-	struct lpc_response_flash_info info;
+	struct ec_response_flash_info info;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
@@ -340,9 +347,12 @@ int gec_probe_size(struct flashchip *flash) {
 		.wp_status      = gec_wp_status,
 	};
 
-	rc = priv->ec_command(EC_LPC_COMMAND_FLASH_INFO,
+	rc = priv->ec_command(EC_CMD_FLASH_INFO, 0,
 			      NULL, 0, &info, sizeof(info));
-	if (rc) return 0;
+	if (rc < 0) {
+		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
+		return 0;
+	}
 
 	flash->total_size = info.flash_size / 1024;
 	flash->page_size = 64;

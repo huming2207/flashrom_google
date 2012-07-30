@@ -39,7 +39,7 @@
 
 #include "file.h"
 #include "flash.h"
-#include "gec_lpc_commands.h"
+#include "gec_ec_commands.h"
 #include "programmer.h"
 
 #define SYSFS_I2C_DEV_ROOT	"/sys/bus/i2c/devices"
@@ -73,12 +73,18 @@ static int gec_i2c_shutdown(void *data)
  *
  * Returns the command status code, or -1 if other error.
  */
-static int gec_command_i2c(int command, const void *outdata, int outsize,
+static int gec_command_i2c(int command, int version,
+			   const void *outdata, int outsize,
 			   void *indata, int insize) {
 	int ret = -1;
 	uint8_t *req_buf = NULL, *resp_buf = NULL;
 	int req_len = 0, resp_len = 0;
 	int i, csum;
+
+	if (version > 0) {
+		msg_perr("%s() version >0 not supported yet.\n", __func__);
+		return -1;
+	}
 
 	if (outsize) {
 		req_len = outsize + GEC_PROTO_BYTES;
@@ -162,8 +168,8 @@ done:
 
 static int detect_ec(void)
 {
-	struct lpc_params_hello request;
-	struct lpc_response_hello response;
+	struct ec_params_hello request;
+	struct ec_response_hello response;
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 
@@ -181,7 +187,7 @@ static int detect_ec(void)
 	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
 	msg_pdbg("%s: sending HELLO request with 0x%08x\n",
 	         __func__, request.in_data);
-	rc = gec_command_i2c(EC_LPC_COMMAND_HELLO, &request,
+	rc = gec_command_i2c(EC_CMD_HELLO, 0, &request,
 			     sizeof(request), &response, sizeof(response));
 	msg_pdbg("%s: response: 0x%08x\n", __func__, response.out_data);
 
@@ -203,7 +209,7 @@ static struct gec_priv gec_i2c_priv = {
 };
 
 static const struct opaque_programmer opaque_programmer_gec_i2c = {
-	.max_data_read	= EC_LPC_PARAM_SIZE,
+	.max_data_read	= EC_OLD_PARAM_SIZE,
 	.max_data_write	= 64,
 	.probe		= gec_probe_size,
 	.read		= gec_read,
@@ -267,6 +273,6 @@ int gec_probe_i2c(const char *name)
 	ret = 0;
 
 gec_probe_i2c_done:
-	free(path);
+	free((void*)path);
 	return ret;
 }
