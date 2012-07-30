@@ -678,7 +678,7 @@ int gec_finish(void);
 int gec_prepare(uint8_t *image, int size);
 struct gec_priv {
 	int detected;
-	int (*ec_command)(int command, const void *indata, int insize,
+	int (*ec_command)(int command, int ver, const void *indata, int insize,
 			  void *outdata, int outsize);
 };
 int gec_probe_size(struct flashchip *flash);
