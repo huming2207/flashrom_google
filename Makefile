@@ -30,6 +30,7 @@ CFLAGS  ?= -Os -Wall -Wshadow
 EXPORTDIR ?= .
 AR      ?= ar
 RANLIB  ?= ranlib
+PKG_CONFIG ?= pkg-config
 
 WARNERROR ?= yes
 
