@@ -107,18 +107,10 @@ static int gec_command_i2c(int command, const void *outdata, int outsize,
 		msg_pspew("%02x ", req_buf[i]);
 	msg_pspew("\n");
 
-	if (insize) {
-		resp_len = insize + GEC_PROTO_BYTES;
-		resp_buf = calloc(1, resp_len);
-		if (!resp_buf)
-			goto done;
-	} else {
-		/* response buffer will hold error code only */
-		resp_len = 1;
-		resp_buf = calloc(1, resp_len);
-		if (!resp_buf)
-			goto done;
-	}
+	resp_len = insize + GEC_PROTO_BYTES;
+	resp_buf = calloc(1, resp_len);
+	if (!resp_buf)
+		goto done;
 
 	ret = linux_i2c_xfer(bus, GEC_I2C_ADDRESS,
 			     resp_buf, resp_len, req_buf, req_len);
