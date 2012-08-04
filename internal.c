@@ -418,19 +418,15 @@ int internal_init(void)
 
 	register_par_programmer(&par_programmer_internal, internal_buses_supported);
 #if defined(__i386__) || defined(__x86_64__)
-	/* Probe unconditionally for IT87* LPC->SPI translation and for
-	 * IT87* Parallel write enable.
-	 */
-	init_superio_ite();
 
 	/* probe for programmers that bridge LPC <--> SPI */
 	if (target_bus == BUS_LPC ||
 	    target_bus == BUS_FWH) {
-		/* note: it85xx init done along with it87* init */
 		gec_probe_lpc(NULL);
 		wpce775x_probe_spi_flash(NULL);
 		mec1308_probe_spi_flash(NULL);
 		ene_probe_spi_flash(NULL);
+		init_superio_ite();
 	}
 
 #endif
