@@ -43,6 +43,19 @@
 #include "spi.h"
 #include "writeprotect.h"
 
+/* FIXME: used for wp hacks */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+struct wp_data {
+	int enable;
+	unsigned int start;
+	unsigned int len;
+};
+static struct wp_data fake_wp;
+#define WP_STATE_HACK_FILENAME "/mnt/stateful_partition/flashrom_wp_state"
+
 /* 1 if we want the flashrom to call erase_and_write_flash() again. */
 static int need_2nd_pass = 0;
 
@@ -288,26 +301,74 @@ static int gec_list_ranges(const struct flashchip *flash) {
 }
 
 
+/* Temporary solution before the real EC WP is ready. This is a hack to
+ * avoid breaking factory procedure.
+ * This should be removed after crosbug.com/p/11320 and 11219 are fixed.
+ */
+static int load_fake_wp(void) {
+	int fd;
+
+	if ((fd = open(WP_STATE_HACK_FILENAME, O_RDONLY)) == -1)
+		goto read_err;
+
+	if (read(fd, &fake_wp, sizeof(fake_wp)) != sizeof(fake_wp))
+		goto read_err;
+
+	close(fd);
+	return 0;
+
+read_err:
+	memset(&fake_wp, 0 , sizeof(fake_wp));
+	return 0;
+}
+
+static int save_fake_wp(void) {
+	int fd;
+
+	if ((fd = open(WP_STATE_HACK_FILENAME,
+	               O_CREAT | O_TRUNC | O_RDWR, 0644)) == -1)
+		return -1;
+
+	if (write(fd, &fake_wp, sizeof(fake_wp)) != sizeof(fake_wp))
+		return -1;
+
+	close(fd);
+	return 0;
+}
+
 static int gec_set_range(const struct flashchip *flash,
                          unsigned int start, unsigned int len) {
-
 	/* TODO: update to latest ec_commands.h and reimplement. */
-	msg_perr("GEC: set_range unimplemented\n");
-	return -1;
+	int rc;
+
+	rc = system("crossystem wpsw_cur?1");
+	if (rc)  /* change-able only when WP pin is de-asserted. */
+		return -1;
+	load_fake_wp();
+	fake_wp.start = start;
+	fake_wp.len = len;
+	return save_fake_wp();
 }
 
 
 static int gec_enable_writeprotect(const struct flashchip *flash) {
 	/* TODO: update to latest ec_commands.h and reimplement. */
-	msg_perr("GEC: enable_writeprotect unimplemented\n");
-	return -1;
+	load_fake_wp();
+	fake_wp.enable = 1;
+	return save_fake_wp();
 }
 
 
 static int gec_disable_writeprotect(const struct flashchip *flash) {
 	/* TODO: update to latest ec_commands.h and reimplement. */
-	msg_perr("GEC: disable_writeprotect unimplemented\n");
-	return -1;
+	int rc;
+
+	rc = system("crossystem wpsw_cur?1");
+	if (rc)  /* change-able only when WP pin is de-asserted. */
+		return -1;
+	load_fake_wp();
+	fake_wp.enable = 0;
+	return save_fake_wp();
 }
 
 
@@ -317,12 +378,15 @@ static int gec_wp_status(const struct flashchip *flash) {
 	 * just claim chip is unprotected.
 	 */
 
-	/* TODO: Fix scripts which rely on SPI-specific terminology. */
+	load_fake_wp();
 	msg_pinfo("WP: status: 0x%02x\n", 0);
 	msg_pinfo("WP: status.srp0: %x\n", 0);
-	msg_pinfo("WP: write protect is %s.\n", "disabled");
-	msg_pinfo("WP: write protect range: start=0x%08x, len=0x%08x\n", 0, 0);
+	msg_pinfo("WP: write protect is %s.\n",
+	          fake_wp.enable ? "enabled" : "disabled");
+	msg_pinfo("WP: write protect range: start=0x%08x, len=0x%08x\n",
+	          fake_wp.start, fake_wp.len);
 
+	/* TODO: Fix scripts which rely on SPI-specific terminology. */
 	return 0;
 }
 
