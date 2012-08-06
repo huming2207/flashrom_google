@@ -31,7 +31,11 @@
 #include "flash.h"
 
 /* Are timers broken? */
+#if CONFIG_USE_OS_TIMER == 1
 int broken_timer = 0;
+#else
+int broken_timer = 1;
+#endif
 
 /* loops per microsecond */
 static unsigned long micro = 1;
