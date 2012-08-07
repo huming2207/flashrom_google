@@ -83,7 +83,7 @@ int acquire_lock(struct ipc_lock *lock, int timeout_msecs)
 	/* try to get the lock */
 	ret = csem_down_timeout_undo(lock->sem, timeout_ptr);
 	if (ret < 0) {
-		msg_gdbg("%s(): failed to acquire lock 0x%08x",
+		msg_gdbg("%s(): failed to acquire lock 0x%08x\n",
 		         __func__, (uint32_t)lock->key);
 		return -1;
 	}

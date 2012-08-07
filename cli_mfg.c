@@ -40,6 +40,7 @@
 
 /* This variable is shared with doit() in flashrom.c */
 int set_ignore_fmap = 0;
+int set_ignore_lock = 0;
 
 #if CONFIG_INTERNAL == 1
 static enum programmer default_programmer = PROGRAMMER_INTERNAL;
@@ -171,6 +172,7 @@ void cli_mfg_usage(const char *name)
 	       "   --flash-name                      flash vendor and device name\n"
 	       "   --get-size                        get chip size (bytes)\n"
 	       "   --ignore-fmap                     ignore fmap structure\n"
+	       "   --ignore-lock                     do not acquire big lock\n"
 	       "   --wp-disable                      disable write protection\n"
 	       "   --wp-enable                       enable write protection\n"
 	       "   --wp-list                         list write protection ranges\n"
@@ -205,6 +207,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_WP_LIST,
 	LONGOPT_IGNORE_FMAP,
 	LONGOPT_FAST_VERIFY,
+	LONGOPT_IGNORE_LOCK,
 };
 
 int main(int argc, char *argv[])
@@ -262,6 +265,7 @@ int main(int argc, char *argv[])
 		{"broken-timers", 0, 0, 'b' },
 		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
 		{"fast-verify", 0, 0, LONGOPT_FAST_VERIFY},
+		{"ignore-lock", 0, 0, LONGOPT_IGNORE_LOCK},
 		{0, 0, 0, 0}
 	};
 
@@ -495,6 +499,9 @@ int main(int argc, char *argv[])
 		case 'b':
 			broken_timer = 1;
 			break;
+		case LONGOPT_IGNORE_LOCK:
+			set_ignore_lock = 1;
+			break;
 		default:
 			cli_mfg_abort_usage(argv[0]);
 			break;
@@ -550,12 +557,14 @@ int main(int argc, char *argv[])
 
 #if USE_BIG_LOCK == 1
 	/* get lock before doing any work that touches hardware */
-	msg_gdbg("Acquiring lock (timeout=%d sec)...\n", LOCK_TIMEOUT_SECS);
-	if (acquire_big_lock(LOCK_TIMEOUT_SECS) < 0) {
-		msg_gerr("Could not acquire lock.\n");
-		exit(1);
+	if (!set_ignore_lock) {
+		msg_gdbg("Acquiring lock (timeout=%d sec)...\n", LOCK_TIMEOUT_SECS);
+		if (acquire_big_lock(LOCK_TIMEOUT_SECS) < 0) {
+			msg_gerr("Could not acquire lock.\n");
+			exit(1);
+		}
+		msg_gdbg("Lock acquired.\n");
 	}
-	msg_gdbg("Lock acquired.\n");
 #endif
 
 	/*
@@ -738,7 +747,8 @@ int main(int argc, char *argv[])
 cli_mfg_silent_exit:
 	programmer_shutdown();  /* must be done after chip_restore() */
 #if USE_BIG_LOCK == 1
-	release_big_lock();
+	if (!set_ignore_lock)
+		release_big_lock();
 #endif
 	if (restore_power_management()) {
 		msg_perr("Unable to re-enable power management\n");
