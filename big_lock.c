@@ -29,9 +29,8 @@
  */
 
 #include "big_lock.h"
-#include "locks.h"
-
 #include "ipc_lock.h"
+#include "locks.h"
 
 static struct ipc_lock big_lock = IPC_LOCK_INIT(BIGLOCK);
 

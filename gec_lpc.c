@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
+#include "gec_lock.h"
 #include "gec_lpc_commands.h"
 #include "programmer.h"
 #include "spi.h"
@@ -47,6 +48,8 @@
 #define INITIAL_DELAY 10     /* 10 us */
 #define MAXIMUM_DELAY 10000  /* 10 ms */
 static int ec_timeout_usec = 1000000;
+
+#define GEC_LOCK_TIMEOUT_SECS 30  /* 30 secs */
 
 /* Waits for the EC to be unbusy. Returns 1 if busy, 0 if not busy. */
 static int ec_busy(int timeout_usec)
@@ -136,6 +139,15 @@ static int detect_ec(void) {
 		return 1;
 	}
 
+#if USE_GEC_LOCK == 1
+	msg_gdbg("Acquiring GEC lock (timeout=%d sec)...\n",
+		  GEC_LOCK_TIMEOUT_SECS);
+	if (acquire_gec_lock(GEC_LOCK_TIMEOUT_SECS) < 0) {
+		msg_gerr("Could not acquire GEC lock.\n");
+		return 1;
+	}
+#endif
+
 	/* reduce timeout period temporarily in case EC is not present */
 	ec_timeout_usec = 25000;
 
@@ -171,6 +183,14 @@ static const struct opaque_programmer opaque_programmer_gec = {
 	.data		= &gec_lpc_priv,
 };
 
+static int gec_lpc_shutdown(void *data)
+{
+#if USE_GEC_LOCK == 1
+	release_gec_lock();
+#endif
+	return 0;
+}
+
 int gec_probe_lpc(const char *name) {
 	msg_pdbg("%s():%d ...\n", __func__, __LINE__);
 
@@ -186,5 +206,11 @@ int gec_probe_lpc(const char *name) {
 	msg_pdbg("GEC detected on LPC bus\n");
 	register_opaque_programmer(&opaque_programmer_gec);
 	gec_lpc_priv.detected = 1;
+
+	if (register_shutdown(gec_lpc_shutdown, NULL)) {
+		msg_perr("Cannot register LPC shutdown function.\n");
+		return 1;
+	}
+
 	return 0;
 }
