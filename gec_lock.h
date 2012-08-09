@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc.
+ * Copyright (C) 2012 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -14,24 +14,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
- *
- * locks.h: locks are used to preserve atomicity of operations.
  */
 
-#ifndef LOCKS_H__
-#define LOCKS_H__
+#ifndef GEC_LOCK_H__
+#define GEC_LOCK_H__
 
-/* this is the base key, since we have to pick something global */
-#define IPC_LOCK_KEY	(0x67736c00 & 0xfffffc00) /* 22 bits "gsl" */
+/*
+ * acquire_gec_lock  -  acquire global lock
+ *
+ * returns 0 to indicate lock acquired
+ * returns >0 to indicate lock was already held
+ * returns <0 to indicate failed to acquire lock
+ */
+extern int acquire_gec_lock(int timeout_secs);
 
-/* The ordering of the following keys matters a lot. We don't want to reorder
- * keys and have a new binary dependent on deployed/used because it will break
- * atomicity of existing users and binaries. In other words, DO NOT REORDER. */
+/*
+ * release_gec_lock  -  release global lock
+ *
+ * returns 0 if lock was released successfully
+ * returns -1 if lock had not been held before the call
+ */
+extern int release_gec_lock(void);
 
-/* this is the "big lock". */
-#define BIGLOCK		(IPC_LOCK_KEY + 0)
-
-/* for Google EC */
-#define GECLOCK		(IPC_LOCK_KEY + 1)
-
-#endif /* LOCKS_H__ */
+#endif /* GEC_LOCK_H__ */
