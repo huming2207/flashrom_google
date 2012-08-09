@@ -247,10 +247,10 @@ CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 
 LIB_OBJS = layout.o file.o fmap.o power.o
 
-LOCK_OBJS = csem.o ipc_lock.o big_lock.o
+LOCK_OBJS = csem.o ipc_lock.o big_lock.o gec_lock.o
 ifeq ($(shell ./util/use_big_lock.sh), 0)
 LIB_OBJS += $(LOCK_OBJS)
-FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
+FEATURE_CFLAGS += -D'USE_BIG_LOCK=1' -D'USE_GEC_LOCK=1'
 endif
 
 CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
