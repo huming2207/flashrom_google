@@ -319,99 +319,171 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 
 static int gec_list_ranges(const struct flashchip *flash) {
-	msg_pinfo("You can specify any range:\n");
-	msg_pinfo("  from: 0x%06x, to: 0x%06x\n", 0, flash->total_size * 1024);
-	msg_pinfo("  unit: 0x%06x (%dKB)\n", 2048, 2);
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct ec_params_flash_region_info p;
+	struct ec_response_flash_region_info r;
+	int rc;
+
+	p.region = EC_FLASH_REGION_WP_RO;
+	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
+		EC_VER_FLASH_REGION_INFO, &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+		return 1;
+	}
+
+	msg_pinfo("Supported write protect range:\n");
+	msg_pinfo("  disable: start=0x%06x len=0x%06x\n", 0, 0);
+	msg_pinfo("  enable:  start=0x%06x len=0x%06x\n", r.offset, r.size);
+
 	return 0;
 }
 
 
-/* Temporary solution before the real EC WP is ready. This is a hack to
- * avoid breaking factory procedure.
- * This should be removed after crosbug.com/p/11320 and 11219 are fixed.
+/*
+ * Helper function for flash protection.
+ *
+ *  On EC API v1, the EC write protection has been simplified to one-bit:
+ *  EC_FLASH_PROTECT_RO_AT_BOOT, which means the state is either enabled
+ *  or disabled. However, this is different from the SPI-style write protect
+ *  behavior. Thus, we re-define the flashrom command (SPI-style) so that
+ *  either SRP or range is non-zero, the EC_FLASH_PROTECT_RO_AT_BOOT is set.
+ *
+ *    SRP     Range      | PROTECT_RO_AT_BOOT
+ *     0        0        |         0
+ *     0     non-zero    |         1
+ *     1        0        |         1
+ *     1     non-zero    |         1
+ *
  */
-static int load_fake_wp(void) {
-	int fd;
+static int set_wp(int enable) {
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct ec_params_flash_protect p;
+	struct ec_response_flash_protect r;
+	int mask = EC_FLASH_PROTECT_RO_AT_BOOT;
+	int flag = enable ? EC_FLASH_PROTECT_RO_AT_BOOT : 0;
+	int rc;
 
-	if ((fd = open(WP_STATE_HACK_FILENAME, O_RDONLY)) == -1)
-		goto read_err;
+	memset(&p, 0, sizeof(p));
+	p.mask = mask;
+	p.flags = flag;
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
+			      &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("Cannot set the write protection status: %d\n", rc);
+		return 1;
+	}
 
-	if (read(fd, &fake_wp, sizeof(fake_wp)) != sizeof(fake_wp))
-		goto read_err;
+	/* Read back */
+	memset(&p, 0, sizeof(p));
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
+			      &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("Cannot get the write protection status: %d\n", rc);
+		return 1;
+	}
 
-	close(fd);
-	return 0;
+	if ((r.flags & mask) != flag) {
+		msg_perr("WP status is not expected (0x%x). actual: 0x%x\n",
+			 flag, r.flags & mask);
+		return 1;
+	}
 
-read_err:
-	memset(&fake_wp, 0 , sizeof(fake_wp));
-	return 0;
-}
-
-static int save_fake_wp(void) {
-	int fd;
-
-	if ((fd = open(WP_STATE_HACK_FILENAME,
-	               O_CREAT | O_TRUNC | O_RDWR, 0644)) == -1)
-		return -1;
-
-	if (write(fd, &fake_wp, sizeof(fake_wp)) != sizeof(fake_wp))
-		return -1;
-
-	close(fd);
 	return 0;
 }
 
 static int gec_set_range(const struct flashchip *flash,
                          unsigned int start, unsigned int len) {
-	/* TODO: update to latest ec_commands.h and reimplement. */
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct ec_params_flash_region_info p;
+	struct ec_response_flash_region_info r;
 	int rc;
 
-	rc = system("crossystem wpsw_cur?1");
-	if (rc)  /* change-able only when WP pin is de-asserted. */
-		return -1;
-	load_fake_wp();
-	fake_wp.start = start;
-	fake_wp.len = len;
-	return save_fake_wp();
+	/* Check if the given range is supported */
+	p.region = EC_FLASH_REGION_WP_RO;
+	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
+		EC_VER_FLASH_REGION_INFO, &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+		return 1;
+	}
+	if ((!start && !len) ||  /* list supported ranges */
+	    ((start == r.offset) && (len == r.size))) {
+		/* pass */
+	} else {
+		msg_perr("Unsupported write protection range (0x%06x,0x%06x)\n",
+			 start, len);
+		msg_perr("Currently supported range:\n");
+		msg_perr("  disable: (0x%06x,0x%06x)\n", 0, 0);
+		msg_perr("  enable:  (0x%06x,0x%06x)\n", r.offset, r.size);
+		return 1;
+	}
+
+	return set_wp(!!len);
 }
 
 
 static int gec_enable_writeprotect(const struct flashchip *flash) {
-	/* TODO: update to latest ec_commands.h and reimplement. */
-	load_fake_wp();
-	fake_wp.enable = 1;
-	return save_fake_wp();
+	return set_wp(1);
 }
 
 
 static int gec_disable_writeprotect(const struct flashchip *flash) {
-	/* TODO: update to latest ec_commands.h and reimplement. */
-	int rc;
-
-	rc = system("crossystem wpsw_cur?1");
-	if (rc)  /* change-able only when WP pin is de-asserted. */
-		return -1;
-	load_fake_wp();
-	fake_wp.enable = 0;
-	return save_fake_wp();
+	return set_wp(0);
 }
 
 
 static int gec_wp_status(const struct flashchip *flash) {
-	/*
-	 * TODO: update to latest ec_commands.h and reimplement.  For now,
-	 * just claim chip is unprotected.
-	 */
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct ec_params_flash_protect p;
+	struct ec_response_flash_protect r;
+	int start, len;  /* wp range */
+	int enabled;
+	int rc;
 
-	load_fake_wp();
-	msg_pinfo("WP: status: 0x%02x\n", 0);
-	msg_pinfo("WP: status.srp0: %x\n", 0);
+	memset(&p, 0, sizeof(p));
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
+			      &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("Cannot get the write protection status: %d\n", rc);
+		return 1;
+	} else if (rc < sizeof(r)) {
+		msg_perr("Too little data returned (expected:%d, actual:%d)\n",
+			 sizeof(r), rc);
+		return 1;
+	}
+
+	start = len = 0;
+	if (r.flags & EC_FLASH_PROTECT_RO_AT_BOOT) {
+		struct ec_params_flash_region_info reg_p;
+		struct ec_response_flash_region_info reg_r;
+
+		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is set.\n",
+			 __func__);
+		reg_p.region = EC_FLASH_REGION_WP_RO;
+		rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
+			EC_VER_FLASH_REGION_INFO,
+			&reg_p, sizeof(reg_p), &reg_r, sizeof(reg_r));
+		if (rc < 0) {
+			msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+			return 1;
+		}
+		start = reg_r.offset;
+		len = reg_r.size;
+	} else {
+		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is clear.\n",
+			 __func__);
+	}
+
+	/* Remove the SPI-style messages. */
+	enabled = r.flags & EC_FLASH_PROTECT_RO_AT_BOOT ? 1 : 0;
+	msg_pinfo("WP: status: 0x%02x\n", enabled ? 0x80 : 0x00);
+	msg_pinfo("WP: status.srp0: %x\n", enabled);
 	msg_pinfo("WP: write protect is %s.\n",
-	          fake_wp.enable ? "enabled" : "disabled");
+			enabled ? "enabled" : "disabled");
 	msg_pinfo("WP: write protect range: start=0x%08x, len=0x%08x\n",
-	          fake_wp.start, fake_wp.len);
+	          start, len);
 
-	/* TODO: Fix scripts which rely on SPI-specific terminology. */
 	return 0;
 }
 
