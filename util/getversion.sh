@@ -2,6 +2,7 @@
 #
 # This file is part of the flashrom project.
 #
+# Copyright (C) 2009,2010 Carl-Daniel Hailfinger
 # Copyright (C) 2011 Chromium OS Authors
 #
 # This program is free software; you can redistribute it and/or modify
