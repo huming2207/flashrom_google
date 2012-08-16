@@ -114,8 +114,9 @@ static int gec_jump_copy(enum ec_current_image target) {
 	 * Thus, we call EC to jump only if the target is different.
 	 */
 	rc = priv->ec_command(EC_CMD_GET_VERSION, 0, NULL, 0, &c, sizeof(c));
-	if (rc || c.current_image == EC_IMAGE_UNKNOWN) {
-		msg_perr("GEC cannot get the running copy: rc=%d\n", rc);
+	if (rc < 0 || c.current_image == EC_IMAGE_UNKNOWN) {
+		msg_perr("GEC cannot get the running copy: rc=%d image=%s\n",
+			 rc, sections[c.current_image]);
 		return 1;
 	}
 
