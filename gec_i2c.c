@@ -206,7 +206,7 @@ static int gec_command_i2c_v0(int command, int version,
 			     resp_buf, resp_len, req_buf, req_len);
 	if (ret) {
 		msg_perr("%s(): linux_i2c_xfer() failed: %d\n", __func__, ret);
-		ret = EC_RES_ERROR;
+		ret = -EC_RES_ERROR;
 		goto done;
 	}
 
@@ -303,7 +303,7 @@ static int gec_command_i2c(int command, int version,
 			     resp_buf, resp_len, req_buf, req_len);
 	if (ret) {
 		msg_perr("%s(): linux_i2c_xfer() failed: %d\n", __func__, ret);
-		ret = EC_RES_ERROR;
+		ret = -EC_RES_ERROR;
 		goto done;
 	}
 
