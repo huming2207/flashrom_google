@@ -186,6 +186,9 @@ enum ec_status {
 	EC_RES_INVALID_RESPONSE = 5,
 	EC_RES_INVALID_VERSION = 6,
 	EC_RES_INVALID_CHECKSUM = 7,
+	EC_RES_IN_PROGRESS = 8,		/* Accepted, command in progress */
+	EC_RES_UNAVAILABLE = 9,		/* No response available */
+	EC_RES_TIMEOUT = 10,		/* We got a timeout */
 };
 
 /*
@@ -217,6 +220,12 @@ enum host_event_code {
 	EC_HOST_EVENT_INTERFACE_READY = 14,
 	/* Keyboard recovery combo has been pressed */
 	EC_HOST_EVENT_KEYBOARD_RECOVERY = 15,
+
+	/* Shutdown due to thermal overload */
+	EC_HOST_EVENT_THERMAL_SHUTDOWN = 16,
+	/* Shutdown due to battery level too low */
+	EC_HOST_EVENT_BATTERY_SHUTDOWN = 17,
+
 	/*
 	 * The high bit of the event mask is not used as a host event code.  If
 	 * it reads back as set, then the entire event mask should be
@@ -381,6 +390,25 @@ struct ec_response_get_cmd_versions {
 	 */
 	uint32_t version_mask;
 } __packed;
+
+/*
+ * Check EC communcations status (busy). This is needed on i2c/spi but not
+ * on lpc since it has its own out-of-band busy indicator.
+ *
+ * lpc must read the status from the command register. Attempting this on
+ * lpc will overwrite the args/parameter space and corrupt its data.
+ */
+#define EC_CMD_GET_COMMS_STATUS		0x09
+
+/* Avoid using ec_status which is for return values */
+enum ec_comms_status {
+	EC_COMMS_STATUS_PROCESSING	= 1 << 0,	/* Processing cmd */
+};
+
+struct ec_response_get_comms_status {
+	uint32_t flags;		/* Mask of enum ec_comms_status */
+} __packed;
+
 
 /*****************************************************************************/
 /* Flash commands */
@@ -617,34 +645,9 @@ struct ec_params_lightbar_cmd {
 /* Verified boot commands */
 
 /*
- * Verified boot uber-command.  Details still evolving.  Like the lightbar
- * command above, this takes sub-commands.
+ * Note: command code 0x29 version 0 was VBOOT_CMD in Link EVT; it may be
+ * reused for other purposes with version > 0.
  */
-#define EC_CMD_VBOOT_CMD 0x29
-
-struct ec_params_vboot_cmd {
-	union {
-		union {
-			uint8_t cmd;
-			struct {
-				uint8_t cmd;
-				/* no inputs */
-			} get_flags;
-			struct {
-				uint8_t cmd;
-				uint8_t val;
-			} set_flags;
-		} in;
-		union {
-			struct {
-				uint8_t val;
-			} get_flags;
-			struct {
-				/* no outputs */
-			} set_flags;
-		} out;
-	};
-} __packed;
 
 /* Verified boot hash command */
 #define EC_CMD_VBOOT_HASH 0x2A
@@ -732,6 +735,36 @@ struct ec_params_pstore_write {
 	uint32_t offset;   /* Byte offset to write */
 	uint32_t size;     /* Size to write in bytes */
 	uint8_t data[EC_PSTORE_SIZE_MAX];
+} __packed;
+
+/*****************************************************************************/
+/* Real-time clock */
+
+/* RTC params and response structures */
+struct ec_params_rtc {
+	uint32_t time;
+} __packed;
+
+struct ec_response_rtc {
+	uint32_t time;
+} __packed;
+
+/* These use ec_response_rtc */
+#define EC_CMD_RTC_GET_VALUE 0x44
+#define EC_CMD_RTC_GET_ALARM 0x45
+
+/* These all use ec_params_rtc */
+#define EC_CMD_RTC_SET_VALUE 0x46
+#define EC_CMD_RTC_SET_ALARM 0x47
+
+/*****************************************************************************/
+/* Port80 log access */
+
+/* Get last port80 code from previous boot */
+#define EC_CMD_PORT80_LAST_BOOT 0x48
+
+struct ec_response_port80_last_boot {
+	uint16_t code;
 } __packed;
 
 /*****************************************************************************/
@@ -917,6 +950,20 @@ struct ec_params_force_idle {
 } __packed;
 
 /*****************************************************************************/
+/* Console commands. Only available when flash write protect is unlocked. */
+
+/* Snapshot console output buffer for use by EC_CMD_CONSOLE_READ. */
+#define EC_CMD_CONSOLE_SNAPSHOT 0x97
+
+/*
+ * Read next chunk of data from saved snapshot.
+ *
+ * Response is null-terminated string.  Empty string, if there is no more
+ * remaining output.
+ */
+#define EC_CMD_CONSOLE_READ 0x98
+
+/*****************************************************************************/
 /* System commands */
 
 /*
@@ -1026,6 +1073,15 @@ struct ec_params_reboot_ec {
  * Use EC_CMD_REBOOT_EC to reboot the EC more politely.
  */
 #define EC_CMD_REBOOT 0xd1  /* Think "die" */
+
+/*
+ * Resend last response (not supported on LPC).
+ *
+ * Returns EC_RES_UNAVAILABLE if there is no response available - for example,
+ * there was no previous command, or the previous command's response was too
+ * big to save.
+ */
+#define EC_CMD_RESEND_RESPONSE 0xdb
 
 /*
  * This header byte on a command indicate version 0. Any header byte less
