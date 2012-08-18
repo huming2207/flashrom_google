@@ -55,6 +55,16 @@
 /*   IN:  (command, size, ... response ..., checkcum) */
 #define GEC_PROTO_BYTES_V1_IN	3
 
+/*
+ * Flash erase on a 1024 byte chunk takes about 22.05ms on STM32-based GEC.
+ * We'll leave about a half millisecond extra for other overhead to avoid
+ * polling the status too aggressively.
+ *
+ * TODO: determine better delay value or mechanism for all chips and commands.
+ */
+#define STM32_ERASE_DELAY	22500	/* 22.5ms */
+#define GEC_COMMAND_RETRIES	5
+
 static int ec_timeout_usec = 1000000;
 
 static unsigned int bus;
@@ -62,6 +72,74 @@ static unsigned int bus;
 static int gec_i2c_shutdown(void *data)
 {
 	return linux_i2c_shutdown(data);
+}
+
+void delay_for_command(int command)
+{
+	switch (command) {
+	case EC_CMD_FLASH_ERASE:
+		programmer_delay(STM32_ERASE_DELAY);
+		break;
+	default:
+		break;
+	}
+}
+
+/* returns 0 if command is successful, <0 to indicate timeout or error */
+static int command_response(int command, int version, uint8_t response_code)
+{
+	uint8_t *status_cmd;
+	struct ec_response_get_comms_status status;
+	int i, status_cmd_len, ret = -EC_RES_TIMEOUT;
+
+	if (response_code != EC_RES_IN_PROGRESS)
+		return -response_code;
+
+	if (version == 0) {
+		status_cmd_len = 1;
+		status_cmd = malloc(status_cmd_len);
+		status_cmd[0] = EC_CMD_GET_COMMS_STATUS;
+	} else {
+		int csum;
+
+		status_cmd_len = GEC_PROTO_BYTES_V1_OUT;
+		status_cmd = malloc(status_cmd_len);
+		status_cmd[0] = EC_CMD_VERSION0 + 1;
+		status_cmd[1] = EC_CMD_GET_COMMS_STATUS;
+		status_cmd[2] = 0;
+
+		csum = status_cmd[0] + status_cmd[1] + status_cmd[2];
+		status_cmd[3] = csum & 0xff;
+	}
+
+	for (i = 1; i <= GEC_COMMAND_RETRIES; i++) {
+		/*
+		 * The first retry might work practically immediately, so
+		 * skip the delay for the first retry.
+		 */
+		if (i != 1)
+			delay_for_command(command);
+
+		msg_pspew("retry %d / %d\n", i, GEC_COMMAND_RETRIES);
+		ret = linux_i2c_xfer(bus, GEC_I2C_ADDRESS,
+				     &status, sizeof(status),
+				     status_cmd, status_cmd_len);
+
+		if (ret) {
+			msg_perr("%s(): linux_i2c_xfer() failed: %d\n",
+				 __func__, ret);
+			ret = -EC_RES_ERROR;
+			break;
+		}
+
+		if (!(status.flags & EC_COMMS_STATUS_PROCESSING)) {
+			ret = -EC_RES_SUCCESS;
+			break;
+		}
+	}
+
+	free(status_cmd);
+	return ret;
 }
 
 /*
@@ -137,11 +215,9 @@ static int gec_command_i2c_v0(int command, int version,
 		msg_pspew("%02x ", resp_buf[i]);
 	msg_pspew("\n");
 
-	/* check response error code */
-	ret = -resp_buf[0];
-	if (ret) {
+	ret = command_response(command, version, resp_buf[0]);
+	if (ret)
 		msg_pdbg("command 0x%02x returned an error %d\n", command, ret);
-	}
 
 	if (insize) {
 		/* copy response packet payload and compute checksum */
@@ -236,11 +312,9 @@ static int gec_command_i2c(int command, int version,
 		msg_pspew("%02x ", resp_buf[i]);
 	msg_pspew("\n");
 
-	/* check response error code */
-	ret = -resp_buf[0];
-	if (ret) {
+	ret = command_response(command, version, resp_buf[0]);
+	if (ret)
 		msg_pdbg("command 0x%02x returned an error %d\n", command, ret);
-	}
 	resp_len = resp_buf[1];
 
 	if (insize) {
