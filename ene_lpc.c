@@ -225,6 +225,10 @@ void wait_cycles(int n)
 static int is_spicmd_write(uint8_t cmd)
 {
 	switch (cmd) {
+	case JEDEC_WREN:
+		/* Chip Write Enable */
+	case JEDEC_EWSR:
+		/* Write Status Enable */
 	case JEDEC_CE_60:
 		/* Chip Erase 0x60 */
 	case JEDEC_CE_C7:
