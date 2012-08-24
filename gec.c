@@ -356,22 +356,29 @@ static int gec_list_ranges(const struct flashchip *flash) {
  *     1        0        |         1
  *     1     non-zero    |         1
  *
+ *
+ *  Besides, to make the protection take effect as soon as possible, we
+ *  try to set EC_FLASH_PROTECT_RO_NOW at the same time. However, not
+ *  every EC supports RO_NOW, thus we then try to protect the entire chip.
  */
 static int set_wp(int enable) {
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
-	int mask = EC_FLASH_PROTECT_RO_AT_BOOT;
-	int flag = enable ? EC_FLASH_PROTECT_RO_AT_BOOT : 0;
+	const int ro_at_boot_flag = EC_FLASH_PROTECT_RO_AT_BOOT;
+	const int ro_now_flag = EC_FLASH_PROTECT_RO_NOW;
+	int need_an_ec_cold_reset = 0;
 	int rc;
 
+	/* Try to set RO_AT_BOOT and RO_NOW first */
 	memset(&p, 0, sizeof(p));
-	p.mask = mask;
-	p.flags = flag;
+	p.mask = (ro_at_boot_flag | ro_now_flag);
+	p.flags = enable ? (ro_at_boot_flag | ro_now_flag) : 0;
 	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
 			      &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
-		msg_perr("Cannot set the write protection status: %d\n", rc);
+		msg_perr("FAILED: Cannot set the RO_AT_BOOT and RO_NOW: %d\n",
+			 rc);
 		return 1;
 	}
 
@@ -380,13 +387,104 @@ static int set_wp(int enable) {
 	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
 			      &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
-		msg_perr("Cannot get the write protection status: %d\n", rc);
+		msg_perr("FAILED: Cannot get RO_AT_BOOT and RO_NOW: %d\n",
+			 rc);
 		return 1;
 	}
 
-	if ((r.flags & mask) != flag) {
-		msg_perr("WP status is not expected (0x%x). actual: 0x%x\n",
-			 flag, r.flags & mask);
+	if (!enable) {
+		/* The disable case is easier to check. */
+		if (r.flags & ro_at_boot_flag) {
+			msg_perr("FAILED: RO_AT_BOOT is not clear.\n");
+			return 1;
+		} else if (r.flags & ro_now_flag) {
+			msg_perr("FAILED: RO_NOW is asserted unexpectedly.\n");
+			need_an_ec_cold_reset = 1;
+			goto exit;
+		}
+
+		msg_pdbg("INFO: RO_AT_BOOT is clear.\n");
+		return 0;
+	}
+
+	/* Check if RO_AT_BOOT is set. If not, fail in anyway. */
+	if (r.flags & ro_at_boot_flag) {
+		msg_pdbg("INFO: RO_AT_BOOT has been set.\n");
+	} else {
+		msg_perr("FAILED: RO_AT_BOOT is not set.\n");
+		return 1;
+	}
+
+	/* Then, we check if the protection has been activated. */
+	if (r.flags & ro_now_flag) {
+		/* Good, RO_NOW is set. */
+		msg_pdbg("INFO: RO_NOW is set. WP is active now.\n");
+	} else if (r.writable_flags & EC_FLASH_PROTECT_ALL_NOW) {
+		struct ec_params_reboot_ec reboot;
+
+		msg_pdbg("WARN: RO_NOW is not set. Trying ALL_NOW.\n");
+
+		memset(&p, 0, sizeof(p));
+		p.mask = EC_FLASH_PROTECT_ALL_NOW;
+		p.flags = EC_FLASH_PROTECT_ALL_NOW;
+		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+				      EC_VER_FLASH_PROTECT,
+				      &p, sizeof(p), &r, sizeof(r));
+		if (rc < 0) {
+			msg_perr("FAILED: Cannot set ALL_NOW: %d\n", rc);
+			return 1;
+		}
+
+		/* Read back */
+		memset(&p, 0, sizeof(p));
+		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+				      EC_VER_FLASH_PROTECT,
+				      &p, sizeof(p), &r, sizeof(r));
+		if (rc < 0) {
+			msg_perr("FAILED:Cannot get ALL_NOW: %d\n", rc);
+			return 1;
+		}
+
+		if (!(r.flags & EC_FLASH_PROTECT_ALL_NOW)) {
+			msg_perr("FAILED: ALL_NOW is not set.\n");
+			need_an_ec_cold_reset = 1;
+			goto exit;
+		}
+
+		msg_pdbg("INFO: ALL_NOW has been set. WP is active now.\n");
+
+		/*
+		 * Our goal is to protect the RO ASAP. The entire protection
+		 * is just a workaround for platform not supporting RO_NOW.
+		 * It has side-effect that the RW is also protected and leads
+		 * the RW update failed. So, we arrange an EC code reset to
+		 * unlock RW ASAP.
+		 */
+		memset(&reboot, 0, sizeof(reboot));
+		reboot.cmd = EC_REBOOT_COLD;
+		reboot.flags = EC_REBOOT_FLAG_ON_AP_SHUTDOWN;
+		rc = priv->ec_command(EC_CMD_REBOOT_EC, 0,
+				      &reboot, sizeof(reboot), NULL, 0);
+		if (rc < 0) {
+			msg_perr("WARN: Cannot arrange a cold reset at next "
+				 "shutdown to unlock entire protect.\n");
+			msg_perr("      But you can do it manually.\n");
+		} else {
+			msg_pdbg("INFO: A cold reset is arranged at next "
+				 "shutdown.\n");
+		}
+
+	} else {
+		msg_perr("FAILED: RO_NOW is not set.\n");
+		msg_perr("FAILED: The PROTECT_RO_AT_BOOT is set, but cannot "
+			 "make write protection active now.\n");
+		need_an_ec_cold_reset = 1;
+	}
+
+exit:
+	if (need_an_ec_cold_reset) {
+		msg_perr("FAILED: You may need a reboot to take effect of "
+			 "PROTECT_RO_AT_BOOT.\n");
 		return 1;
 	}
 
@@ -405,15 +503,15 @@ static int gec_set_range(const struct flashchip *flash,
 	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
 		EC_VER_FLASH_REGION_INFO, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
-		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+		msg_perr("FAILED: Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
 	}
 	if ((!start && !len) ||  /* list supported ranges */
 	    ((start == r.offset) && (len == r.size))) {
 		/* pass */
 	} else {
-		msg_perr("Unsupported write protection range (0x%06x,0x%06x)\n",
-			 start, len);
+		msg_perr("FAILED: Unsupported write protection range "
+			 "(0x%06x,0x%06x)\n\n", start, len);
 		msg_perr("Currently supported range:\n");
 		msg_perr("  disable: (0x%06x,0x%06x)\n", 0, 0);
 		msg_perr("  enable:  (0x%06x,0x%06x)\n", r.offset, r.size);
@@ -446,11 +544,12 @@ static int gec_wp_status(const struct flashchip *flash) {
 	rc = priv->ec_command(EC_CMD_FLASH_PROTECT, EC_VER_FLASH_PROTECT,
 			      &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
-		msg_perr("Cannot get the write protection status: %d\n", rc);
+		msg_perr("FAILED: Cannot get the write protection status: %d\n",
+			 rc);
 		return 1;
 	} else if (rc < sizeof(r)) {
-		msg_perr("Too little data returned (expected:%d, actual:%d)\n",
-			 sizeof(r), rc);
+		msg_perr("FAILED: Too little data returned (expected:%d, "
+			 "actual:%d)\n", sizeof(r), rc);
 		return 1;
 	}
 
@@ -466,7 +565,8 @@ static int gec_wp_status(const struct flashchip *flash) {
 			EC_VER_FLASH_REGION_INFO,
 			&reg_p, sizeof(reg_p), &reg_r, sizeof(reg_r));
 		if (rc < 0) {
-			msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+			msg_perr("FAILED: Cannot get the WP_RO region info: "
+				 "%d\n", rc);
 			return 1;
 		}
 		start = reg_r.offset;
@@ -475,6 +575,13 @@ static int gec_wp_status(const struct flashchip *flash) {
 		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is clear.\n",
 			 __func__);
 	}
+
+	/*
+	 * If neither RO_NOW or ALL_NOW is set, it means write protect is
+	 * NOT active now.
+	 */
+	if (!(r.flags & (EC_FLASH_PROTECT_RO_NOW | EC_FLASH_PROTECT_ALL_NOW)))
+		start = len = 0;
 
 	/* Remove the SPI-style messages. */
 	enabled = r.flags & EC_FLASH_PROTECT_RO_AT_BOOT ? 1 : 0;
