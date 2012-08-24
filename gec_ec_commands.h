@@ -490,8 +490,8 @@ struct ec_params_flash_erase {
  * be changed.
  */
 #define EC_FLASH_PROTECT_RO_NOW             (1 << 1)
-/* RW flash code protected now, until reboot. */
-#define EC_FLASH_PROTECT_RW_NOW             (1 << 2)
+/* Entire flash code protected now, until reboot. */
+#define EC_FLASH_PROTECT_ALL_NOW            (1 << 2)
 /* Flash write protect GPIO is asserted now */
 #define EC_FLASH_PROTECT_GPIO_ASSERTED      (1 << 3)
 /* Error - at least one bank of flash is stuck locked, and cannot be unlocked */
@@ -502,8 +502,8 @@ struct ec_params_flash_erase {
  * re-requesting the desired flags, or by a hard reset if that fails.
  */
 #define EC_FLASH_PROTECT_ERROR_INCONSISTENT (1 << 5)
-/* RW flash code protected when the EC boots */
-#define EC_FLASH_PROTECT_RW_AT_BOOT         (1 << 6)
+/* Entile flash code protected when the EC boots */
+#define EC_FLASH_PROTECT_ALL_AT_BOOT        (1 << 6)
 
 struct ec_params_flash_protect {
 	uint32_t mask;   /* Bits in flags to apply */
@@ -612,7 +612,7 @@ struct ec_params_lightbar_cmd {
 			struct num {
 				uint8_t cmd;
 				uint8_t num;
-			} brightness, seq;
+			} brightness, seq, demo;
 
 			struct reg {
 				uint8_t cmd;
@@ -636,7 +636,7 @@ struct ec_params_lightbar_cmd {
 			} get_seq;
 			struct {
 				/* no return params */
-			} off, on, init, brightness, seq, reg, rgb;
+			} off, on, init, brightness, seq, reg, rgb, demo;
 		} out;
 	};
 } __packed;
