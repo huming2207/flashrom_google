@@ -165,7 +165,7 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 	 */
 	ceiling_size = ceiling(flash->total_size * 1024);
 	for (stride = ceiling_size / 2;
-	     stride >= 16;
+	     stride >= 64;
 	     stride /= 2) {
 		if (fmap_found)
 			break;
