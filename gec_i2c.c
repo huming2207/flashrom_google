@@ -46,14 +46,11 @@
 #define GEC_I2C_ADAPTER_NAME	"cros_ec_i2c"
 #define GEC_I2C_ADDRESS		0x1e
 
-/* v0 protocol bytes (command/response code + checksum byte) */
-#define GEC_PROTO_BYTES_V0	2
-
-/* v1 protocol bytes
+/* v2 protocol bytes
  *   OUT: (version, command, size, ... request ..., checksum) */
-#define GEC_PROTO_BYTES_V1_OUT	4
+#define GEC_PROTO_BYTES_V2_OUT	4
 /*   IN:  (command, size, ... response ..., checkcum) */
-#define GEC_PROTO_BYTES_V1_IN	3
+#define GEC_PROTO_BYTES_V2_IN	3
 
 /*
  * Flash erase on a 1024 byte chunk takes about 22.05ms on STM32-based GEC.
@@ -91,26 +88,19 @@ static int command_response(int command, int version, uint8_t response_code)
 	uint8_t *status_cmd;
 	struct ec_response_get_comms_status status;
 	int i, status_cmd_len, ret = -EC_RES_TIMEOUT;
+	int csum;
 
 	if (response_code != EC_RES_IN_PROGRESS)
 		return -response_code;
 
-	if (version == 0) {
-		status_cmd_len = 1;
-		status_cmd = malloc(status_cmd_len);
-		status_cmd[0] = EC_CMD_GET_COMMS_STATUS;
-	} else {
-		int csum;
+	status_cmd_len = GEC_PROTO_BYTES_V2_OUT;
+	status_cmd = malloc(status_cmd_len);
+	status_cmd[0] = EC_CMD_VERSION0 + version;
+	status_cmd[1] = EC_CMD_GET_COMMS_STATUS;
+	status_cmd[2] = 0;
 
-		status_cmd_len = GEC_PROTO_BYTES_V1_OUT;
-		status_cmd = malloc(status_cmd_len);
-		status_cmd[0] = EC_CMD_VERSION0 + 1;
-		status_cmd[1] = EC_CMD_GET_COMMS_STATUS;
-		status_cmd[2] = 0;
-
-		csum = status_cmd[0] + status_cmd[1] + status_cmd[2];
-		status_cmd[3] = csum & 0xff;
-	}
+	csum = status_cmd[0] + status_cmd[1] + status_cmd[2];
+	status_cmd[3] = csum & 0xff;
 
 	for (i = 1; i <= GEC_COMMAND_RETRIES; i++) {
 		/*
@@ -143,7 +133,7 @@ static int command_response(int command, int version, uint8_t response_code)
 }
 
 /*
- * gec_command_i2c - (v0) Issue command to GEC over I2C
+ * gec_command_i2c - (protocol v2) Issue command to GEC over I2C
  *
  * @command:	command code
  * @outdata:	data to send to EC
@@ -155,107 +145,7 @@ static int command_response(int command, int version, uint8_t response_code)
  * and indata buffers will contain payload data (if any); command and response
  * codes as well as checksum data are handled transparently by this function.
  *
- * Returns the command status code, or -1 if other error.
- */
-static int gec_command_i2c_v0(int command, int version,
-			      const void *outdata, int outsize,
-			      void *indata, int insize) {
-	int ret = -1;
-	uint8_t *req_buf = NULL, *resp_buf = NULL;
-	int req_len = 0, resp_len = 0;
-	int i, csum;
-
-	if (version > 0) {
-		msg_perr("%s() version >0 not supported yet.\n", __func__);
-		return -EC_RES_INVALID_VERSION;
-	}
-
-	if (outsize) {
-		req_len = outsize + GEC_PROTO_BYTES_V0;
-		req_buf = calloc(1, req_len);
-		if (!req_buf)
-			goto done;
-
-		/* copy message payload and compute checksum */
-		memcpy(&req_buf[1], outdata, outsize);
-		for (i = 0, csum = 0; i < outsize; i++) {
-			req_buf[i + 1] = *((uint8_t *)outdata + i);
-			csum += *((uint8_t *)outdata + i);
-		}
-		req_buf[req_len - 1] = csum & 0xff;
-	} else {
-		/* request buffer will hold command code only */
-		req_len = 1;
-		req_buf = calloc(1, req_len);
-		if (!req_buf)
-			goto done;
-	}
-	req_buf[0] = command;
-
-	msg_pspew("%s: req_buf: ", __func__);
-	for (i = 0; i < req_len; i++)
-		msg_pspew("%02x ", req_buf[i]);
-	msg_pspew("\n");
-
-	resp_len = insize + GEC_PROTO_BYTES_V0;
-	resp_buf = calloc(1, resp_len);
-	if (!resp_buf)
-		goto done;
-
-	ret = linux_i2c_xfer(bus, GEC_I2C_ADDRESS,
-			     resp_buf, resp_len, req_buf, req_len);
-	if (ret) {
-		msg_perr("%s(): linux_i2c_xfer() failed: %d\n", __func__, ret);
-		ret = -EC_RES_ERROR;
-		goto done;
-	}
-
-	msg_pspew("%s: resp_buf: ", __func__);
-	for (i = 0; i < resp_len; i++)
-		msg_pspew("%02x ", resp_buf[i]);
-	msg_pspew("\n");
-
-	ret = command_response(command, version, resp_buf[0]);
-	if (ret)
-		msg_pdbg("command 0x%02x returned an error %d\n", command, ret);
-
-	if (insize) {
-		/* copy response packet payload and compute checksum */
-		for (i = 0, csum = 0; i < insize; i++)
-			csum += resp_buf[i + 1];
-		csum &= 0xff;
-
-		if (csum != resp_buf[resp_len - 1]) {
-			msg_pdbg("bad checksum (got 0x%02x from EC, calculated "
-				 "0x%02x\n", resp_buf[resp_len - 1], csum);
-			ret = -EC_RES_INVALID_CHECKSUM;
-			goto done;
-		}
-
-		memcpy(indata, &resp_buf[1], insize);
-	}
-done:
-	if (resp_buf)
-		free(resp_buf);
-	if (req_buf)
-		free(req_buf);
-	return ret;
-}
-
-/*
- * gec_command_i2c - (v1) Issue command to GEC over I2C
- *
- * @command:	command code
- * @outdata:	data to send to EC
- * @outsize:	number of bytes in outbound payload
- * @indata:	(unallocated) buffer to store data received from EC
- * @insize:	number of bytes in inbound payload
- *
- * Protocol-related details will be handled by this function. The outdata
- * and indata buffers will contain payload data (if any); command and response
- * codes as well as checksum data are handled transparently by this function.
- *
- * Returns the command status code, or -1 if other error.
+ * Returns >=0 for success, or negative if other error.
  */
 static int gec_command_i2c(int command, int version,
 			   const void *outdata, int outsize,
@@ -265,15 +155,12 @@ static int gec_command_i2c(int command, int version,
 	int req_len = 0, resp_len = 0;
 	int i, csum;
 
-	if (version == 0)
-		return gec_command_i2c_v0(command, version, outdata, outsize,
-				          indata, insize);
-	else if (version > 1) {
+	if (version > 1) {
 		msg_perr("%s() version >1 not supported yet.\n", __func__);
 		return -EC_RES_INVALID_VERSION;
 	}
 
-	req_len = outsize + GEC_PROTO_BYTES_V1_OUT;
+	req_len = outsize + GEC_PROTO_BYTES_V2_OUT;
 	req_buf = calloc(1, req_len);
 	if (!req_buf)
 		goto done;
@@ -294,7 +181,7 @@ static int gec_command_i2c(int command, int version,
 		msg_pspew("%02x ", req_buf[i]);
 	msg_pspew("\n");
 
-	resp_len = insize + GEC_PROTO_BYTES_V1_IN;
+	resp_len = insize + GEC_PROTO_BYTES_V2_IN;
 	resp_buf = calloc(1, resp_len);
 	if (!resp_buf)
 		goto done;
@@ -316,11 +203,17 @@ static int gec_command_i2c(int command, int version,
 	if (ret)
 		msg_pdbg("command 0x%02x returned an error %d\n", command, ret);
 	resp_len = resp_buf[1];
+	if (resp_len > insize) {
+		msg_perr("%s(): responsed size is too large %d > %d\n",
+			 __func__, resp_len, insize);
+		ret = -EC_RES_ERROR;
+		goto done;
+	}
 
 	if (insize) {
 		/* copy response packet payload and compute checksum */
 		csum = resp_buf[0] + resp_buf[1];
-		for (i = 0; i < insize; i++)
+		for (i = 0; i < resp_len; i++)
 			csum += resp_buf[i + 2];
 		csum &= 0xff;
 
@@ -331,9 +224,9 @@ static int gec_command_i2c(int command, int version,
 			goto done;
 		}
 
-		memcpy(indata, &resp_buf[2], insize);
+		memcpy(indata, &resp_buf[2], resp_len);
 	}
-	ret = insize;
+	ret = resp_len;
 done:
 	if (resp_buf)
 		free(resp_buf);
@@ -346,6 +239,7 @@ static int detect_ec(void)
 {
 	struct ec_params_hello request;
 	struct ec_response_hello response;
+	struct ec_response_proto_version proto;
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 
@@ -369,7 +263,7 @@ static int detect_ec(void)
 
 	ec_timeout_usec = old_timeout;
 
-	if (rc || response.out_data != 0xf1e2d3c4) {
+	if (rc < 0 || response.out_data != 0xf1e2d3c4) {
 		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
 		         "rc=%d, request=0x%x response=0x%x\n",
 		         rc, request.in_data, response.out_data);
