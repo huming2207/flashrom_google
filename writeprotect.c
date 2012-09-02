@@ -508,6 +508,38 @@ struct w25q_range w25x80_ranges[] = {
 	{ 0, X, 0x7, {0x000000, 1024 * 1024} },
 };
 
+static struct w25q_range gd25q64_ranges[] = {
+	{ X, X, 0, {0, 0} },	/* none */
+	{ 0, 0, 0x1, {0x7e0000, 128 * 1024} },
+	{ 0, 0, 0x2, {0x7c0000, 256 * 1024} },
+	{ 0, 0, 0x3, {0x780000, 512 * 1024} },
+	{ 0, 0, 0x4, {0x700000, 1024 * 1024} },
+	{ 0, 0, 0x5, {0x600000, 2048 * 1024} },
+	{ 0, 0, 0x6, {0x400000, 4096 * 1024} },
+
+	{ 0, 1, 0x1, {0x000000, 128 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 256 * 1024} },
+	{ 0, 1, 0x3, {0x000000, 512 * 1024} },
+	{ 0, 1, 0x4, {0x000000, 1024 * 1024} },
+	{ 0, 1, 0x5, {0x000000, 2048 * 1024} },
+	{ 0, 1, 0x6, {0x000000, 4096 * 1024} },
+	{ X, X, 0x7, {0x000000, 8192 * 1024} },
+
+	{ 1, 0, 0x1, {0x7ff000, 4 * 1024} },
+	{ 1, 0, 0x2, {0x7fe000, 8 * 1024} },
+	{ 1, 0, 0x3, {0x7fc000, 16 * 1024} },
+	{ 1, 0, 0x4, {0x7f8000, 32 * 1024} },
+	{ 1, 0, 0x5, {0x7f8000, 32 * 1024} },
+	{ 1, 0, 0x6, {0x7f8000, 32 * 1024} },
+
+	{ 1, 1, 0x1, {0x000000, 4 * 1024} },
+	{ 1, 1, 0x2, {0x000000, 8 * 1024} },
+	{ 1, 1, 0x3, {0x000000, 16 * 1024} },
+	{ 1, 1, 0x4, {0x000000, 32 * 1024} },
+	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
+	{ 1, 1, 0x6, {0x000000, 32 * 1024} },
+};
+
 /* Given a flash chip, this function returns its range table. */
 static int w25_range_table(const struct flashchip *flash,
                            struct w25q_range **w25q_ranges,
@@ -653,6 +685,11 @@ static int w25_range_table(const struct flashchip *flash,
 			*w25q_ranges = w25q32_ranges;
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
+		case GIGADEVICE_GD25Q64:
+			*w25q_ranges = gd25q64_ranges;
+			*num_entries = ARRAY_SIZE(gd25q64_ranges);
+			break;
+		/* TODO(shawnn): add support for other GD parts */
 		default:
 			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
