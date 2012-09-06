@@ -39,7 +39,9 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
+#if USE_GEC_LOCK == 1
 #include "gec_lock.h"
+#endif
 #include "gec_ec_commands.h"
 #include "programmer.h"
 #include "spi.h"
