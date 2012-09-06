@@ -39,6 +39,9 @@
 
 #include "file.h"
 #include "flash.h"
+#if USE_GEC_LOCK == 1
+#include "gec_lock.h"
+#endif
 #include "gec_ec_commands.h"
 #include "programmer.h"
 
@@ -64,6 +67,8 @@
  */
 #define STM32_ERASE_DELAY	22500	/* 22.5ms */
 #define GEC_COMMAND_RETRIES	5
+#define GEC_LOCK_TIMEOUT_SECS 30  /* 30 secs */
+
 
 static int ec_timeout_usec = 1000000;
 
@@ -71,6 +76,10 @@ static unsigned int bus;
 
 static int gec_i2c_shutdown(void *data)
 {
+#if USE_GEC_LOCK == 1
+	release_gec_lock();
+#endif
+
 	return linux_i2c_shutdown(data);
 }
 
@@ -398,6 +407,13 @@ int gec_probe_i2c(const char *name)
 {
 	const char *path, *s, *p;
 	int ret = 1;
+
+#if USE_GEC_LOCK == 1
+	if (acquire_gec_lock(GEC_LOCK_TIMEOUT_SECS) < 0) {
+		msg_gerr("Could not acquire GEC lock.\n");
+		return 1;
+	}
+#endif
 
 	msg_pdbg("%s: probing for GEC on I2C...\n", __func__);
 
