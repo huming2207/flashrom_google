@@ -209,8 +209,11 @@ static int gec_command_i2c(int command, int version,
 	msg_pspew("\n");
 
 	ret = command_response(command, version, resp_buf[0]);
-	if (ret)
+	if (ret) {
 		msg_pdbg("command 0x%02x returned an error %d\n", command, ret);
+		goto done;
+	}
+
 	resp_len = resp_buf[1];
 	if (resp_len > insize) {
 		msg_perr("%s(): responsed size is too large %d > %d\n",
