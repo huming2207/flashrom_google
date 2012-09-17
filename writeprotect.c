@@ -540,6 +540,17 @@ static struct w25q_range gd25q64_ranges[] = {
 	{ 1, 1, 0x6, {0x000000, 32 * 1024} },
 };
 
+static struct w25q_range a25l040_ranges[] = {
+	{ X, X, 0x0, {0, 0} },	/* none */
+	{ X, X, 0x1, {0x70000, 64 * 1024} },
+	{ X, X, 0x2, {0x60000, 128 * 1024} },
+	{ X, X, 0x3, {0x40000, 256 * 1024} },
+	{ X, X, 0x4, {0x00000, 512 * 1024} },
+	{ X, X, 0x5, {0x00000, 512 * 1024} },
+	{ X, X, 0x6, {0x00000, 512 * 1024} },
+	{ X, X, 0x7, {0x00000, 512 * 1024} },
+};
+
 /* Given a flash chip, this function returns its range table. */
 static int w25_range_table(const struct flashchip *flash,
                            struct w25q_range **w25q_ranges,
@@ -692,6 +703,19 @@ static int w25_range_table(const struct flashchip *flash,
 		/* TODO(shawnn): add support for other GD parts */
 		default:
 			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->model_id);
+			return -1;
+		}
+		break;
+	case AMIC_ID_NOPREFIX:
+		switch(flash->model_id) {
+		case AMIC_A25L040:
+			*w25q_ranges = a25l040_ranges;
+			*num_entries = ARRAY_SIZE(a25l040_ranges);
+			break;
+		default:
+			msg_cerr("%s() %d: AMIC flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
 				 flash->model_id);
 			return -1;
