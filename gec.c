@@ -57,6 +57,11 @@ struct wp_data {
 static struct wp_data fake_wp;
 #define WP_STATE_HACK_FILENAME "/mnt/stateful_partition/flashrom_wp_state"
 
+/* If software sync is enabled, then we don't try the latest firmware copy
+ * after updating.
+ */
+#define SOFTWARE_SYNC_ENABLED
+
 /* 1 if we want the flashrom to call erase_and_write_flash() again. */
 static int need_2nd_pass = 0;
 
@@ -283,7 +288,9 @@ int gec_block_erase(struct flashchip *flash,
 		rc = EC_RES_SUCCESS;
 	}
 
+#ifndef SOFTWARE_SYNC_ENABLED
 	try_latest_firmware = 1;
+#endif
 	return rc;
 }
 
@@ -314,7 +321,9 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		rc = EC_RES_SUCCESS;
 	}
 
+#ifndef SOFTWARE_SYNC_ENABLED
 	try_latest_firmware = 1;
+#endif
 	return rc;
 }
 
