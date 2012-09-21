@@ -121,6 +121,12 @@ unsigned int shm_io_base;
 unsigned char *ce_high, *ce_low;
 static int it85xx_scratch_rom_reenter = 0;
 
+/* FIXME: gross hack for Stout to disable/enable EC interrupts */
+#define STOUT_EC_CMD_DISABLE_IRQ	0xd2
+#define STOUT_EC_CMD_ENABLE_IRQ		0xd3
+
+static int toggle_stout_ec_interrupts;
+
 /* This function will poll the keyboard status register until either
  * an expected value shows up, or the timeout is reached.
  * timeout is in usec.
@@ -146,6 +152,15 @@ static int wait_for(const unsigned int mask, const unsigned int expected_value,
 	return 1;
 }
 
+static int stout_ec_cmd(uint8_t cmd) {
+	if (wait_for(KB_IBF, 0, MAX_TIMEOUT, __func__, __LINE__, 0))
+		return 1;
+	OUTB(cmd, found_chip->port_cmd);
+	msg_pdbg("%s():%d sent command 0x%02x to EC\n",
+			__func__, __LINE__, cmd);
+	return 0;
+}
+
 /* IT8502 employs a scratch RAM when flash is being updated. Call the following
  * two functions before/after flash erase/program. */
 void it85xx_enter_scratch_rom(void)
@@ -154,7 +169,6 @@ void it85xx_enter_scratch_rom(void)
 
 	if (it85xx_scratch_rom_reenter > 0)
 		return;
-
 	msg_pdbg("%s: entering scratch rom mode\n", __func__);
 
 	for (tries = 0; tries < MAX_TRY; ++tries) {
@@ -241,10 +255,19 @@ void it85xx_exit_scratch_rom(void)
 
 static int it85xx_shutdown(void *data)
 {
+	int ret = 0;
+
 	msg_pdbg("%s():%d\n", __func__, __LINE__);
 	it85xx_exit_scratch_rom();
 
-	return 0;	/* FIXME: Should probably return something meaningful */
+	if (toggle_stout_ec_interrupts) {
+		if (stout_ec_cmd(STOUT_EC_CMD_ENABLE_IRQ))
+			msg_perr("%s():%d Failed to re-enable EC interrupts\n",
+				__func__, __LINE__);
+		ret = 1;
+	}
+
+	return ret;
 }
 
 static int it85xx_spi_common_init(struct superio s)
@@ -385,6 +408,18 @@ int it8518_spi_init(struct superio s)
 	}
 
 	found_chip = &ite_chips[ITE_IT8518];
+
+	/* FIXME: board hack */
+	if (dmi_match("Stout"))
+		toggle_stout_ec_interrupts = 1;
+
+	if (toggle_stout_ec_interrupts) {
+		if (stout_ec_cmd(STOUT_EC_CMD_DISABLE_IRQ)) {
+			msg_perr("%s():%d Failed to disable EC interrupts\n",
+				__func__, __LINE__);
+			return 1;
+		}
+	}
 
 #ifdef LPC_IO
         setup_it8518_io_base();
