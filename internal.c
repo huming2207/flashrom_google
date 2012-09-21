@@ -127,7 +127,7 @@ int register_superio(struct superio s)
 #endif
 
 int is_laptop = 0;
-int laptop_ok = 0;
+int laptop_ok = 1;	/* FIXME: proper whitelisting hasn't been added yet */
 
 static const struct par_programmer par_programmer_internal = {
 		.chip_readb		= internal_chip_readb,
@@ -337,8 +337,7 @@ int internal_init(void)
 	 */
 	coreboot_init();
 
-	/* FIXME: Removed to avoid annoying laptop warnings */
-	//dmi_init();
+	dmi_init();
 
 	if (probe_target_bus_later) {
 		/* read the target bus value from register. */
