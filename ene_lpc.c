@@ -99,13 +99,10 @@ static ene_chip ene_chips[] = {
 	  0x66, 0x68,      /* port_ec_{command,data} */
 	  0x7d, 0x10,      /* ec_reset_{cmd,data} */
 	  0x7f, 0x10,      /* ec_restart_{cmd,data} */
-	  	/*
-		 * TODO(rongchang): Add KB94X pause mode support
-		 */
-	  0,0,             /* ec_pause_{cmd,data} */
+	  0x7e, 0x10,      /* ec_pause_{cmd,data} */
 	  0xf710,          /* ec_status_buf */
 	  0x02, 0x00,      /* ec_is_{stopping,running} masks */
-	  0,               /* ec_is_pausing mask */
+	  0x01,		   /* ec_is_pausing mask */
 	  0x0380 },        /* port_io_base */
 };
 
@@ -135,6 +132,9 @@ static enum ene_ec_state ec_state = EC_STATE_NORMAL;
 #define EC_COMMAND_TIMEOUT 4
 #define EC_RESTART_TIMEOUT 10
 #define ENE_SPI_DELAY_CYCLE 4
+#define EC_PAUSE_TIMEOUT 12
+
+#define ENE_KB94X_PAUSE_WAKEUP_PORT  0x64
 
 static const uint8_t mask_input_buffer_full    = 2;
 static const uint8_t mask_output_buffer_full   = 1;
@@ -142,6 +142,8 @@ static const uint8_t mask_output_buffer_full   = 1;
 const int port_ene_bank   = 1;
 const int port_ene_offset = 2;
 const int port_ene_data   = 3;
+
+static struct timeval pause_begin, pause_now;
 
 static void ec_command(uint8_t cmd, uint8_t data)
 {
@@ -156,6 +158,7 @@ static void ec_command(uint8_t cmd, uint8_t data)
 			return;
 		}
 	}
+
 	/* Write command */
 	OUTB(cmd, found_chip->port_ec_command);
 
@@ -311,6 +314,8 @@ static int ene_pause_ec(void)
 		}
 	}
 
+
+	gettimeofday(&pause_begin, NULL);
 	ec_state = EC_STATE_IDLE;
 	return 0;
 }
@@ -319,8 +324,12 @@ static int ene_resume_ec(void)
 {
 	struct timeval begin, now;
 
-	/* Trigger 8051 interrupt to resume */
-	ene_write(REG_EC_EXTCMD, 0xff);
+
+	if (found_chip->chip_id == ENE_KB94X)
+		OUTB(0xff, ENE_KB94X_PAUSE_WAKEUP_PORT);
+	else
+		/* Trigger 8051 interrupt to resume */
+		ene_write(REG_EC_EXTCMD, 0xff);
 
 	gettimeofday(&begin, NULL);
 	while (ene_read(found_chip->ec_status_buf) !=
@@ -334,6 +343,18 @@ static int ene_resume_ec(void)
 	}
 
 	ec_state = EC_STATE_NORMAL;
+	return 0;
+}
+
+static int ene_pause_timeout_check(void)
+{
+	gettimeofday(&pause_now, NULL);
+	if ((pause_now.tv_sec - pause_begin.tv_sec) >=
+			     EC_PAUSE_TIMEOUT) {
+		if(ene_resume_ec() == 0)
+			ene_pause_ec();
+
+	}
 	return 0;
 }
 
@@ -370,6 +391,13 @@ static int ene_reset_ec(void)
 	return 0;
 }
 
+static int ene_enter_flash_mode(void)
+{
+	if (ene_pause_ec())
+		return ene_reset_ec();
+	return 0;
+}
+
 static int ene_spi_send_command(unsigned int writecnt,
 				unsigned int readcnt,
 				const unsigned char *writearr,
@@ -382,6 +410,8 @@ static int ene_spi_send_command(unsigned int writecnt,
 		ene_resume_ec();
 		ene_reset_ec();
 	}
+	else if(found_chip->chip_id == ENE_KB94X && ec_state == EC_STATE_IDLE)
+		ene_pause_timeout_check();
 
 	ene_spi_start();
 
@@ -408,13 +438,6 @@ static int ene_spi_send_command(unsigned int writecnt,
 	}
 
 	ene_spi_end();
-	return 0;
-}
-
-static int ene_enter_flash_mode(void)
-{
-	if (ene_pause_ec())
-		return ene_reset_ec();
 	return 0;
 }
 
