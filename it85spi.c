@@ -67,7 +67,7 @@ static ite_chip ite_chips[] = {
 	{ ITE_IT8518,
 	  0x62,
 	  0x66,
-	  0xD8,
+	  0xDD,		/* default value, see note in it85xx_spi_send_command */
 	  0xFF,
 	  500000,
 	}
@@ -302,6 +302,45 @@ static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *writearr, unsigned char *readarr)
 {
 	int i;
+	static int wdt_reset_flag_set = 0;
+
+	if (found_chip->chip_id == ITE_IT8518) {
+		/*
+		 * 0xd8 - Sets WDT reset flag to reboot EC after exiting from
+		 *        scratch mode. This flag will be be checked when
+		 *        command 0x8c is received. Use this when changing
+		 *        ROM content (erase / write commands).
+		 * 0xdd - Same as d8, but without setting the WDT reset flag.
+		 *        Use this for commands that do not change EC code.
+		 *
+		 * If opcode will cause ROM content to change and scratch
+		 * mode has been previously entered, then we need to re-enter
+		 * scratch mode using 0xd8.
+		 *
+		 * FIXME(dhendrix): This is specific to Stout. We should use
+		 * better method to apply board hacks rather than using the
+		 * EC's chip ID as the condition.
+		 */
+		switch (writearr[0]) {
+		case JEDEC_BYTE_PROGRAM:
+		case JEDEC_BE_52:
+		case JEDEC_BE_D7:
+		case JEDEC_BE_D8:
+		case JEDEC_CE_60:
+		case JEDEC_CE_C7:
+		case JEDEC_SE:
+			if (!wdt_reset_flag_set) {
+				msg_pdbg("%s: changing copy_to_sram_cmd\n",
+					__func__);
+				found_chip->copy_to_sram_cmd = 0xd8;
+				it85xx_exit_scratch_rom();
+				wdt_reset_flag_set = 1;
+			}
+			break;
+		default:
+			break;
+		}
+	}
 
 	it85xx_enter_scratch_rom();
 	/* Exit scratch ROM ONLY when programmer shuts down. Otherwise, the
