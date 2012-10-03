@@ -531,8 +531,22 @@ static int gec_set_range(const struct flashchip *flash,
 }
 
 
-static int gec_enable_writeprotect(const struct flashchip *flash) {
-	return set_wp(1);
+static int gec_enable_writeprotect(const struct flashchip *flash,
+		enum wp_mode wp_mode) {
+	int ret;
+
+	switch (wp_mode) {
+	case WP_MODE_HARDWARE:
+		ret = set_wp(1);
+		break;
+	default:
+		msg_perr("%s():%d Unsupported write-protection mode\n",
+				__func__, __LINE__);
+		ret = 1;
+		break;
+	}
+
+	return ret;
 }
 
 

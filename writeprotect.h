@@ -21,17 +21,26 @@
 #ifndef __WRITEPROTECT_H__
 #define __WRITEPROTECT_H__ 1
 
+enum wp_mode {
+	WP_MODE_UNKNOWN = -1,
+	WP_MODE_HARDWARE,	/* hardware WP pin determines status */
+	WP_MODE_POWER_CYCLE,	/* WP active until power off/on cycle */
+	WP_MODE_PERMANENT,	/* status register permanently locked,
+				   WP permanently enabled */
+};
+
 struct wp {
 	int (*list_ranges)(const struct flashchip *flash);
 	int (*set_range)(const struct flashchip *flash,
 			 unsigned int start, unsigned int len);
-	int (*enable)(const struct flashchip *flash);
+	int (*enable)(const struct flashchip *flash, enum wp_mode mode);
 	int (*disable)(const struct flashchip *flash);
 	int (*wp_status)(const struct flashchip *flash);
 };
 
 /* winbond w25-series */
-extern struct wp wp_w25;
+extern struct wp wp_w25;	/* older winbond chips (w25p, w25x, etc) */
+extern struct wp wp_w25q;
 extern struct wp wp_wpce775x;
 
 struct w25q_status {
@@ -44,9 +53,12 @@ struct w25q_status {
 	unsigned char tb : 1;
 	unsigned char sec : 1;
 	unsigned char srp0 : 1;
-	/* FIXME: what about the second status register? */
-//	unsigned char srp1 : 1;
-//	unsigned char qe : 1;
+} __attribute__ ((packed));
+
+struct w25q_status_2 {
+	unsigned char srp1 : 1;
+	unsigned char qe : 1;
+	unsigned char rsvd : 6;
 } __attribute__ ((packed));
 
 int w25_range_to_status(const struct flashchip *flash,
@@ -55,5 +67,6 @@ int w25_range_to_status(const struct flashchip *flash,
 int w25_status_to_range(const struct flashchip *flash,
                         const struct w25q_status *status,
                         unsigned int *start, unsigned int *len);
+enum wp_mode get_wp_mode(const char *mode_str);
 
 #endif				/* !__WRITEPROTECT_H__ */

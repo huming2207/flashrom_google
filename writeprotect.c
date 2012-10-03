@@ -34,11 +34,16 @@
  */
 #define WRITE_STATUS_REGISTER_DELAY 100 * 1000  /* unit: us */
 
-/* Mask to extract SRP0 and range bits in status register.
- *   SRP0:           bit 7
- *   range(BP2-BP0): bit 4-2
+/*
+ * Mask to extract write-protect enable and range bits
+ *   Status register 1:
+ *     SRP0:           bit 7
+ *     range(BP2-BP0): bit 4-2
+ *   Status register 2:
+ *     SRP1:           bit 1
  */
 #define MASK_WP_AREA (0x9C)
+#define MASK_WP2_AREA (0x01)
 
 /*
  * The following procedures rely on look-up tables to match the user-specified
@@ -888,7 +893,6 @@ static int w25_wp_status(const struct flashchip *flash)
 
 	memset(&status, 0, sizeof(status));
 	tmp = spi_read_status_register();
-	/* FIXME: this is NOT endian-free copy. */
 	memcpy(&status, &tmp, 1);
 	msg_cinfo("WP: status: 0x%02x\n", tmp);
 	msg_cinfo("WP: status.srp0: %x\n", status.srp0);
@@ -931,11 +935,20 @@ static int w25_set_srp0(const struct flashchip *flash, int enable)
 	return 0;
 }
 
-static int w25_enable_writeprotect(const struct flashchip *flash)
+static int w25_enable_writeprotect(const struct flashchip *flash,
+		enum wp_mode wp_mode)
 {
 	int ret;
 
-	ret = w25_set_srp0(flash, 1);
+	switch (wp_mode) {
+	case WP_MODE_HARDWARE:
+		ret = w25_set_srp0(flash, 1);
+		break;
+	default:
+		msg_cerr("%s(): unsupported write-protect mode\n", __func__);
+		return 1;
+	}
+
 	if (ret)
 		msg_cerr("%s(): error=%d.\n", __func__, ret);
 	return ret;
@@ -966,10 +979,275 @@ static int w25_list_ranges(const struct flashchip *flash)
 	return 0;
 }
 
+/* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
+uint8_t w25q_read_status_register_2(void)
+{
+	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x35 };
+	unsigned char readarr[2];
+	int ret;
+
+	/* Read Status Register */
+	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
+	if (ret) {
+		/*
+		 * FIXME: make this a benign failure for now in case we are
+		 * unable to execute the opcode
+		 */
+		msg_cdbg("RDSR2 failed!\n");
+		readarr[0] = 0x00;
+	}
+
+	return readarr[0];
+}
+
+static int w25q_wp_status(const struct flashchip *flash)
+{
+	struct w25q_status sr1;
+	struct w25q_status_2 sr2;
+	uint8_t tmp;
+	unsigned int start, len;
+	int ret = 0;
+
+	memset(&sr1, 0, sizeof(sr1));
+	tmp = spi_read_status_register();
+	memcpy(&sr1, &tmp, 1);
+	memset(&sr2, 0, sizeof(sr2));
+	tmp = w25q_read_status_register_2();
+	memcpy(&sr2, &tmp, 1);
+
+	msg_cinfo("WP: status: 0x%02x%02x\n", sr2, sr1);
+	msg_cinfo("WP: status.srp0: %x\n", sr1.srp0);
+	msg_cinfo("WP: status.srp1: %x\n", sr2.srp1);
+	msg_cinfo("WP: write protect is %s.\n",
+	          (sr1.srp0 || sr2.srp1) ? "enabled" : "disabled");
+
+	msg_cinfo("WP: write protect range: ");
+	if (w25_status_to_range(flash, &sr1, &start, &len)) {
+		msg_cinfo("(cannot resolve the range)\n");
+		ret = -1;
+	} else {
+		msg_cinfo("start=0x%08x, len=0x%08x\n", start, len);
+	}
+
+	return ret;
+}
+
+/*
+ * W25Q adds an optional byte to the standard WRSR opcode. If /CS is
+ * de-asserted after the first byte, then it acts like a JEDEC-standard
+ * WRSR command. if /CS is asserted, then the next data byte is written
+ * into status register 2.
+ */
+#define W25Q_WRSR_OUTSIZE	0x03
+static int w25q_write_status_register_WREN(uint8_t s1, uint8_t s2)
+{
+	int result;
+	struct spi_command cmds[] = {
+	{
+	/* FIXME: WRSR requires either EWSR or WREN depending on chip type. */
+		.writecnt       = JEDEC_WREN_OUTSIZE,
+		.writearr       = (const unsigned char[]){ JEDEC_WREN },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = W25Q_WRSR_OUTSIZE,
+		.writearr       = (const unsigned char[]){ JEDEC_WRSR, s1, s2 },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = 0,
+		.writearr       = NULL,
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}};
+
+	result = spi_send_multicommand(cmds);
+	if (result) {
+	        msg_cerr("%s failed during command execution\n",
+	                __func__);
+	}
+
+	/* WRSR performs a self-timed erase before the changes take effect. */
+	programmer_delay(WRITE_STATUS_REGISTER_DELAY);
+
+	return result;
+}
+
+/*
+ * Set/clear the SRP1 bit in status register 2.
+ * FIXME: make this more generic if other chips use the same SR2 layout
+ */
+static int w25q_set_srp1(const struct flashchip *flash, int enable)
+{
+	struct w25q_status sr1;
+	struct w25q_status_2 sr2;
+	uint8_t tmp, expected;
+
+	tmp = spi_read_status_register();
+	memcpy(&sr1, &tmp, 1);
+	tmp = w25q_read_status_register_2();
+	memcpy(&sr2, &tmp, 1);
+
+	msg_cdbg("%s: old status 2: 0x%02x\n", __func__, tmp);
+
+	sr2.srp1 = enable ? 1 : 0;
+
+	memcpy(&expected, &sr2, 1);
+	w25q_write_status_register_WREN(*((uint8_t *)&sr1), *((uint8_t *)&sr2));
+
+	tmp = w25q_read_status_register_2();
+	msg_cdbg("%s: new status 2: 0x%02x\n", __func__, tmp);
+	if ((tmp & MASK_WP2_AREA) != (expected & MASK_WP2_AREA))
+		return 1;
+
+	return 0;
+}
+
+enum wp_mode get_wp_mode(const char *mode_str)
+{
+	enum wp_mode wp_mode = WP_MODE_UNKNOWN;
+
+	if (!strcasecmp(mode_str, "hardware"))
+		wp_mode = WP_MODE_HARDWARE;
+	else if (!strcasecmp(mode_str, "power_cycle"))
+		wp_mode = WP_MODE_POWER_CYCLE;
+	else if (!strcasecmp(mode_str, "permanent"))
+		wp_mode = WP_MODE_PERMANENT;
+
+	return wp_mode;
+}
+
+static int w25q_disable_writeprotect(const struct flashchip *flash,
+		enum wp_mode wp_mode)
+{
+	int ret = 1;
+	struct w25q_status sr1;
+	struct w25q_status_2 sr2;
+	uint8_t tmp;
+
+	switch (wp_mode) {
+	case WP_MODE_HARDWARE:
+		ret = w25_set_srp0(flash, 0);
+		break;
+	case WP_MODE_POWER_CYCLE:
+		tmp = w25q_read_status_register_2();
+		memcpy(&sr2, &tmp, 1);
+		if (sr2.srp1) {
+			msg_cerr("%s(): must disconnect power to disable "
+					"write-protection\n", __func__);
+		} else {
+			ret = 0;
+		}
+		break;
+	case WP_MODE_PERMANENT:
+		msg_cerr("%s(): cannot disable permanent write-protection\n",
+				__func__);
+		break;
+	default:
+		msg_cerr("%s(): invalid mode specified\n", __func__);
+		break;
+	}
+
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
+	return ret;
+}
+
+static int w25q_disable_writeprotect_default(const struct flashchip *flash)
+{
+	return w25q_disable_writeprotect(flash, WP_MODE_HARDWARE);
+}
+
+static int w25q_enable_writeprotect(const struct flashchip *flash,
+		enum wp_mode wp_mode)
+{
+	int ret = 1;
+	struct w25q_status sr1;
+	struct w25q_status_2 sr2;
+	uint8_t tmp;
+
+	switch (wp_mode) {
+	case WP_MODE_HARDWARE:
+		if (w25q_disable_writeprotect(flash, WP_MODE_POWER_CYCLE)) {
+			msg_cerr("%s(): cannot disable power cycle WP mode\n",
+					__func__);
+			break;
+		}
+
+		tmp = spi_read_status_register();
+		memcpy(&sr1, &tmp, 1);
+		if (sr1.srp0)
+			ret = 0;
+		else
+			ret = w25_set_srp0(flash, 1);
+
+		break;
+	case WP_MODE_POWER_CYCLE:
+		if (w25q_disable_writeprotect(flash, WP_MODE_HARDWARE)) {
+			msg_cerr("%s(): cannot disable hardware WP mode\n",
+					__func__);
+			break;
+		}
+
+		tmp = w25q_read_status_register_2();
+		memcpy(&sr2, &tmp, 1);
+		if (sr2.srp1)
+			ret = 0;
+		else
+			ret = w25q_set_srp1(flash, 1);
+
+		break;
+	case WP_MODE_PERMANENT:
+		tmp = spi_read_status_register();
+		memcpy(&sr1, &tmp, 1);
+		if (sr1.srp0 == 0) {
+			ret = w25_set_srp0(flash, 1);
+			if (ret) {
+				msg_perr("%s(): cannot enable SRP0 for ",
+						"permanent WP\n", __func__);
+				break;
+			}
+		}
+
+		tmp = w25q_read_status_register_2();
+		memcpy(&sr2, &tmp, 1);
+		if (sr2.srp1 == 0) {
+			ret = w25q_set_srp1(flash, 1);
+			if (ret) {
+				msg_perr("%s(): cannot enable SRP1 for ",
+						"permanent WP\n", __func__);
+				break;
+			}
+		}
+
+		break;
+	}
+
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
+	return ret;
+}
+
+/* W25P, W25X, and many flash chips from various vendors */
 struct wp wp_w25 = {
 	.list_ranges	= w25_list_ranges,
 	.set_range	= w25_set_range,
 	.enable		= w25_enable_writeprotect,
 	.disable	= w25_disable_writeprotect,
 	.wp_status	= w25_wp_status,
+
+};
+
+/* W25Q series has features such as a second status register and SFDP */
+struct wp wp_w25q = {
+	.list_ranges	= w25_list_ranges,
+	.set_range	= w25_set_range,
+	.enable		= w25q_enable_writeprotect,
+	/*
+	 * By default, disable hardware write-protection. We may change
+	 * this later if we want to add fine-grained write-protect disable
+	 * as a command-line option.
+	 */
+	.disable	= w25q_disable_writeprotect_default,
+	.wp_status	= w25q_wp_status,
 };

@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
 		{"diff", 1, 0, LONGOPT_DIFF},
 		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
-		{"wp-enable", 0, 0, LONGOPT_WP_ENABLE},
+		{"wp-enable", optional_argument, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
 		{"wp-list", 0, 0, LONGOPT_WP_LIST},
 		{"broken-timers", 0, 0, 'b' },
@@ -274,6 +274,7 @@ int main(int argc, char *argv[])
 
 	char *tempstr = NULL;
 	char *pparam = NULL;
+	char *wp_mode_opt = NULL;
 
 	print_version();
 
@@ -480,6 +481,8 @@ int main(int argc, char *argv[])
 			break;
 		case LONGOPT_WP_ENABLE:
 			set_wp_enable = 1;
+			if (optarg)
+				wp_mode_opt = strdup(optarg);
 			break;
 		case LONGOPT_WP_DISABLE:
 			set_wp_disable = 1;
@@ -720,8 +723,21 @@ int main(int argc, char *argv[])
 	}
 	
 	if (!rc && set_wp_enable) {
+		enum wp_mode wp_mode;
+
+		if (wp_mode_opt)
+			wp_mode = get_wp_mode(wp_mode_opt);
+		else
+			wp_mode = WP_MODE_HARDWARE;	/* default */
+
+		if (wp_mode == WP_MODE_UNKNOWN) {
+			printf("Error: Invalid WP mode: \"%s\"\n", wp_mode_opt);
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
 		if (fill_flash->wp && fill_flash->wp->enable) {
-			rc |= fill_flash->wp->enable(fill_flash);
+			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
 		} else {
 			printf("Error: write protect is not supported "
 			       "on this flash chip.\n");
