@@ -113,16 +113,9 @@ int spi_write_disable(void)
 	return spi_send_command(sizeof(cmd), 0, cmd, NULL);
 }
 
-static int probe_spi_rdid_generic(struct flashchip *flash, int bytes)
+static void rdid_get_ids(unsigned char *readarr,
+		int bytes, uint32_t *id1, uint32_t *id2)
 {
-	unsigned char readarr[4];
-	uint32_t id1;
-	uint32_t id2;
-
-	if (spi_rdid(readarr, bytes)) {
-		return 0;
-	}
-
 	if (!oddparity(readarr[0]))
 		msg_cdbg("RDID byte 0 parity violation. ");
 
@@ -132,18 +125,21 @@ static int probe_spi_rdid_generic(struct flashchip *flash, int bytes)
 	if (readarr[0] == 0x7f) {
 		if (!oddparity(readarr[1]))
 			msg_cdbg("RDID byte 1 parity violation. ");
-		id1 = (readarr[0] << 8) | readarr[1];
-		id2 = readarr[2];
+		*id1 = (readarr[0] << 8) | readarr[1];
+		*id2 = readarr[2];
 		if (bytes > 3) {
-			id2 <<= 8;
-			id2 |= readarr[3];
+			*id2 <<= 8;
+			*id2 |= readarr[3];
 		}
 	} else {
-		id1 = readarr[0];
-		id2 = (readarr[1] << 8) | readarr[2];
+		*id1 = readarr[0];
+		*id2 = (readarr[1] << 8) | readarr[2];
 	}
+}
 
-	msg_cdbg("%s: id1 0x%02x, id2 0x%02x\n", __func__, id1, id2);
+static int compare_id(struct flashchip *flash, uint32_t id1, uint32_t id2)
+{
+	msg_cdbg("id1 0x%02x, id2 0x%02x\n", id1, id2);
 
 	if (id1 == flash->manufacture_id && id2 == flash->model_id) {
 		/* Print the status register to tell the
@@ -169,11 +165,26 @@ static int probe_spi_rdid_generic(struct flashchip *flash, int bytes)
 
 int probe_spi_rdid(struct flashchip *flash)
 {
-	return probe_spi_rdid_generic(flash, 3);
+	unsigned char readarr[3];
+	static int cached = 0;
+	static uint32_t id1, id2;
+
+	if (!cached) {
+		if (spi_rdid(readarr, 3))
+			return 0;
+		rdid_get_ids(readarr, 3, &id1, &id2);
+		cached = 1;
+	}
+
+	return compare_id(flash, id1, id2);
 }
 
 int probe_spi_rdid4(struct flashchip *flash)
 {
+	unsigned char readarr[4];
+	static uint32_t id1, id2;
+	static int cached = 0;
+
 	/* Some SPI controllers do not support commands with writecnt=1 and
 	 * readcnt=4.
 	 */
@@ -183,51 +194,39 @@ int probe_spi_rdid4(struct flashchip *flash)
 	case SPI_CONTROLLER_IT87XX:
 	case SPI_CONTROLLER_WBSIO:
 		msg_cinfo("4 byte RDID not supported on this SPI controller\n");
-		return 0;
 		break;
 #endif
 #endif
 	default:
-		return probe_spi_rdid_generic(flash, 4);
+		break;
 	}
 
-	return 0;
+	if (!cached) {
+		if (spi_rdid(readarr, 4))
+			return 0;
+		rdid_get_ids(readarr, 4, &id1, &id2);
+		cached = 1;
+	}
+	return compare_id(flash, id1, id2);
 }
 
 int probe_spi_rems(struct flashchip *flash)
 {
 	unsigned char readarr[JEDEC_REMS_INSIZE];
-	uint32_t id1, id2;
+	static uint32_t id1, id2;
+	static int cached = 0;
 
-	if (spi_rems(readarr)) {
-		return 0;
+	if (!cached) {
+		if (spi_rems(readarr)) {
+			return 0;
+		}
+
+		id1 = readarr[0];
+		id2 = readarr[1];
+		cached = 1;
 	}
 
-	id1 = readarr[0];
-	id2 = readarr[1];
-
-	msg_cdbg("%s: id1 0x%x, id2 0x%x\n", __func__, id1, id2);
-
-	if (id1 == flash->manufacture_id && id2 == flash->model_id) {
-		/* Print the status register to tell the
-		 * user about possible write protection.
-		 */
-		spi_prettyprint_status_register(flash);
-
-		return 1;
-	}
-
-	/* Test if this is a pure vendor match. */
-	if (id1 == flash->manufacture_id &&
-	    GENERIC_DEVICE_ID == flash->model_id)
-		return 1;
-
-	/* Test if there is any vendor ID. */
-	if (GENERIC_MANUF_ID == flash->manufacture_id &&
-	    id1 != 0xff)
-		return 1;
-
-	return 0;
+	return compare_id(flash, id1, id2);
 }
 
 int probe_spi_res1(struct flashchip *flash)
