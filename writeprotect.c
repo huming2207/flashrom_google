@@ -1004,18 +1004,19 @@ static int w25q_wp_status(const struct flashchip *flash)
 {
 	struct w25q_status sr1;
 	struct w25q_status_2 sr2;
-	uint8_t tmp;
+	uint8_t tmp[2];
 	unsigned int start, len;
 	int ret = 0;
 
 	memset(&sr1, 0, sizeof(sr1));
-	tmp = spi_read_status_register();
-	memcpy(&sr1, &tmp, 1);
-	memset(&sr2, 0, sizeof(sr2));
-	tmp = w25q_read_status_register_2();
-	memcpy(&sr2, &tmp, 1);
+	tmp[0] = spi_read_status_register();
+	memcpy(&sr1, &tmp[0], 1);
 
-	msg_cinfo("WP: status: 0x%02x%02x\n", sr2, sr1);
+	memset(&sr2, 0, sizeof(sr2));
+	tmp[1] = w25q_read_status_register_2();
+	memcpy(&sr2, &tmp[1], 1);
+
+	msg_cinfo("WP: status: 0x%02x%02x\n", tmp[1], tmp[0]);
 	msg_cinfo("WP: status.srp0: %x\n", sr1.srp0);
 	msg_cinfo("WP: status.srp1: %x\n", sr2.srp1);
 	msg_cinfo("WP: write protect is %s.\n",
@@ -1121,7 +1122,6 @@ static int w25q_disable_writeprotect(const struct flashchip *flash,
 		enum wp_mode wp_mode)
 {
 	int ret = 1;
-	struct w25q_status sr1;
 	struct w25q_status_2 sr2;
 	uint8_t tmp;
 
@@ -1203,7 +1203,7 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 		if (sr1.srp0 == 0) {
 			ret = w25_set_srp0(flash, 1);
 			if (ret) {
-				msg_perr("%s(): cannot enable SRP0 for ",
+				msg_perr("%s(): cannot enable SRP0 for "
 						"permanent WP\n", __func__);
 				break;
 			}
@@ -1214,12 +1214,15 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 		if (sr2.srp1 == 0) {
 			ret = w25q_set_srp1(flash, 1);
 			if (ret) {
-				msg_perr("%s(): cannot enable SRP1 for ",
+				msg_perr("%s(): cannot enable SRP1 for "
 						"permanent WP\n", __func__);
 				break;
 			}
 		}
 
+		break;
+	default:
+		msg_perr("%s(): invalid mode %d\n", __func__, wp_mode);
 		break;
 	}
 
