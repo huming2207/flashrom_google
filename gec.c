@@ -54,7 +54,6 @@ struct wp_data {
 	unsigned int start;
 	unsigned int len;
 };
-static struct wp_data fake_wp;
 #define WP_STATE_HACK_FILENAME "/mnt/stateful_partition/flashrom_wp_state"
 
 /* If software sync is enabled, then we don't try the latest firmware copy
@@ -571,7 +570,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 			 rc);
 		return 1;
 	} else if (rc < sizeof(r)) {
-		msg_perr("FAILED: Too little data returned (expected:%d, "
+		msg_perr("FAILED: Too little data returned (expected:%zd, "
 			 "actual:%d)\n", sizeof(r), rc);
 		return 1;
 	}
