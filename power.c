@@ -30,11 +30,8 @@ enum pm_state {
 	PM_ON,
 };
 
-/* power management daemons used in Chromium OS */
-static struct chromiumos_pm {
-	enum pm_state powerd;	/* power management running inside minijail */
-	enum pm_state powerm;	/* power management running outside minijail */
-} pm_state_at_start;
+/* power management daemon used in Chromium OS */
+enum pm_state powerd_state_at_start;
 
 static int pm_disabled;
 
@@ -46,19 +43,14 @@ int disable_power_management()
 		return 0;
 	}
 
-	msg_pdbg("%s: Disabling power management services.\n", __func__);
+	msg_pdbg("%s: Disabling power management service.\n", __func__);
 
 	/* if the service terminates successfully, then it was running when
 	 * flashrom was invoked */
 	if (system("stop powerd >/dev/null 2>&1") == 0)
-		pm_state_at_start.powerd = PM_ON;
+		powerd_state_at_start = PM_ON;
 	else
-		pm_state_at_start.powerd = PM_OFF;
-
-	if (system("stop powerm >/dev/null 2>&1") == 0)
-		pm_state_at_start.powerm = PM_ON;
-	else
-		pm_state_at_start.powerm = PM_OFF;
+		powerd_state_at_start = PM_OFF;
 
 	pm_disabled = 1;
 	return 0;
@@ -74,18 +66,11 @@ int restore_power_management()
 		return 0;
 	}
 
-	msg_pdbg("%s: (Re-)Enabling power management services\n", __func__);
+	msg_pdbg("%s: (Re-)Enabling power management service\n", __func__);
 
-	if (pm_state_at_start.powerd == PM_ON) {
+	if (powerd_state_at_start == PM_ON) {
 		if (system("start powerd >/dev/null 2>&1") != 0) {
 			msg_perr("Cannot restart powerd service\n");
-			rc |= 1;
-		}
-	}
-
-	if (pm_state_at_start.powerm == PM_ON) {
-		if (system("start powerm >/dev/null 2>&1") != 0) {
-			msg_perr("Cannot restart powerm service\n");
 			rc |= 1;
 		}
 	}
