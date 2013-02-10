@@ -630,9 +630,6 @@ int mec1308_probe_spi_flash(const char *name);
 /* sb600spi.c */
 int sb600_probe_spi(struct pci_dev *dev);
 
-/* tegra2_spi.c */
-int tegra2_spi_init(void);
-
 /* wbsio_spi.c */
 int wbsio_check_for_spi(void);
 #endif

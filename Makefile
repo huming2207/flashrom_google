@@ -363,7 +363,7 @@ PROGRAMMER_OBJS += gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o
 else
 ifeq ($(ARCH),"arm")
-PROGRAMMER_OBJS += gec_i2c.o tegra2_spi.o
+PROGRAMMER_OBJS += gec_i2c.o
 endif
 NEED_PCI := yes
 endif
@@ -544,7 +544,7 @@ FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "UTSNAME := yes" .features && printf 
 FEATURE_LIBS += $(shell LC_ALL=C grep -q "NEEDLIBZ := yes" .libdeps && printf "%s" "-lz")
 
 LIBFLASHROM_OBJS = $(CHIP_OBJS) $(PROGRAMMER_OBJS) $(LIB_OBJS)
-OBJS = $(CLI_OBJS) $(LIBFLASHROM_OBJS) 
+OBJS = $(CLI_OBJS) $(LIBFLASHROM_OBJS)
 
 $(PROGRAM)$(EXEC_SUFFIX): $(OBJS)
 	$(CC) $(LDFLAGS) -o $(PROGRAM)$(EXEC_SUFFIX) $(OBJS) $(FEATURE_LIBS) $(LIBS)

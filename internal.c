@@ -315,8 +315,7 @@ int internal_init(void)
 	 *   2. without -p (the default programmer, which is internal too)
 	 *
 	 * This code would try to auto-detect the /dev/spidevX.Y.
-	 * If failed, try processor_flash_enable() then (which will register
-	 * tegra2 spi programmer).
+	 * If failed, try processor_flash_enable() then.
 	 *
 	 * The -p linux_spi still works because the programmer_init() would
 	 * call the linux_spi_init() in flashrom.c.
