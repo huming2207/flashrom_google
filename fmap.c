@@ -123,14 +123,15 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 	return flash->total_size * 1024 - from_top;
 }
 
-int fmap_find(struct flashchip *flash, uint8_t **buf)
+int fmap_find_signature(struct flashchip *flash, const char *sig_str,
+			int sig_len, off_t *offsetp)
 {
 	long int offset = 0, ceiling_size;
 	uint64_t sig, tmp64;
 	struct fmap fmap;
 	int fmap_size, fmap_found = 0, stride;
 
-	memcpy(&sig, FMAP_SIGNATURE, strlen(FMAP_SIGNATURE));
+	memcpy(&sig, sig_str, sig_len);
 
 	offset = get_crossystem_fmap_base(flash);
 	if (CROSSYSTEM_FAIL != offset) {
@@ -227,8 +228,26 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 	if (!fmap_found)
 		return 0;
 
-	if (offset < 0) return -1;
+	if (offset < 0)
+		return -1;
 
+	/* found */
+	*offsetp = offset;
+	return 1;
+}
+
+
+int fmap_find(struct flashchip *flash, uint8_t **buf)
+{
+	struct fmap fmap;
+	off_t offset;
+	int fmap_size;
+	int ret;
+
+	ret = fmap_find_signature(flash, FMAP_SIGNATURE,
+				  strlen(FMAP_SIGNATURE), &offset);
+	if (ret <= 0)
+		return ret;
 	if (flash->read(flash, (uint8_t *)&fmap, offset, sizeof(fmap))) {
 		msg_gdbg("[L%d] failed to read flash at offset 0x%lx\n",
 		         __LINE__, offset);
@@ -245,7 +264,6 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 	}
 	return fmap_size;
 }
-
 
 /* Like fmap_find, but give a memory location to search FMAP. */
 struct fmap *fmap_find_in_memory(uint8_t *image, int size)
