@@ -111,10 +111,18 @@ static int manual_mknod(const char *dev)
 	msg_pdbg("Creating SPI device node %s...\n", dev);
 	strcpy(cmd, "modprobe spidev");
 	msg_pdbg("CMD: [%s]\n", cmd);
-	system(cmd);
+	if (system(cmd)) {
+		msg_perr("%s: failed to run '%s': %s\n", __func__,
+			 cmd, strerror(errno));
+		return -1;
+	}
 	snprintf(cmd, sizeof(cmd), "mknod %s c %d 0", dev, SPIDEV_MAJOR);
 	msg_pdbg("CMD: [%s]\n", cmd);
-	system(cmd);
+	if (system(cmd)) {
+		msg_perr("%s: failed to run '%s': %s\n", __func__,
+			 cmd, strerror(errno));
+		return -1;
+	}
 
 	if ((fd = open(dev, O_RDWR)) == -1) {
 		msg_perr("%s: failed to open %s: %s\n", __func__,
