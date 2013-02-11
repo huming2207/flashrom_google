@@ -247,6 +247,16 @@ CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 
 LIB_OBJS = layout.o file.o fmap.o power.o search.o
 
+ifeq ($(CONFIG_FDTMAP), yes)
+FEATURE_CFLAGS += -D'CONFIG_FDTMAP=1'
+LIB_OBJS += fdtmap.o
+ifeq ($(CONFIG_STATIC), yes)
+LIBS += -static -lfdt -lz
+else
+LIBS += -lfdt -lz
+endif
+endif
+
 LOCK_OBJS = csem.o ipc_lock.o big_lock.o gec_lock.o
 ifeq ($(shell ./util/use_big_lock.sh), 0)
 LIB_OBJS += $(LOCK_OBJS)
@@ -335,6 +345,9 @@ CONFIG_SATAMV ?= yes
 
 # Disable wiki printing by default. It is only useful if you have wiki access.
 CONFIG_PRINT_WIKI ?= no
+
+# Support for reading a flashmap from a device tree in the image
+CONFIG_FDTMAP ?= no
 
 # Bitbanging SPI infrastructure, default off unless needed.
 ifeq ($(CONFIG_RAYER_SPI), yes)

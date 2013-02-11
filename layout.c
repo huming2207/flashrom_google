@@ -23,8 +23,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <zlib.h>
+
 #include "flash.h"
+#include "fdtmap.h"
 #include "fmap.h"
+#include "libfdt.h"
+#include "layout.h"
 #include "programmer.h"
 #include "search.h"
 
@@ -35,14 +40,6 @@ char *mainboard_part = NULL;
 static int romimages = 0;
 
 #define MAX_ROMLAYOUT	64
-
-typedef struct {
-	unsigned int start;
-	unsigned int end;
-	unsigned int included;
-	char name[256];
-	char file[256];  /* file[0]=='\0' means not specified. */
-} romlayout_t;
 
 /*
  * include_args lists arguments specified at the command line with -i. They
@@ -290,28 +287,17 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 	return 0;
 }
 
-/* returns the number of entries added, or <0 to indicate error */
-int add_fmap_entries(struct flashchip *flash)
+static int add_fmap_entries_from_buf(struct flashchip *flash,
+				     const uint8_t *buf)
 {
-	int i, fmap_size;
-	uint8_t *buf = NULL;
 	struct fmap *fmap;
+	int i;
 
-	fmap_size = fmap_find(flash, get_crossystem_fmap_base, &buf);
-	if (fmap_size == 0) {
-		msg_gdbg("%s: no fmap present\n", __func__);
-		return 0;
-	} else if (fmap_size < 0) {
-		msg_gdbg("%s: error reading fmap\n", __func__);
-		return -1;
-	} else {
-		fmap = (struct fmap *)(buf);
-	}
+	fmap = (struct fmap *)(buf);
 
 	for (i = 0; i < fmap->nareas; i++) {
 		if (romimages >= MAX_ROMLAYOUT) {
 			msg_gerr("ROM image contains too many regions\n");
-			free(buf);
 			return -1;
 		}
 		rom_entries[romimages].start = fmap->areas[i].offset;
@@ -345,8 +331,108 @@ int add_fmap_entries(struct flashchip *flash)
 		romimages++;
 	}
 
-	free(buf);
-	return fmap->nareas;
+	return romimages;
+}
+
+#ifdef CONFIG_FDTMAP
+static int find_and_process_fdtmap(struct flashchip *flash)
+{
+	struct search_info search;
+	struct fdtmap_hdr hdr;
+	off_t offset;
+	int fmap_size;
+	uint8_t *buf;
+	uint32_t crc;
+	int ret = -1;
+
+	search_init(&search, flash, sizeof(hdr));
+	search.handler = get_crossystem_fmap_base;
+	while (!search_find_next(&search, &offset)) {
+		if (search.image)
+			memcpy(&hdr, search.image + offset, sizeof(hdr));
+		else if (flash->read(flash, (uint8_t *)&hdr, offset,
+				sizeof(hdr))) {
+			msg_gdbg("[L%d] failed to read flash at offset %#lx\n",
+				__LINE__, offset);
+			return -1;
+		}
+		if (memcmp(hdr.sig, FDTMAP_SIGNATURE, sizeof(hdr.sig)))
+			continue;
+
+		msg_gdbg("%s: found possible fdtmap at offset %#lx\n",
+			 __func__, offset);
+
+		fmap_size = hdr.size;
+		buf = malloc(fmap_size);
+		msg_gdbg("%s: fdtmap size %#x\n", __func__, fmap_size);
+
+		/* We may as well just read it here, to simplify the code */
+		if (flash->read(flash, buf, offset + sizeof(hdr), fmap_size)) {
+			msg_gdbg("[L%d] failed to read %d bytes at offset %#lx\n",
+				__LINE__, fmap_size, offset);
+			continue;
+		}
+
+		/* Sanity check, the FDT total size should equal fmap_size */
+		if (fdt_totalsize(buf) != fmap_size) {
+			msg_gdbg("[L%d] FDT size %#x did not match header size %#x"
+				" at %#lx\n", __LINE__, fdt_totalsize(buf),
+				fmap_size, offset);
+			continue;
+		}
+
+		crc = crc32(0, Z_NULL, 0);
+		crc = crc32(crc, buf, fmap_size);
+		/* Sanity check, the FDT total size should equal fmap_size */
+		if (crc != hdr.crc32) {
+			msg_gdbg("[L%d] CRC32 %#08x did not match expected %#08x"
+				" at %#lx\n", __LINE__, crc, hdr.crc32, offset);
+			continue;
+		}
+
+		/* It looks valid, so use it */
+		romimages = fdtmap_add_entries_from_buf(buf, rom_entries,
+							MAX_ROMLAYOUT);
+		free(buf);
+		ret = 0;
+		break;
+	}
+
+	search_free(&search);
+	return ret;
+}
+#endif /* CONFIG_FDTMAP */
+
+/* returns the number of entries added, or <0 to indicate error */
+int add_fmap_entries(struct flashchip *flash)
+{
+	int ret = -1;
+
+	/*
+	 * Look for an FDT first as it has more information. Fall back to
+	 * using the FMAP
+	 */
+#ifdef CONFIG_FDTMAP
+	ret = find_and_process_fdtmap(flash);
+#endif /* CONFIG_FDTMAP */
+	if (ret < 0) {
+		int fmap_size;
+		uint8_t *buf;
+
+		fmap_size = fmap_find(flash, get_crossystem_fmap_base, &buf);
+		if (fmap_size == 0) {
+			msg_gdbg("%s: no fmap present\n", __func__);
+			return 0;
+		} else if (fmap_size < 0) {
+			msg_gdbg("%s: error reading fmap\n", __func__);
+			return -1;
+		}
+
+		romimages = add_fmap_entries_from_buf(flash, buf);
+		free(buf);
+	}
+
+	return romimages;
 }
 
 int get_num_include_args(void) {
