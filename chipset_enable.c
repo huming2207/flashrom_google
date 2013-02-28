@@ -506,6 +506,8 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	static const char *const straps_names_ich7_nm10[] = { "reserved", "SPI", "PCI", "LPC" };
 	static const char *const straps_names_ich8910[] = { "SPI", "SPI", "PCI", "LPC" };
 	static const char *const straps_names_pch56[] = { "LPC", "reserved", "PCI", "SPI" };
+	static const char *const straps_names_lpt[] = { "LPC", "reserved", "reserved", "SPI" };
+	static const char *const straps_names_lpt_lp[] = { "SPI", "LPC", "unknown", "unknown" };
 	static const char *const straps_names_unknown[] = { "unknown", "unknown", "unknown", "unknown" };
 
 	switch (ich_generation) {
@@ -525,7 +527,14 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	case CHIPSET_5_SERIES_IBEX_PEAK:
 	case CHIPSET_6_SERIES_COUGAR_POINT:
+	case CHIPSET_7_SERIES_PANTHER_POINT:
 		straps_names = straps_names_pch56;
+		break;
+	case CHIPSET_8_SERIES_LYNX_POINT:
+		straps_names = straps_names_lpt;
+		break;
+	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+		straps_names = straps_names_lpt_lp;
 		break;
 	default:
 		msg_gerr("%s: unknown ICH generation. Please report!\n",
@@ -566,6 +575,34 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 			gcs = (gcs & ~0xc00) | (0x3 << 10);
 		}
 		break;
+	case CHIPSET_8_SERIES_LYNX_POINT:
+		/* Lynx Point BBS (Boot BIOS Straps) field of GCS register.
+		 *   00b: LPC
+		 *   01b: reserved
+		 *   10b: reserved
+		 *   11b: SPI
+		 */
+		if (target_bus == BUS_LPC) {
+			msg_pdbg("Setting BBS to LPC\n");
+			gcs = (gcs & ~0xc00) | (0x0 << 10);
+		} else if (target_bus == BUS_SPI) {
+			msg_pdbg("Setting BBS to SPI\n");
+			gcs = (gcs & ~0xc00) | (0x3 << 10);
+		}
+		break;
+	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+		/* Lynx Point LP BBS (Boot BIOS Straps) field of GCS register.
+		 *   0b: SPI
+		 *   1b: LPC
+		 */
+		if (target_bus == BUS_LPC) {
+			msg_pdbg("Setting BBS to LPC\n");
+			gcs = (gcs & ~0x400) | (0x1 << 10);
+		} else if (target_bus == BUS_SPI) {
+			msg_pdbg("Setting BBS to SPI\n");
+			gcs = (gcs & ~0x400) | (0x0 << 10);
+		}
+		break;
 	case CHIPSET_ICH7:
 	case CHIPSET_ICH8:
 	case CHIPSET_ICH9:
@@ -594,7 +631,17 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	msg_pdbg("GCS = 0x%x: ", gcs);
 	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
 		 (gcs & 0x1) ? "en" : "dis");
-	bbs = (gcs >> 10) & 0x3;
+
+	switch (ich_generation) {
+	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+		/* Lynx Point LP uses a single bit for GCS */
+		bbs = (gcs >> 10) & 0x1;
+		break;
+	default:
+		/* Older chipsets use two bits for GCS */
+		bbs = (gcs >> 10) & 0x3;
+		break;
+	}
 	msg_pdbg("Boot BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
 
 	buc = mmio_readb(rcrb + 0x3414);
@@ -658,6 +705,19 @@ static int enable_flash_pch5(struct pci_dev *dev, const char *name)
 static int enable_flash_pch6(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name, CHIPSET_6_SERIES_COUGAR_POINT);
+}
+
+/* Lynx Point */
+static int enable_flash_lynxpoint(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name, CHIPSET_8_SERIES_LYNX_POINT);
+}
+
+/* Lynx Point LP */
+static int enable_flash_lynxpoint_lp(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name,
+				       CHIPSET_8_SERIES_LYNX_POINT_LP);
 }
 
 static int via_no_byte_merge(struct pci_dev *dev, const char *name)
@@ -1383,6 +1443,20 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x7198, OK, "Intel", "440MX",		enable_flash_piix4},
 	{0x8086, 0x8119, OK, "Intel", "SCH Poulsbo",	enable_flash_poulsbo},
 	{0x8086, 0x8186, OK, "Intel", "Atom E6xx(T)/Tunnel Creek", enable_flash_tunnelcreek},
+	{0x8086, 0x8c41, OK, "Intel", "Mobile Engineering Sample", enable_flash_lynxpoint},
+	{0x8086, 0x8c42, OK, "Intel", "Desktop Engineering Sample", enable_flash_lynxpoint},
+	{0x8086, 0x8c44, OK, "Intel", "Z87", enable_flash_lynxpoint},
+	{0x8086, 0x8c46, OK, "Intel", "Z85", enable_flash_lynxpoint},
+	{0x8086, 0x8c49, OK, "Intel", "HM86", enable_flash_lynxpoint},
+	{0x8086, 0x8c4a, OK, "Intel", "H87", enable_flash_lynxpoint},
+	{0x8086, 0x8c4b, OK, "Intel", "HM87", enable_flash_lynxpoint},
+	{0x8086, 0x8c4c, OK, "Intel", "Q85", enable_flash_lynxpoint},
+	{0x8086, 0x8c4e, OK, "Intel", "Q87", enable_flash_lynxpoint},
+	{0x8086, 0x8c4f, OK, "Intel", "QM87", enable_flash_lynxpoint},
+	{0x8086, 0x9c41, OK, "Intel", "LP Engineering Sample", enable_flash_lynxpoint_lp},
+	{0x8086, 0x9c43, OK, "Intel", "LP Premium", enable_flash_lynxpoint_lp},
+	{0x8086, 0x9c45, OK, "Intel", "LP Mainstream", enable_flash_lynxpoint_lp},
+	{0x8086, 0x9c47, OK, "Intel", "LP Value", enable_flash_lynxpoint_lp},
 #endif
 	{},
 };
@@ -1466,6 +1540,10 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			    /* TODO: add once enable_flash_ich_dc_spi(..., \
 			               CHIPSET_7_SERIES_PANTHER_POINT); */) {
 				is_new_ich = 1;
+			} else if (chipset_enables[i].doit ==
+				   enable_flash_lynxpoint_lp) {
+				/* The new LP chipsets have 1 bit BBS */
+				is_new_ich = 2;
 			}
 			break;
 		}
@@ -1479,7 +1557,24 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 	/* Map RCBA to virtual memory */
 	rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
-	if (is_new_ich) {
+	switch (is_new_ich) {
+	case 2:
+		/* Lynx Point LP BBS (Boot BIOS Straps) field of GCS register.
+		 *   0b: SPI
+		 *   1b: LPC
+		 */
+		gcs = mmio_readl(rcrb + 0x3410);
+		switch ((gcs & 0x400) >> 10) {
+		case 0x0:
+			*bus = BUS_SPI;
+			break;
+		case 0x1:
+			*bus = BUS_LPC;
+			break;
+		}
+		ret = 0;
+		break;
+	case 1:
 		/* Newer BBS (Boot BIOS Straps) field of GCS register.
 		 *   00b: LPC.
 		 *   01b: reserved
@@ -1500,7 +1595,8 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			break;
 		}
 		ret = 0;
-	} else {
+		break;
+	case 0:
 		/* Older BBS (Boot BIOS Straps) field of GCS register.
 		 *   00: reserved
 		 *   01: SPI
@@ -1521,6 +1617,7 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			break;
 		}
 		ret = 0;
+		break;
 	}
 
 	return ret;
