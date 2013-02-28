@@ -280,6 +280,26 @@ static struct w25q_range mx25l3205d_ranges[] = {
 	{ X, 1, 0x7, {0x000000, 4096 * 1024} },
 };
 
+static struct w25q_range mx25u3235e_ranges[] = {
+	{ X, 0, 0, {0, 0} },	/* none */
+	{ 0, 0, 0x1, {0x3f0000, 64 * 1024} },
+	{ 0, 0, 0x2, {0x3e0000, 128 * 1024} },
+	{ 0, 0, 0x3, {0x3c0000, 256 * 1024} },
+	{ 0, 0, 0x4, {0x380000, 512 * 1024} },
+	{ 0, 0, 0x5, {0x300000, 1024 * 1024} },
+	{ 0, 0, 0x6, {0x200000, 2048 * 1024} },
+	{ 0, 0, 0x7, {0x000000, 4096 * 1024} },
+
+	{ 0, 1, 0x0, {0x000000, 4096 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 2048 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 3072 * 1024} },
+	{ 0, 1, 0x3, {0x000000, 3584 * 1024} },
+	{ 0, 1, 0x4, {0x000000, 3840 * 1024} },
+	{ 0, 1, 0x5, {0x000000, 3968 * 1024} },
+	{ 0, 1, 0x6, {0x000000, 4032 * 1024} },
+	{ 0, 1, 0x7, {0x000000, 4096 * 1024} },
+};
+
 #if 0
 /* FIXME: MX25L6405D has same ID as MX25L6406 */
 static struct w25q_range mx25l6405d_ranges[] = {
@@ -667,6 +687,10 @@ static int w25_range_table(const struct flashchip *flash,
 		case MACRONIX_MX25L3205:
 			*w25q_ranges = mx25l3205d_ranges;
 			*num_entries = ARRAY_SIZE(mx25l3205d_ranges);
+			break;
+		case MACRONIX_MX25U3235E:
+			*w25q_ranges = mx25u3235e_ranges;
+			*num_entries = ARRAY_SIZE(mx25u3235e_ranges);
 			break;
 		case MACRONIX_MX25L6405:
 			/* FIXME: MX25L64* chips have mixed capabilities and
