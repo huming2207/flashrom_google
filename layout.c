@@ -26,6 +26,7 @@
 #include "flash.h"
 #include "fmap.h"
 #include "programmer.h"
+#include "search.h"
 
 #if CONFIG_INTERNAL == 1
 char *mainboard_vendor = NULL;
@@ -210,6 +211,85 @@ int read_romlayout(char *name)
 }
 #endif
 
+/*
+ * Invoke crossystem and parse the returned string to produce an offset
+ * @search: Search information
+ * @offset: Place to put offset
+ * @return 0 if offset found, -1 if not
+ */
+static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
+{
+	char cmd[] = "crossystem fmap_base";
+	FILE *fp;
+	int n;
+	char buf[16];
+	unsigned long fmap_base;
+	unsigned long from_top;
+
+	if (!(fp = popen(cmd, "r")))
+		return -1;
+	n = fread(buf, 1, sizeof(buf) - 1, fp);
+	fclose(fp);
+	if (n < 0)
+		return -1;
+	buf[n] = '\0';
+	if (strlen(buf) == 0)
+		return -1;
+
+	/*
+	 * There are 2 kinds of fmap_base returned from crossystem.
+	 *
+	 *  1. Shadow ROM/BIOS area (x86), such as 0xFFxxxxxx.
+	 *  2. Offset to start of flash, such as 0x00xxxxxx.
+	 *
+	 * The shadow ROM is a cached copy of the BIOS ROM which resides below
+	 * 4GB host/CPU memory address space on x86. The top of BIOS address
+	 * aligns to the last byte of address space, 0xFFFFFFFF. So to obtain
+	 * the ROM offset when shadow ROM is used, we subtract the fmap_base
+	 * from 4G minus 1.
+	 *
+	 *  CPU address                  flash address
+	 *      space                    p     space
+	 *  0xFFFFFFFF   +-------+  ---  +-------+  0x400000
+	 *               |       |   ^   |       | ^
+	 *               |  4MB  |   |   |       | | from_top
+	 *               |       |   v   |       | v
+	 *  fmap_base--> | -fmap | ------|--fmap-|-- the offset we need.
+	 *       ^       |       |       |       |
+	 *       |       +-------+-------+-------+  0x000000
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *  0x00000000   +-------+
+	 *
+	 * We'll use bit 31 to determine if the shadow BIOS area is being used.
+	 * This is sort of a hack, but allows us to perform sanity checking for
+	 * older x86-based Chrome OS platforms.
+	 */
+
+	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
+	msg_gdbg("%s: fmap_base: 0x%x, ROM size: 0x%x\n",
+		__func__, fmap_base, search->flash->total_size * 1024);
+
+	if (fmap_base & (1 << 31)) {
+		from_top = 0xFFFFFFFF - fmap_base + 1;
+		msg_gdbg("%s: fmap is located in shadow ROM, from_top: 0x%x\n",
+				__func__, from_top);
+		if (from_top > search->flash->total_size * 1024)
+			return -1;
+		*offset = (search->flash->total_size * 1024) - from_top;
+	} else {
+		msg_gdbg("%s: fmap is located in physical ROM\n", __func__);
+		if (fmap_base > search->flash->total_size * 1024)
+			return -1;
+		*offset = fmap_base;
+	}
+
+	msg_gdbg("%s: ROM offset: 0x%x\n", __func__, *offset);
+	return 0;
+}
+
 /* returns the number of entries added, or <0 to indicate error */
 int add_fmap_entries(struct flashchip *flash)
 {
@@ -217,7 +297,7 @@ int add_fmap_entries(struct flashchip *flash)
 	uint8_t *buf = NULL;
 	struct fmap *fmap;
 
-	fmap_size = fmap_find(flash, &buf);
+	fmap_size = fmap_find(flash, get_crossystem_fmap_base, &buf);
 	if (fmap_size == 0) {
 		msg_gdbg("%s: no fmap present\n", __func__);
 		return 0;
