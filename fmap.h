@@ -87,23 +87,6 @@ struct fmap {
  */
 int fmap_find(struct flashchip *flash, uint8_t **buf);
 
-/*
- * fmap_find_signature - find given signature in a binary image
- *
- * @flash:	flash structure containing read function
- * @sig_str:	Signature to search for
- * @sig_len:	Length of signature in bytes
- * @offsetp:	Returns offset to signature if found
- *
- * The signature must be no more than 8 bytes in length, since it gets copied
- * into a uint64_t.
- *
- * returns 0 if not found, 1 if found
- * returns <0 to indicate some sort of error occurred
- */
-int fmap_find_signature(struct flashchip *flash, const char *sig_str,
-			int sig_len, off_t *offsetp);
-
 /* Like fmap_find, but give a memory location to search FMAP. */
 struct fmap *fmap_find_in_memory(uint8_t *image, int size);
 
