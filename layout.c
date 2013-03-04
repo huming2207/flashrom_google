@@ -26,6 +26,7 @@
 #include "flash.h"
 #include "fmap.h"
 #include "programmer.h"
+#include "search.h"
 
 #if CONFIG_INTERNAL == 1
 char *mainboard_vendor = NULL;
@@ -210,6 +211,62 @@ int read_romlayout(char *name)
 }
 #endif
 
+/*
+ * Invoke crossystem and parse the returned string to produce an offset
+ * @search: Search information
+ * @offset: Place to put offset
+ * @return 0 if offset found, -1 if not
+ */
+static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
+{
+	char cmd[] = "crossystem fmap_base";
+	FILE *fp;
+	int n;
+	char buf[16];
+	unsigned long fmap_base;
+	unsigned long from_top;
+
+	if (!(fp = popen(cmd, "r")))
+		return -1;
+	n = fread(buf, 1, sizeof(buf) - 1, fp);
+	fclose(fp);
+	if (n < 0)
+		return -1;
+	buf[n] = '\0';
+	if (strlen(buf) == 0)
+		return -1;
+
+	/* fmap_base is the absolute address in CPU address space.
+	 * The top of BIOS address aligns to the last byte of address space,
+	 * 0xFFFFFFFF. So we have to shift it to the address related to
+	 * start of BIOS.
+	 *
+	 *  CPU address                  flash address
+	 *      space                    p     space
+	 *  0xFFFFFFFF   +-------+  ---  +-------+  0x400000
+	 *               |       |   ^   |       | ^
+	 *              |  4MB  |   |   |       | | from_top
+	 *               |       |   v   |       | v
+	 *  fmap_base--> | -fmap | ------|--fmap-|-- the offset we need.
+	 *       ^       |       |       |       |
+	 *       |       +-------+-------+-------+  0x000000
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *       |       |       |
+	 *  0x00000000   +-------+
+	 *
+	 */
+	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
+	from_top = 0xFFFFFFFF - fmap_base + 1;
+	if (from_top > search->flash->total_size * 1024) {
+		/* Invalid fmap_base value for this chip, like EC's flash. */
+		return -1;
+	}
+	*offset = search->flash->total_size * 1024 - from_top;
+	return 0;
+}
+
 /* returns the number of entries added, or <0 to indicate error */
 int add_fmap_entries(struct flashchip *flash)
 {
@@ -217,7 +274,7 @@ int add_fmap_entries(struct flashchip *flash)
 	uint8_t *buf = NULL;
 	struct fmap *fmap;
 
-	fmap_size = fmap_find(flash, &buf);
+	fmap_size = fmap_find(flash, get_crossystem_fmap_base, &buf);
 	if (fmap_size == 0) {
 		msg_gdbg("%s: no fmap present\n", __func__);
 		return 0;
