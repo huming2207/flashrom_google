@@ -79,6 +79,7 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 	char buf[16];
 	unsigned long fmap_base;
 	unsigned long from_top;
+	uint32_t rom_offset;
 
 	if (!(fp = popen(cmd, "r"))) {
 		return CROSSYSTEM_FAIL;
@@ -93,10 +94,17 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 		return CROSSYSTEM_FAIL;
 	}
 
-	/* fmap_base is the absolute address in CPU address space.
-	 * The top of BIOS address aligns to the last byte of address space,
-	 * 0xFFFFFFFF. So we have to shift it to the address related to
-	 * start of BIOS.
+	/*
+	 * There are 2 kinds of fmap_base returned from crossystem.
+	 *
+	 *  1. Shadow ROM/BIOS area (x86), such as 0xFFxxxxxx.
+	 *  2. Offset to start of flash, such as 0x00xxxxxx.
+	 *
+	 * The shadow ROM is a cached copy of the BIOS ROM which resides below
+	 * 4GB host/CPU memory address space on x86. The top of BIOS address
+	 * aligns to the last byte of address space, 0xFFFFFFFF. So to obtain
+	 * the ROM offset when shadow ROM is used, we subtract the fmap_base
+	 * from 4G minus 1.
 	 *
 	 *  CPU address                  flash address
 	 *      space                    p     space
@@ -113,14 +121,29 @@ static uint32_t get_crossystem_fmap_base(struct flashchip *flash) {
 	 *       |       |       |
 	 *  0x00000000   +-------+
 	 *
+	 * We'll use bit 31 to determine if the shadow BIOS area is being used.
+	 * This is sort of a hack, but allows us to perform sanity checking for
+	 * older x86-based Chrome OS platforms.
 	 */
 	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
-	from_top = 0xFFFFFFFF - fmap_base + 1;
-	if (from_top > flash->total_size * 1024) {
-		/* Invalid fmap_base value for this chip, like EC's flash. */
-		return CROSSYSTEM_FAIL;
+	msg_gdbg("%s: fmap_base: 0x%x, ROM size: 0x%x\n",
+		__func__, fmap_base, flash->total_size * 1024);
+	if (fmap_base & (1 << 31)) {
+		from_top = 0xFFFFFFFF - fmap_base + 1;
+		msg_gdbg("%s: fmap is located in shadow ROM, from_top: 0x%x\n",
+				__func__, from_top);
+		if (from_top > flash->total_size * 1024)
+			return CROSSYSTEM_FAIL;
+		rom_offset = (flash->total_size * 1024) - from_top;
+	} else {
+		msg_gdbg("%s: fmap is located in physical ROM\n", __func__);
+		if (fmap_base > flash->total_size * 1024)
+			return CROSSYSTEM_FAIL;
+		rom_offset = fmap_base;
 	}
-	return flash->total_size * 1024 - from_top;
+
+	msg_gdbg("%s: ROM offset: 0x%x\n", __func__, rom_offset);
+	return rom_offset;
 }
 
 int fmap_find(struct flashchip *flash, uint8_t **buf)
