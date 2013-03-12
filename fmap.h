@@ -73,13 +73,10 @@ struct fmap {
 	struct fmap_area areas[];
 } __attribute__((packed));
 
-struct search_info;
-
 /*
  * fmap_find - find FMAP signature in a binary image and copy it to buffer
  *
  * @flash:	flash structure containing read function
- * @handler:	handler used by search to locate the fmap
  * @buf:	unallocated buffer to store fmap struct
  *
  * This function allocates memory which the caller must free. It does no error
@@ -88,9 +85,7 @@ struct search_info;
  * returns size of fmap struct to indicate success
  * returns <0 to indicate failure
  */
-int fmap_find(struct flashchip *flash,
-	      int (*handler)(struct search_info *search, off_t *offset),
-	      uint8_t **buf);
+int fmap_find(struct flashchip *flash, uint8_t **buf);
 
 /* Like fmap_find, but give a memory location to search FMAP. */
 struct fmap *fmap_find_in_memory(uint8_t *image, int size);
