@@ -135,8 +135,8 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 	offset = get_crossystem_fmap_base(flash);
 	if (CROSSYSTEM_FAIL != offset) {
 		if (offset < 0 || offset >= flash->total_size * 1024 ||
-		    flash->read(flash, (uint8_t *)&tmp64,
-		                offset, sizeof(tmp64))) {
+		    read_flash(flash, (uint8_t *)&tmp64,
+			    offset, sizeof(tmp64))) {
 			msg_gdbg("[L%d] failed to read flash at "
 			         "offset 0x%lx\n", __LINE__, offset);
 			return -1;
@@ -178,17 +178,11 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 			if (offset % (stride * 2) == 0 ||
 			    offset >= flash->total_size * 1024)
 				continue;
-			tmp = flash->read(flash, (uint8_t *)&tmp64,
-			                  offset, sizeof(tmp64));
-			if (tmp) {
-				if (ignore_error(tmp)) {
-					continue;
-				} else {
-					msg_gdbg("[L%d] failed to read flash "
-					         "at offset 0x%lx\n",
-					         __LINE__, offset);
-					return -1;
-				}
+			if (read_flash(flash, (uint8_t *)&tmp64,
+						offset, sizeof(tmp64))) {
+				msg_gdbg("[L%d] failed to read flash at offset"
+				         " 0x%lx\n", __LINE__, offset);
+				return -1;
 			}
 
 			if (!memcmp(&tmp64, &sig, sizeof(sig))) {
@@ -208,8 +202,7 @@ int fmap_find(struct flashchip *flash, uint8_t **buf)
 		uint8_t *image = malloc(flash->total_size * 1024);
 
 		msg_gdbg("using brute force method to find fmap\n");
-		tmp = flash->read(flash, image, 0, flash->total_size * 1024);
-		if (tmp && !ignore_error(tmp)) {
+		if (flash->read(flash, image, 0, flash->total_size * 1024)) {
 			msg_gdbg("[L%d] failed to read flash\n", __LINE__);
 			return -1;
 		}

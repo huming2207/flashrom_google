@@ -226,6 +226,8 @@ void map_flash_registers(struct flashchip *flash);
 int read_memmapped(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int erase_flash(struct flashchip *flash);
 int probe_flash(int startchip, struct flashchip *fill_flash, int force);
+int read_flash(struct flashchip *flash, uint8_t *buf,
+			unsigned int start, unsigned int len);
 int read_flash_to_file(struct flashchip *flash, const char *filename);
 int min(int a, int b);
 int max(int a, int b);

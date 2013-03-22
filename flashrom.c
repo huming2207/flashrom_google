@@ -651,6 +651,8 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 
 		tmp = flash->read(flash, readbuf + i, start + i, chunksize);
 
+		/* Since this function explicitly compares the bytes, we need
+		   to handle errors manually */
 		if (tmp) {
 			ret = tmp;
 			if (ignore_error(tmp)) {
@@ -1187,6 +1189,40 @@ int write_buf_to_file(unsigned char *buf, unsigned long size,
 	return 0;
 }
 
+/*
+ * read_flash - wrapper for flash->read() with additional high-level policy
+ *
+ * @flash	flash chip
+ * @buf		buffer to store data in
+ * @start	start address
+ * @len		number of bytes to read
+ *
+ * This wrapper simplifies most cases when the flash chip needs to be read
+ * since policy decisions such as non-fatal error handling is centralized.
+ */
+int read_flash(struct flashchip *flash, uint8_t *buf,
+		unsigned int start, unsigned int len)
+{
+	int ret;
+
+	if (!flash || !flash->read)
+		return -1;
+
+	ret = flash->read(flash, buf, start, len);
+	if (ret) {
+		if (ignore_error(ret)) {
+			msg_gdbg("ignoring error when reading 0x%x-0x%x\n",
+					start, start + len - 1);
+			ret = 0;
+		} else {
+			msg_gdbg("failed to read 0x%x-0x%x\n",
+					start, start + len - 1);
+		}
+	}
+
+	return ret;
+}
+
 int read_flash_to_file(struct flashchip *flash, const char *filename)
 {
 	unsigned long size = flash->total_size * 1024;
@@ -1212,7 +1248,7 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 
 	/* First try to handle partial read case, rather than read the whole
 	 * flash, which is slow. */
-	ret = handle_partial_read(flash, buf, flash->read, 1);
+	ret = handle_partial_read(flash, buf, read_flash, 1);
 	if (ret < 0) {
 		msg_cerr("Partial read operation failed!\n");
 		ret = 1;
@@ -1220,13 +1256,7 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 	} else if (ret > 0) {
 		/* Partial read has been handled, pass the whole flash read. */
 	} else {
-		int tmp = flash->read(flash, buf, 0, size);
-
-		if (!tmp) {
-			ret = tmp;
-		} else if (ignore_error(tmp)) {
-			ret = 0;
-		} else {
+		if (read_flash(flash, buf, 0, size)) {
 			msg_cerr("Read operation failed!\n");
 			ret = 1;
 			goto out_free;
@@ -1482,7 +1512,7 @@ int erase_and_write_flash(struct flashchip *flash, uint8_t *oldcontents,
 		 * in non-verbose mode.
 		 */
 		msg_cinfo("Reading current flash chip contents... ");
-		if (flash->read(flash, curcontents, 0, size)) {
+		if (read_flash(flash, curcontents, 0, size)) {
 			/* Now we are truly screwed. Read failed as well. */
 			msg_cerr("Can't read anymore! Aborting.\n");
 			/* We have no idea about the flash chip contents, so
@@ -1901,18 +1931,11 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 			goto out;
 		}
 	} else {
-		int tmp;
-
 		msg_cdbg("Reading old contents from flash chip... ");
-		tmp = flash->read(flash, oldcontents, 0, size);
-		if (tmp) {
-			if (ignore_error(tmp)) {
-				msg_gdbg("ignoring access error.\n");
-			} else {
-				ret = 1;
-				msg_cdbg("FAILED.\n");
-				goto out;
-			}
+		if (read_flash(flash, oldcontents, 0, size)) {
+			ret = 1;
+			msg_cdbg("FAILED.\n");
+			goto out;
 		}
 	}
 	msg_cdbg("done.\n");
@@ -1937,7 +1960,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
 			msg_cerr("Uh oh. Erase/write failed. Checking if "
 				 "anything changed.\n");
-			if (!flash->read(flash, newcontents, 0, size)) {
+			if (!read_flash(flash, newcontents, 0, size)) {
 				if (!memcmp(oldcontents, newcontents, size)) {
 					msg_cinfo("Good. It seems nothing was "
 						  "changed.\n");
@@ -1961,7 +1984,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 		} else if (ret > 0) {
 			// Need 2nd pass. Get the just written content.
 			msg_pdbg("GEC needs 2nd pass.\n");
-			if (flash->read(flash, oldcontents, 0, size)) {
+			if (read_flash(flash, oldcontents, 0, size)) {
 				msg_cerr("Uh oh. Cannot get latest content.\n");
 				emergency_help_message();
 				ret = 1;
