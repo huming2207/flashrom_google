@@ -76,20 +76,20 @@ struct fmap {
 struct search_info;
 
 /*
- * fmap_find - find FMAP signature in a binary image and copy it to buffer
+ * fmap_find - find FMAP signature at offset in an image and copy it to buffer
  *
  * @flash:	flash structure containing read function
- * @handler:	handler used by search to locate the fmap
+ * @fmap:	pointer to fmap header
+ * @offset:	offset of fmap header in image
  * @buf:	unallocated buffer to store fmap struct
  *
  * This function allocates memory which the caller must free. It does no error
- * checking. The caller is responsible for verifying that the contents are sane.
+ * checking. The caller is responsible for verifying that the contents are
+ * sane.
  *
- * returns size of fmap struct to indicate success
- * returns <0 to indicate failure
+ * returns 1 if found, 0 if not found, <0 to indicate failure
  */
-int fmap_find(struct flashchip *flash,
-	      int (*handler)(struct search_info *search, off_t *offset),
+int fmap_find(struct flashchip *flash, struct fmap *fmap, loff_t offset,
 	      uint8_t **buf);
 
 /* Like fmap_find, but give a memory location to search FMAP. */

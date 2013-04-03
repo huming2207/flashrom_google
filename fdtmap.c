@@ -34,7 +34,11 @@
  */
 
 #include <ctype.h>
+#include <stdint.h>
+#include <zlib.h>
 
+#include "flash.h"
+#include "fdtmap.h"
 #include "flash.h"
 #include "libfdt.h"
 #include "layout.h"
@@ -210,4 +214,46 @@ int fdtmap_add_entries_from_buf(const void *blob, romlayout_t *rom_entries,
 	}
 
 	return count;
+}
+
+int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr, loff_t offset,
+		uint8_t **buf)
+{
+	int fmap_size;
+	uint32_t crc;
+
+	if (memcmp(hdr->sig, FDTMAP_SIGNATURE, sizeof(hdr->sig)))
+		return 0;
+
+	msg_gdbg("%s: found possible fdtmap at offset %#lx\n",
+			__func__, offset);
+
+	fmap_size = hdr->size;
+	*buf = malloc(fmap_size);
+	msg_gdbg("%s: fdtmap size %#x\n", __func__, fmap_size);
+
+	/* We may as well just read it here, to simplify the code */
+	if (flash->read(flash, *buf, offset + sizeof(*hdr), fmap_size)) {
+		msg_gdbg("[L%d] failed to read %d bytes at offset %#lx\n",
+			 __LINE__, fmap_size, offset);
+		return 0;
+	}
+
+	/* Sanity check, the FDT total size should equal fmap_size */
+	if (fdt_totalsize(*buf) != fmap_size) {
+		msg_gdbg("[L%d] FDT size %#x did not match header size %#x at %#lx\n",
+			 __LINE__, fdt_totalsize(*buf), fmap_size, offset);
+		return 0;
+	}
+
+	crc = crc32(0, Z_NULL, 0);
+	crc = crc32(crc, *buf, fmap_size);
+	/* Sanity check, the FDT total size should equal fmap_size */
+	if (crc != hdr->crc32) {
+		msg_gdbg("[L%d] CRC32 %#08x did not match expected %#08x at %#lx\n",
+			 __LINE__, crc, hdr->crc32, offset);
+		return 0;
+	}
+
+	return 1;
 }

@@ -43,70 +43,25 @@
 #include "fmap.h"
 #include "search.h"
 
-static int fmap_find_signature(struct flashchip *flash,
-		int (*handler)(struct search_info *search, off_t *offset),
-		off_t *offsetp)
-{
-	struct search_info search;
-	uint64_t sig, tmp64;
-	int sig_len;
-	int ret = 0;	/* Assume not found */
-
-	sig_len = strlen(FMAP_SIGNATURE);
-	memcpy(&sig, FMAP_SIGNATURE, sig_len);
-	search_init(&search, flash, sig_len);
-	search.handler = handler;
-
-	while (!search_find_next(&search, offsetp)) {
-		if (search.image)
-			memcpy(&tmp64, search.image + *offsetp, sizeof(tmp64));
-		else if (read_flash(flash, (uint8_t *)&tmp64,
-		                *offsetp, sizeof(tmp64))) {
-			msg_gdbg("[L%d] failed to read flash at "
-			         "offset 0x%lx\n", __LINE__, *offsetp);
-			ret = -1;
-			break;
-		}
-		if (!memcmp(&tmp64, &sig, sizeof(sig))) {
-			ret = 1;	/* Found */
-			break;
-		}
-	}
-
-	search_free(&search);
-	return ret;
-}
-
-
-int fmap_find(struct flashchip *flash,
-	      int (*handler)(struct search_info *search, off_t *offset),
+int fmap_find(struct flashchip *flash, struct fmap *fmap, loff_t offset,
 	      uint8_t **buf)
 {
-	struct fmap fmap;
-	off_t offset;
 	int fmap_size;
-	int ret;
 
-	ret = fmap_find_signature(flash, handler, &offset);
-	if (ret <= 0)
-		return ret;
-	if (read_flash(flash, (uint8_t *)&fmap, offset, sizeof(fmap))) {
-		msg_gdbg("[L%d] failed to read flash at offset 0x%lx\n",
-		         __LINE__, offset);
-		return -1;
-	}
+	if (memcmp(&fmap->signature, FMAP_SIGNATURE, sizeof(fmap->signature)))
+		return 0;
 
-	fmap_size = sizeof(fmap) + (fmap.nareas * sizeof(struct fmap_area));
+	fmap_size = sizeof(*fmap) + fmap->nareas * sizeof(struct fmap_area);
 	*buf = malloc(fmap_size);
 
 	if (read_flash(flash, *buf, offset, fmap_size)) {
 		msg_gdbg("[L%d] failed to read %d bytes at offset 0x%lx\n",
-		         __LINE__, fmap_size, offset);
+			__LINE__, fmap_size, offset);
 		return -1;
 	}
-	return fmap_size;
-}
 
+	return 1;
+}
 
 /* Like fmap_find, but give a memory location to search FMAP. */
 struct fmap *fmap_find_in_memory(uint8_t *image, int size)

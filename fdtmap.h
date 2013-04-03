@@ -59,4 +59,19 @@ struct fdtmap_hdr {
 int fdtmap_add_entries_from_buf(const void *blob,
 		struct romlayout *rom_entries, int max_entries);
 
+/*
+ * fdtmap_find - find FDTMAP at offset in an image and copy it to buffer
+ *
+ * @flash:	flash structure containing read function
+ * @hdr:	pointer to fmap header
+ * @offset:	offset of fmap header in image
+ * @buf:	unallocated buffer to store fmap struct
+ *
+ * This function allocates memory which the caller must free.
+ *
+ * returns 1 if found, 0 if not found, <0 to indicate failure
+ */
+int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr,
+		loff_t offset, uint8_t **buf);
+
 #endif
