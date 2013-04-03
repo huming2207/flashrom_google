@@ -266,12 +266,12 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 	 */
 
 	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
-	msg_gdbg("%s: fmap_base: 0x%x, ROM size: 0x%x\n",
+	msg_gdbg("%s: fmap_base: %#lx, ROM size: 0x%x\n",
 		__func__, fmap_base, search->flash->total_size * 1024);
 
 	if (fmap_base & (1 << 31)) {
 		from_top = 0xFFFFFFFF - fmap_base + 1;
-		msg_gdbg("%s: fmap is located in shadow ROM, from_top: 0x%x\n",
+		msg_gdbg("%s: fmap is located in shadow ROM, from_top: %#lx\n",
 				__func__, from_top);
 		if (from_top > search->flash->total_size * 1024)
 			return -1;
@@ -283,7 +283,7 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 		*offset = fmap_base;
 	}
 
-	msg_gdbg("%s: ROM offset: 0x%x\n", __func__, *offset);
+	msg_gdbg("%s: ROM offset: %#lx\n", __func__, *offset);
 	return 0;
 }
 
