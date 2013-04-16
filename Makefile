@@ -426,10 +426,13 @@ NEED_PCI := yes
 endif
 
 ifeq ($(CONFIG_FT2232_SPI), yes)
-FTDILIBS := $(shell pkg-config --libs libftdi 2>/dev/null || printf "%s" "-lftdi -lusb")
+FTDILIBS := $(shell $(PKG_CONFIG) --libs libftdi1 2>/dev/null ||	\
+		    $(PKG_CONFIG) --libs libftdi 2>/dev/null || echo "-lftdi -lusb")
+FTDICFLAGS := $(shell $(PKG_CONFIG) --cflags libftdi1 2>/dev/null ||	\
+		      $(PKG_CONFIG) --cflags libftdi 2>/dev/null)
 # This is a totally ugly hack.
-FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && printf "%s" "-D'CONFIG_FT2232_SPI=1'")
-FEATURE_LIBS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && printf "%s" "$(FTDILIBS)")
+FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDICFLAGS) -D'CONFIG_FT2232_SPI=1'")
+FEATURE_LIBS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDILIBS)")
 PROGRAMMER_OBJS += ft2232_spi.o
 endif
 
@@ -667,7 +670,7 @@ endif
 
 define FTDI_TEST
 #include <ftdi.h>
-struct ftdi_context *ftdic = NULL;
+struct ftdi_context *ftdic = (void *)0;
 int main(int argc, char **argv)
 {
 	(void) argc;
@@ -695,7 +698,7 @@ features: compiler
 ifeq ($(CONFIG_FT2232_SPI), yes)
 	@printf "Checking for FTDI support... "
 	@echo "$$FTDI_TEST" > .featuretest.c
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >/dev/null 2>&1 &&	\
+	@$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDICFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >/dev/null 2>&1 &&	\
 		( echo "found."; echo "FTDISUPPORT := yes" >> .features.tmp ) ||	\
 		( echo "not found."; echo "FTDISUPPORT := no" >> .features.tmp )
 endif
