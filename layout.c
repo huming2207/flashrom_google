@@ -352,7 +352,6 @@ int add_fmap_entries(struct flashchip *flash)
 	uint8_t *buf = NULL;
 	off_t offset;
 
-	romimages = 0;
 	search_init(&search, flash, sizeof(hdr));
 	search.handler = get_crossystem_fmap_base;
 	while (found == FOUND_NONE && !search_find_next(&search, &offset)) {
