@@ -388,6 +388,7 @@ int add_fmap_entries(struct flashchip *flash)
 #endif
 	case FOUND_FMAP:
 		romimages = add_fmap_entries_from_buf(flash, buf);
+		break;
 	default:
 		msg_gdbg("%s: no fmap present\n", __func__);
 	}
