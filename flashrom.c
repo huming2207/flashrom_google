@@ -1190,6 +1190,25 @@ int write_buf_to_file(unsigned char *buf, unsigned long size,
 }
 
 /*
+ * This is a simple cache of ROM content. When read_flash() is called
+ * we see if the requested bytes have been marked as read (non-zero) in
+ * cache_valid[] and, if so, we simply copy the content from cache[] into
+ * the user supplied buffer.
+ * - If cache_valid[N] is 0x00 then cache[N] must be read from ROM.
+ * - If cache_valid[N] != 0x00 (ie 0xff) then cache[N] has been previously
+ *   read from ROM and is valid.
+ */
+static uint8_t *cache;
+static uint8_t *cache_valid;
+
+static cache_invalidate(unsigned int start, unsigned int len)
+{
+	/* set the invalid bytes to something obvious for debugging */
+	memset(&cache[start], 0xaa, len);
+	memset(&cache_valid[start], 0x00, len);
+}
+
+/*
  * read_flash - wrapper for flash->read() with additional high-level policy
  *
  * @flash	flash chip
@@ -1203,12 +1222,36 @@ int write_buf_to_file(unsigned char *buf, unsigned long size,
 int read_flash(struct flashchip *flash, uint8_t *buf,
 		unsigned int start, unsigned int len)
 {
-	int ret;
+	int ret = 0;
+	unsigned int i = 0;
 
 	if (!flash || !flash->read)
 		return -1;
 
-	ret = flash->read(flash, buf, start, len);
+	while (i < len) {
+		unsigned int j, to_read;
+
+		if (cache_valid[start + i]) {
+			buf[i] = cache[start + i];
+			i++;
+			continue;
+		}
+
+		for (j = i; j < len; j++) {
+			if (cache_valid[start + j])
+				break;
+		}
+
+		to_read = j - i;
+		ret = flash->read(flash, &cache[start + i], start + i, to_read);
+		if (ret)
+			break;
+
+		memcpy(&buf[i], &cache[start + i], to_read);
+		memset(&cache_valid[start + i], 0xff, to_read);
+		i = j;
+	}
+
 	if (ret) {
 		if (ignore_error(ret)) {
 			msg_gdbg("ignoring error when reading 0x%x-0x%x\n",
@@ -1240,6 +1283,13 @@ int write_flash(struct flashchip *flash, uint8_t *buf,
 	if (!flash || !flash->write)
 		return -1;
 
+	/*
+	 * Due to the way various programmers handle errors we might not
+	 * be able to tell exactly how many bytes get written before something
+	 * goes wrong. To be safe, simply invalidate all bytes which were
+	 * supposed to have been written.
+	 */
+	cache_invalidate(start, len);
 	return flash->write(flash, buf, start, len);
 }
 
@@ -1373,6 +1423,9 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 	unsigned int starthere = 0, lenhere = 0;
 	int ret = 0, skip = 1, writecount = 0;
 	enum write_granularity gran = write_gran_256bytes; /* FIXME */
+
+	/* invalidate cached bytes */
+	cache_invalidate(start, len);
 
 	/* curcontents and newcontents are opaque to walk_eraseregions, and
 	 * need to be adjusted here to keep the impression of proper abstraction
@@ -1865,6 +1918,9 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	 */
 	if (flash->unlock)
 		flash->unlock(flash);
+
+	cache = calloc(size, 1);
+	cache_valid = calloc(size, 1);
 
 	/* add entries for regions specified in flashmap */
 	if (!set_ignore_fmap && add_fmap_entries(flash) < 0) {
