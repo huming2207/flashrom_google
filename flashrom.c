@@ -1223,6 +1223,26 @@ int read_flash(struct flashchip *flash, uint8_t *buf,
 	return ret;
 }
 
+/*
+ * write_flash - wrapper for flash->write() with additional high-level policy
+ *
+ * @flash	flash chip
+ * @buf		buffer to write to flash
+ * @start	start address in flash
+ * @len		number of bytes to write
+ *
+ * TODO: Look up regions that are write-protected and avoid attempt to write
+ * to them at all.
+ */
+int write_flash(struct flashchip *flash, uint8_t *buf,
+		unsigned int start, unsigned int len)
+{
+	if (!flash || !flash->write)
+		return -1;
+
+	return flash->write(flash, buf, start, len);
+}
+
 int read_flash_to_file(struct flashchip *flash, const char *filename)
 {
 	unsigned long size = flash->total_size * 1024;
@@ -1387,7 +1407,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 		if (!writecount++)
 			msg_cdbg("W");
 		/* Needs the partial write function signature. */
-		ret = flash->write(flash, newcontents + starthere,
+		ret = write_flash(flash, newcontents + starthere,
 				   start + starthere, lenhere);
 		if (ret) {
 			if (ret == ACCESS_DENIED)
