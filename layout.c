@@ -357,7 +357,7 @@ int add_fmap_entries(struct flashchip *flash)
 	while (found == FOUND_NONE && !search_find_next(&search, &offset)) {
 		if (search.image)
 			memcpy(&hdr, search.image + offset, sizeof(hdr));
-		else if (flash->read(flash, (uint8_t *)&hdr, offset,
+		else if (read_flash(flash, (uint8_t *)&hdr, offset,
 				sizeof(hdr))) {
 			msg_gdbg("[L%d] failed to read flash at offset %#lx\n",
 				__LINE__, offset);
