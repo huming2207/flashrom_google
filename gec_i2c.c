@@ -46,7 +46,8 @@
 #include "programmer.h"
 
 #define SYSFS_I2C_DEV_ROOT	"/sys/bus/i2c/devices"
-#define GEC_I2C_ADAPTER_NAME	"cros_ec_i2c"
+#define GEC_I2C_DEVICE_NAME1	"cros-ec-i2c"		/* upstream name */
+#define GEC_I2C_DEVICE_NAME2	"chromeos-ec-i2c"	/* 3.4 name */
 #define GEC_I2C_ADDRESS		0x1e
 
 /* v2 protocol bytes
@@ -315,18 +316,17 @@ int gec_probe_i2c(const char *name)
 	msg_pdbg("%s: probing for GEC on I2C...\n", __func__);
 
 	/*
-	 * It is possible for the MFD to show up on a different bus than
-	 * its I2C adapter. For ChromeOS EC, the I2C passthru adapter piggy-
-	 * backs on top of the kernel EC driver. This allows the kernel to
-	 * use the MFD while allowing userspace access to the I2C module.
-	 *
-	 * So for the purposes of finding the correct bus, use the name of
-	 * the I2C adapter and not the MFD itself.
+	 * We look for the device using two possible names (since the EC landed
+	 * upstream with a different name than the ChromeOS 3.4 kernel).
 	 */
-	path = scanft(SYSFS_I2C_DEV_ROOT, "name", GEC_I2C_ADAPTER_NAME, 1);
+	path = scanft(SYSFS_I2C_DEV_ROOT, "name", GEC_I2C_DEVICE_NAME1, 1);
 	if (!path) {
-		msg_pdbg("GEC I2C adapter not found\n");
-		goto gec_probe_i2c_done;
+		path = scanft(SYSFS_I2C_DEV_ROOT, "name", GEC_I2C_DEVICE_NAME2,
+			      1);
+		if (!path) {
+			msg_pdbg("GEC I2C device not found\n");
+			goto gec_probe_i2c_done;
+		}
 	}
 
 	/*
@@ -345,7 +345,7 @@ int gec_probe_i2c(const char *name)
 	}
 
 	msg_pdbg("Opening GEC (bus %u, addr 0x%02x)\n", bus, GEC_I2C_ADDRESS);
-	if (linux_i2c_open(bus, GEC_I2C_ADDRESS))
+	if (linux_i2c_open(bus, GEC_I2C_ADDRESS, 1))
 		goto gec_probe_i2c_done;
 
 	if (detect_ec()) {

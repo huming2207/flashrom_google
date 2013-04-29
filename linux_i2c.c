@@ -65,11 +65,12 @@ int linux_i2c_init(void)
 	return 0;
 }
 
-int linux_i2c_open(int bus, int addr)
+int linux_i2c_open(int bus, int addr, int force)
 {
 	char *dev;
 	int ret = 1;
 	int path_len = strlen(I2C_DEV_PREFIX) + 3;
+	int request = force ? I2C_SLAVE_FORCE : I2C_SLAVE;
 
 	if (bus < 0 || bus > I2C_MAX_ADAPTER) {
 		msg_perr("Invalid I2C bus %d\n", bus);
@@ -89,7 +90,7 @@ int linux_i2c_open(int bus, int addr)
 	}
 
 #if defined (__linux__)
-	if (ioctl(fd, I2C_SLAVE, addr) < 0) {
+	if (ioctl(fd, request, addr) < 0) {
 		msg_perr("Unable to set I2C slave address to 0x%02x\n", addr);
 		close(fd);
 		goto linux_i2c_open_done;
