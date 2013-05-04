@@ -116,3 +116,10 @@ void register_par_programmer(const struct par_programmer *pgm, const enum chipbu
 	par_programmer = pgm;
 	buses_supported |= buses;
 }
+
+struct programmer_alias aliases[] = {
+	{ "ec", ALIAS_EC },
+	{ "host", ALIAS_HOST },
+	{ NULL },
+};
+struct programmer_alias *alias;

@@ -443,9 +443,28 @@ int main(int argc, char *argv[])
 					break;
 				}
 			}
-			if (prog == PROGRAMMER_INVALID) {
+
+			for (i = 0; aliases[i].name; i++) {
+				name = aliases[i].name;
+				namelen = strlen(aliases[i].name);
+				if (!strncmp(optarg, name, namelen)) {
+					/* FIXME: add parameter parsing? */
+					alias = &aliases[i];
+					msg_gdbg("Programmer alias: \"%s\"\n",
+							alias->name);
+					break;
+				}
+			}
+
+			if ((prog == PROGRAMMER_INVALID) && !alias) {
 				fprintf(stderr, "Error: Unknown programmer "
 					"%s.\n", optarg);
+				cli_mfg_abort_usage(argv[0]);
+			}
+
+			if ((prog != PROGRAMMER_INVALID) && alias) {
+				fprintf(stderr, "Error: Alias cannot be used "
+					"with programmer name.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
 			break;

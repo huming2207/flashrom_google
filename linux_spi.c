@@ -139,6 +139,14 @@ int linux_spi_init(void)
 	char *p, *endp, *dev;
 	uint32_t speed = 0;
 
+	/*
+	 * FIXME: There might be other programmers with flash memory (such as
+	 * an EC) connected via SPI. For now we rely on the device's driver to
+	 * distinguish it and assume generic SPI implies host.
+	 */
+	if (alias && alias->type != ALIAS_HOST)
+		return 1;
+
 	dev = extract_programmer_param("dev");
 	if (!dev) {
 		dev = linux_spi_probe();

@@ -256,13 +256,6 @@ static int detect_ec(void)
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 
-	/* FIXME: for now we allow BUS_LPC because scripts might rely on
-	   passing "-p internal:bus=lpc" to target EC */
-	if ((target_bus != BUS_PROG) && (target_bus != BUS_LPC)) {
-		msg_pdbg("%s():%d cannot use target_bus\n", __func__, __LINE__);
-		return 1;
-	}
-
 	/* reduce timeout period temporarily in case EC is not present */
 	ec_timeout_usec = 25000;
 
@@ -305,6 +298,9 @@ int gec_probe_i2c(const char *name)
 {
 	const char *path, *s, *p;
 	int ret = 1;
+
+	if (alias && alias->type != ALIAS_EC)
+		return 1;
 
 #if USE_GEC_LOCK == 1
 	if (acquire_gec_lock(GEC_LOCK_TIMEOUT_SECS) < 0) {

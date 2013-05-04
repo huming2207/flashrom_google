@@ -412,6 +412,9 @@ int mec1308_probe_spi_flash(const char *name)
 
 	msg_pdbg("%s(): entered\n", __func__);
 
+	if (alias && alias->type != ALIAS_EC)
+		return 1;
+
 	if (mec1308_get_sio_index(&sio_port) < 0) {
 		msg_pdbg("MEC1308 not found (probe failed).\n");
 		return 0;
