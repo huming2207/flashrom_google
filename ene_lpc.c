@@ -512,6 +512,9 @@ int ene_probe_spi_flash(const char *name)
 {
 	uint8_t hwver, ediid, i;
 
+	if (alias && alias->type != ALIAS_EC)
+		return 1;
+
 	msg_pdbg("%s\n", __func__);
 
 	for (i = 0; i < ENE_LAST; ++i) {

@@ -87,6 +87,20 @@ enum programmer {
 	PROGRAMMER_INVALID /* This must always be the last entry. */
 };
 
+enum alias_type {
+	ALIAS_NONE = 0,	/* no alias (default) */
+	ALIAS_EC,	/* embedded controller */
+	ALIAS_HOST,	/* chipset / PCH / SoC / etc. */
+};
+
+struct programmer_alias {
+	const char *name;
+	enum alias_type type;
+};
+
+extern struct programmer_alias *alias;
+extern struct programmer_alias aliases[];
+
 struct programmer_entry {
 	const char *vendor;
 	const char *name;

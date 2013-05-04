@@ -157,6 +157,9 @@ static const struct opaque_programmer opaque_programmer_gec_dev = {
 
 int gec_probe_dev(void)
 {
+	if (alias && alias->type != ALIAS_EC)
+		return 1;
+
 	msg_pdbg("%s: probing for GEC at %s\n", __func__, GEC_DEV_NAME);
 	gec_fd = open(GEC_DEV_NAME, O_RDWR);
 	if (gec_fd < 0)

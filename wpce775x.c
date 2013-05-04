@@ -203,7 +203,7 @@ static int nuvoton_get_sio_index(uint16_t *port)
 	}
 
 	if (!port_found) {
-		msg_cdbg("\nfailed to obtain super i/o index");
+		msg_cdbg("\nfailed to obtain super i/o index\n");
 		return -1;
 	}
 
@@ -910,33 +910,25 @@ static const struct spi_programmer spi_programmer_wpce775x = {
 
 int wpce775x_spi_common_init(void)
 {
-	uint16_t sio_port;
-	uint8_t srid;
 	uint8_t fwh_id;
 
 	msg_pdbg("%s(): entered\n", __func__);
 
-	/* detect if wpce775x exists */
-	if (nuvoton_get_sio_index(&sio_port) < 0) {
-		msg_pdbg("No Nuvoton chip is found.\n");
-		return 0;
-	}
-	srid = sio_read(sio_port, NUVOTON_SIOCFG_SRID);
-	if ((srid & 0xE0) == 0xA0) {
-		msg_pdbg("Found EC: WPCE775x (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		         srid >> 5, srid & 0x1f, sio_port);
-
-	} else {
-		msg_pdbg("Found EC: Nuvoton (Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
-		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
-		         srid >> 5, srid & 0x1f, sio_port);
-	}
+	/*
+	 * FIXME: This is necessary to ensure that access to the shared access
+	 * window region is sent on the LPC bus. The old CLI syntax
+	 * (-p internal:bus=lpc) would cause the chipset enable code to set the
+	 * target bus appropriately before this function gets run, but the new
+	 * syntax ("-p ec") does not cause that to happen.
+	 */
+	target_bus = BUS_LPC;
+	msg_pdbg("%s: forcing target bus: 0x%08x\n", __func__, target_bus);
+	chipset_flash_enable();
 
 	/* get the address of Shadow Window 2. */
 	if (get_shaw2ba(&wcb_physical_address) < 0) {
 		msg_pdbg("Cannot get the address of Shadow Window 2");
-		return 0;
+		return 1;
 	}
 	msg_pdbg("Get the address of WCB(SHA WIN2) at 0x%08lx\n",
 	         wcb_physical_address);
@@ -947,13 +939,13 @@ int wpce775x_spi_common_init(void)
 	msg_pdbg("mapped wcb address: %p for physical addr: 0x%08lx\n", wcb, wcb_physical_address);
 	if (!wcb) {
 		msg_perr("FATAL! Cannot map memory area for wcb physical address.\n");
-		return 0;
+		return 1;
 	}
 	memset((void*)wcb, 0, sizeof(*wcb));
 
 	if (get_fwh_id(&fwh_id) < 0) {
 		msg_pdbg("Cannot get fwh_id value.\n");
-		return 0;
+		return 1;
 	}
 	msg_pdbg("get fwh_id: 0x%02x\n", fwh_id);
 
@@ -975,13 +967,44 @@ int wpce775x_spi_common_init(void)
 	return 0;
 }
 
+int wpce775x_probe_superio()
+{
+	uint16_t sio_port;
+	uint8_t srid;
+
+	/* detect if wpce775x exists */
+	if (nuvoton_get_sio_index(&sio_port) < 0) {
+		msg_pdbg("No Nuvoton chip is found.\n");
+		return 1;
+	}
+	srid = sio_read(sio_port, NUVOTON_SIOCFG_SRID);
+	if ((srid & 0xE0) == 0xA0) {
+		msg_pdbg("Found EC: WPCE775x "
+			 "(Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
+	} else {
+		msg_pdbg("Found EC: Nuvoton "
+			 "(Vendor:0x%02x,ID:0x%02x,Rev:0x%02x) on sio_port:0x%x.\n",
+		         sio_read(sio_port, NUVOTON_SIOCFG_SID),
+		         srid >> 5, srid & 0x1f, sio_port);
+	}
+
+	return 0;
+}
+
 /* Called by internal_init() */
 int wpce775x_probe_spi_flash(const char *name)
 {
-	if (!(buses_supported & BUS_FWH)) {
-		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
+	if (alias && alias->type != ALIAS_EC)
 		return 1;
-	}
-	return wpce775x_spi_common_init();
+
+	if (wpce775x_probe_superio())
+		return 1;
+
+	if (wpce775x_spi_common_init())
+		return 1;
+
+	return 0;
 }
 #endif

@@ -264,11 +264,6 @@ static int detect_ec(void) {
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 
-	if (target_bus != BUS_LPC) {
-		msg_pdbg("%s():%d target_bus is not LPC.\n", __func__, __LINE__);
-		return 1;
-	}
-
 #if USE_GEC_LOCK == 1
 	msg_gdbg("Acquiring GEC lock (timeout=%d sec)...\n",
 		  GEC_LOCK_TIMEOUT_SECS);
@@ -370,18 +365,21 @@ static int gec_lpc_shutdown(void *data)
 int gec_probe_lpc(const char *name) {
 	msg_pdbg("%s():%d ...\n", __func__, __LINE__);
 
+	if (alias && alias->type != ALIAS_EC)
+		return 1;
+
 	if (detect_ec()) return 1;
+
+	msg_pdbg("GEC detected on LPC bus\n");
+	gec_lpc_priv.detected = 1;
 
 	if (buses_supported & BUS_SPI) {
 		msg_pdbg("%s():%d remove BUS_SPI from buses_supported.\n",
-		         __func__, __LINE__);
+			__func__, __LINE__);
 		buses_supported &= ~BUS_SPI;
 	}
-	buses_supported |= BUS_LPC;
-
-	msg_pdbg("GEC detected on LPC bus\n");
 	register_opaque_programmer(&opaque_programmer_gec);
-	gec_lpc_priv.detected = 1;
+	buses_supported |= BUS_LPC;
 
 	if (register_shutdown(gec_lpc_shutdown, NULL)) {
 		msg_perr("Cannot register LPC shutdown function.\n");

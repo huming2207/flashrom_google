@@ -301,7 +301,7 @@ int internal_init(void)
 	 * fix up any scripts which depend on "-p internal:bus=lpc" for
 	 * flashing EC firmware.
 	 */
-	if ((target_bus == BUS_PROG) || (target_bus == BUS_LPC)) {
+	if (target_bus != BUS_SPI) {
 		if (!gec_probe_i2c(NULL))
 			return 0;
 	}
@@ -424,8 +424,8 @@ int internal_init(void)
 #if defined(__i386__) || defined(__x86_64__)
 
 	/* probe for programmers that bridge LPC <--> SPI */
-	if (target_bus == BUS_LPC ||
-	    target_bus == BUS_FWH) {
+	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
+	    (alias && alias->type == ALIAS_EC)) {
 		gec_probe_lpc(NULL);
 		wpce775x_probe_spi_flash(NULL);
 		mec1308_probe_spi_flash(NULL);
@@ -437,7 +437,11 @@ int internal_init(void)
 
 	board_flash_enable(lb_vendor, lb_part);
 
-	if (!(buses_supported & target_bus)) {
+	if (!(buses_supported & target_bus) &&
+		(!alias || (alias && alias->type == ALIAS_NONE))) {
+		/* User specified a target bus which is not supported on the
+		 * platform or specified an alias which does not enable it.
+		 */
 		msg_perr("Programmer does not support specified bus\n");
 		return 1;
 	}

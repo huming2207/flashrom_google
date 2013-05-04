@@ -456,12 +456,21 @@ int it85xx_spi_init(struct superio s)
 {
 	int ret;
 
-	if (!(internal_buses_supported & BUS_FWH)) {
-		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
+	if (alias && alias->type != ALIAS_EC)
 		return 1;
-	}
 
 	found_chip = &ite_chips[ITE_IT85XX];
+
+	/*
+	 * FIXME: This is necessary to ensure that access to the shared access
+	 * window region is sent on the LPC bus. The old CLI syntax
+	 * (-p internal:bus=lpc) would cause the chipset enable code to set the
+	 * target bus appropriately before this function gets run, but the new
+	 * syntax ("-p ec") does not cause that to happen.
+	 */
+	target_bus = BUS_LPC;
+	msg_pdbg("%s: forcing target bus: 0x%08x\n", __func__, target_bus);
+	chipset_flash_enable();
 
 	ret = it85xx_spi_common_init(s);
 	msg_pdbg("FWH: %s():%d ret=%d\n", __func__, __LINE__, ret);
