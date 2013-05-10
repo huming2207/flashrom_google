@@ -1201,7 +1201,7 @@ int write_buf_to_file(unsigned char *buf, unsigned long size,
 static uint8_t *cache;
 static uint8_t *cache_valid;
 
-static cache_invalidate(unsigned int start, unsigned int len)
+static void cache_invalidate(unsigned int start, unsigned int len)
 {
 	/* set the invalid bytes to something obvious for debugging */
 	memset(&cache[start], 0xaa, len);
