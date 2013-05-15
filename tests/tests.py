@@ -148,7 +148,7 @@ fdt_src = """
         };
         rw-b-onestop@300000 {
             label = "rw-b-onestop";
-            reg = <0x00380000 0x00008000>;
+            reg = <%(rw_start)#x %(rw_size)#x>;
             type = "blob boot";
         };
     };
@@ -176,6 +176,8 @@ part_fname = 'part.bin'
 start = 0x10000
 size = 0x80000
 
+rw_start = 0x380000
+rw_size = 0x8000
 
 def Run(args):
   """Run a command + args and raise if it fails.
@@ -198,19 +200,20 @@ class TestFlashrom(unittest.TestCase):
   def setUp(self):
     """Set up read to run some tests.
 
-    Create a chunk of data to be writte to the image, in self.part.
+    Create a chunk of data to be written to the image, in self.part.
     """
     # Create some dummy data.
     part = ''
     for i in range(size):
       part += '%d.' % i
-      if len(part) >= size:
+      if len(part) > size:
         break
-    part = part[:size]
-    part_image = chr(0xff) * start
-    part_image += part + chr(0xff) * (flash_size - size - start)
+    self.part = part[:size]
+    self.rw_part = part[1:rw_size + 1]
+    part_image = chr(0xff) * flash_size
+    part_image = self.InsertData(part_image, start, self.part)
+    part_image = self.InsertData(part_image, rw_start, self.rw_part)
     open(part_fname, 'wb').write(part_image)
-    self.part = part
 
   def InsertData(self, image, pos, data):
     """Insert some data into an image.
@@ -240,7 +243,8 @@ class TestFlashrom(unittest.TestCase):
     return struct.pack('<8sLL', sig, len(data), crc32)
 
   def TryTest(self, sig=FDTMAP_SIGNATURE, fdtmap_pos=0x000c8000,
-              bad_crc=False, bad_size=False, decoy=False):
+              bad_crc=False, bad_size=False, decoy=False,
+              alt_region=False):
     """Simple test to check that an FDT flashmap works correctly.
 
     Create an FDT map and write it to an image file. Then write a single
@@ -254,6 +258,7 @@ class TestFlashrom(unittest.TestCase):
       bad_size: True to force the size field to be incorrect.
       decoy: True to create lots of decoy blocks with invalid signatures or
           CRCs.
+      alt_region: True to use the alternative RW region for the test
     Returns:
       Contents of the part that was read back from the created image.
     """
@@ -263,7 +268,8 @@ class TestFlashrom(unittest.TestCase):
         'size': size,
         'fdtmap_pos': fdtmap_pos,
         'fdtmap_size': fdtmap_size,
-
+        'rw_start' : rw_start,
+        'rw_size' : rw_size,
     }
     with open(src_fname, 'w') as fd:
       print >>fd, fdt_src % props
@@ -286,9 +292,13 @@ class TestFlashrom(unittest.TestCase):
       fd.write(image)
 
     # Use flashrom to write it into the image.
+    if alt_region:
+      region = 'RW_B_ONESTOP'
+    else:
+      region = 'RO_ONESTOP'
     args = ['sudo', '../flashrom',
             '-p', 'dummy:emulate=SST25VF032B,image=%s' % image_fname,
-            '-w', part_fname, '-i', 'RO_ONESTOP']
+            '-w', part_fname, '-i', region]
     Run(args)
 
     # Read it back.
@@ -299,17 +309,26 @@ class TestFlashrom(unittest.TestCase):
     # Make sure that it matches.
     with open(part_fname, 'rb') as fd:
       check = fd.read()
-    check = check[start:start + size]
+    if alt_region:
+      check = check[rw_start:rw_start + rw_size]
+    else:
+      check = check[start:start + size]
     Run(['sudo', 'rm', '-f', part_fname])
     return check
 
+  def checkData(self, part, result):
+    if part != result:
+      print 'Part size   %d: %s' % (len(self.rw_part), self.rw_part[:100])
+      print 'Result size %d: %s' % (len(result), result[:100])
+      self.fail('Failed to find correct data at expected location')
+
   def testValidmap(self):
     """Simple test with fairly well aligned fdtmap."""
-    self.assertEqual(self.part, self.TryTest())
+    self.checkData(self.part, self.TryTest())
 
   def testExhaustiveSearch(self):
     """Test that the exhaustive search works OK."""
-    self.assertEqual(self.part, self.TryTest(fdtmap_pos=0x000c8001))
+    self.checkData(self.part, self.TryTest(fdtmap_pos=0x000c8001))
 
   def testInvalidSignature(self):
     """Make sure that a bad signature is detected."""
@@ -325,7 +344,11 @@ class TestFlashrom(unittest.TestCase):
 
   def testDecoy(self):
     """Make sure that decoys (bad FDT maps) don't throw us off."""
-    self.assertEqual(self.part, self.TryTest(decoy=True))
+    self.checkData(self.part, self.TryTest(decoy=True))
+
+  def testLastRegion(self):
+    """Make sure that the entire FDTMAP is read correctly."""
+    self.checkData(self.rw_part, self.TryTest(alt_region=True))
 
 if __name__ == '__main__':
   print 'Testing fdtmap'
