@@ -35,6 +35,7 @@
 
 #include <ctype.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <zlib.h>
 
 #include "flash.h"
@@ -149,7 +150,7 @@ static int scan_flashmap(const void *blob, romlayout_t *rom_entries,
 		if (node < 0)
 			return node;
 		if (depth != 1)
-			break;
+			continue;
 
 		name = fdt_get_name(blob, node, NULL);
 		ret = read_entry(blob, node, name, &entry);
