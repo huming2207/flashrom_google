@@ -133,6 +133,7 @@ static enum ene_ec_state ec_state = EC_STATE_NORMAL;
 #define EC_RESTART_TIMEOUT 10
 #define ENE_SPI_DELAY_CYCLE 4
 #define EC_PAUSE_TIMEOUT 12
+#define EC_RESET_TRIES 3
 
 #define ENE_KB94X_PAUSE_WAKEUP_PORT  0x64
 
@@ -404,11 +405,24 @@ static int ene_spi_send_command(unsigned int writecnt,
 				unsigned char *readarr)
 {
 	int i;
+	int tries = EC_RESET_TRIES;
 
 	if (ec_state == EC_STATE_IDLE && is_spicmd_write(writearr[0])) {
-		/* Enter reset mode if we need to write/erase */
-		ene_resume_ec();
-		ene_reset_ec();
+		do {
+			/* Enter reset mode if we need to write/erase */
+			if (ene_resume_ec())
+				continue;
+
+			if (!ene_reset_ec())
+				break;
+		} while (--tries > 0);
+
+		if (!tries) {
+			msg_perr("%s: EC failed reset, skipping write\n",
+				__func__);
+			ec_state = EC_STATE_IDLE;
+			return 1;
+		}
 	}
 	else if(found_chip->chip_id == ENE_KB94X && ec_state == EC_STATE_IDLE)
 		ene_pause_timeout_check();
