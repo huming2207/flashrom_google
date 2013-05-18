@@ -494,6 +494,16 @@ int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 int buspirate_spi_init(void);
 #endif
 
+/* linux_i2c.c */
+#if CONFIG_LINUX_I2C == 1
+int linux_i2c_shutdown(void *data);
+int linux_i2c_init(void);
+int linux_i2c_open(int bus, int addr, int force);
+void linux_i2c_close(void);
+int linux_i2c_xfer(int bus, int addr, const void *inbuf,
+		   int insize, const void *outbuf, int outsize);
+#endif
+
 /* linux_spi.c */
 #if CONFIG_LINUX_SPI == 1
 int linux_spi_init(void);
