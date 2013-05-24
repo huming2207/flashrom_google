@@ -382,6 +382,8 @@ NEED_PCI := yes
 endif
 endif
 
+PROGRAMMER_OBJS += gec_dev.o
+
 ifeq ($(CONFIG_SERPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_SERPROG=1'
 PROGRAMMER_OBJS += serprog.o

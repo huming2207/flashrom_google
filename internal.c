@@ -307,6 +307,9 @@ int internal_init(void)
 	}
 #endif
 
+	if (!gec_probe_dev())
+		return 0;
+
 #if defined(__arm__) && CONFIG_LINUX_SPI == 1
 	/* On the ARM platform, we prefer /dev/spidev if it is supported.
 	 * That means, if user specifies

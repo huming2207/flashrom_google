@@ -671,6 +671,14 @@ int wpce775x_probe_spi_flash(const char *name);
 
 /* gec.c */
 int gec_probe_i2c(const char *name);
+
+/**
+ * Probe the Google Chrome OS EC device
+ *
+ * @return 0 if found correct, non-zero if not found or error
+ */
+int gec_probe_dev(void);
+
 int gec_probe_lpc(const char *name);
 int gec_need_2nd_pass(void);
 int gec_finish(void);
