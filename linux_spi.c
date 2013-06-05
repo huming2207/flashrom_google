@@ -76,17 +76,18 @@ static char* linux_spi_probe(void)
 	int i;  /* for for-loop */
 
 	for (i = '0'; i <= '9'; i++) {
-		int fd;
-		char buf[8];  // 8 is long enough for modalias
+		int fd, bytes_read;
+		char buf[32];
 
 		filename[X] = i;
 		if ((fd = open(filename, O_RDONLY)) < 0 ||
-		    read(fd, buf, sizeof(buf)) < 0) {
+		    (bytes_read = read(fd, buf, sizeof(buf) - 1) < 0)) {
 			msg_pdbg("read(%s) < 0, try next.\n", filename);
 			continue;
 		}
+		buf[bytes_read] = '\0';
 
-		if (!strncmp(buf, "spidev", 6)) {
+		if (strstr(buf, "spidev")) {
 			static char name[] = "/dev/spidevX.0";
 			*strchr(name, 'X') = i;
 			msg_pdbg("Detected linux_spi:dev=%s\n", name);
