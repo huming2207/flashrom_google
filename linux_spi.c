@@ -81,7 +81,7 @@ static char* linux_spi_probe(void)
 
 		filename[X] = i;
 		if ((fd = open(filename, O_RDONLY)) < 0 ||
-		    (bytes_read = read(fd, buf, sizeof(buf) - 1) < 0)) {
+		    ((bytes_read = read(fd, buf, sizeof(buf) - 1)) < 0)) {
 			msg_pdbg("read(%s) < 0, try next.\n", filename);
 			continue;
 		}
