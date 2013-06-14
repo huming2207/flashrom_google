@@ -306,8 +306,11 @@ int internal_init(void)
 			return 0;
 	}
 
-	if (!gec_probe_dev())
-		return 0;
+	/* This is on ARM only for now crbug.com/249568 */
+	if (target_bus != BUS_SPI) {
+		if (!gec_probe_dev())
+			return 0;
+	}
 #endif
 
 #if defined(__arm__) && CONFIG_LINUX_SPI == 1
