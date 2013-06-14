@@ -305,10 +305,10 @@ int internal_init(void)
 		if (!gec_probe_i2c(NULL))
 			return 0;
 	}
-#endif
 
 	if (!gec_probe_dev())
 		return 0;
+#endif
 
 #if defined(__arm__) && CONFIG_LINUX_SPI == 1
 	/* On the ARM platform, we prefer /dev/spidev if it is supported.
