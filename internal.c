@@ -296,6 +296,12 @@ int internal_init(void)
 #endif
 
 #if defined(__arm__)
+	/* This is on ARM only for now crbug.com/249568 */
+	if (target_bus != BUS_SPI) {
+		if (!gec_probe_dev())
+			return 0;
+	}
+
 	/* FIXME: This should not need to be covered by the "#if defined",
 	 * and should not check BUS_LPC. Those are hacks until we can
 	 * fix up any scripts which depend on "-p internal:bus=lpc" for
@@ -303,12 +309,6 @@ int internal_init(void)
 	 */
 	if (target_bus != BUS_SPI) {
 		if (!gec_probe_i2c(NULL))
-			return 0;
-	}
-
-	/* This is on ARM only for now crbug.com/249568 */
-	if (target_bus != BUS_SPI) {
-		if (!gec_probe_dev())
 			return 0;
 	}
 #endif
