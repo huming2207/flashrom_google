@@ -45,7 +45,7 @@
 #include "programmer.h"
 
 #define I2C_DEV_PREFIX		"/dev/i2c-"
-#define I2C_MAX_ADAPTER		32
+#define I2C_MAX_ADAPTER		255
 
 static int fd = -1;
 
@@ -69,7 +69,7 @@ int linux_i2c_open(int bus, int addr, int force)
 {
 	char *dev;
 	int ret = 1;
-	int path_len = strlen(I2C_DEV_PREFIX) + 3;
+	int path_len = strlen(I2C_DEV_PREFIX) + 4;
 	int request = force ? I2C_SLAVE_FORCE : I2C_SLAVE;
 
 	if (bus < 0 || bus > I2C_MAX_ADAPTER) {
