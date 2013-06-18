@@ -296,18 +296,26 @@ int internal_init(void)
 #endif
 
 #if defined(__arm__)
-	/* This is on ARM only for now crbug.com/249568 */
+	/*
+	 * FIXME: CrOS EC probing should not require this "#if defined(__arm__)"
+	 * and should not depend on the target bus. This is only to satisfy
+	 * users and scripts who currently depend on the old "-p internal:bus="
+	 * syntax or some default behavior.
+	 *
+	 * Once everything is finally updated, we should only rely on
+	 * alias == ALIAS_EC in order to call gec_probe_*.
+	 *
+	 * Also, ensure probing does not get confused when removing the
+	 * "#if defined(__arm__)" (see crbug.com/249568).
+	 */
+	if (!alias && probe_target_bus_later)
+		target_bus = BUS_SPI;
+
 	if (target_bus != BUS_SPI) {
+		/* Give preference to the devfs interface if it exists. */
 		if (!gec_probe_dev())
 			return 0;
-	}
 
-	/* FIXME: This should not need to be covered by the "#if defined",
-	 * and should not check BUS_LPC. Those are hacks until we can
-	 * fix up any scripts which depend on "-p internal:bus=lpc" for
-	 * flashing EC firmware.
-	 */
-	if (target_bus != BUS_SPI) {
 		if (!gec_probe_i2c(NULL))
 			return 0;
 	}
