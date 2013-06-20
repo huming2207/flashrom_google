@@ -137,7 +137,7 @@ static int gec_command_dev(int command, int version,
 		return -EC_RES_ERROR;
 	}
 
-	return 0;
+	return cmd.insize;
 }
 
 static struct gec_priv gec_dev_priv = {
