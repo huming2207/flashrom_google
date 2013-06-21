@@ -155,6 +155,12 @@ static const struct opaque_programmer opaque_programmer_gec_dev = {
 	.data		= &gec_dev_priv,
 };
 
+static int gec_dev_shutdown(void *data)
+{
+	close(gec_fd);
+	return 0;
+}
+
 int gec_probe_dev(void)
 {
 	if (alias && alias->type != ALIAS_EC)
@@ -167,6 +173,7 @@ int gec_probe_dev(void)
 
 	msg_pdbg("GEC detected at %s\n", GEC_DEV_NAME);
 	register_opaque_programmer(&opaque_programmer_gec_dev);
+	register_shutdown(gec_dev_shutdown, NULL);
 	gec_dev_priv.detected = 1;
 
 	return 0;
