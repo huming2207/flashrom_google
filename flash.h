@@ -312,6 +312,8 @@ int add_fmap_entries(struct flashchip *flash);
 int get_num_include_args(void);
 int register_include_arg(char *name);
 int process_include_args(void);
+int num_include_files(void);
+int included_regions_overlap(void);
 int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
 int handle_partial_read(
     struct flashchip *flash,

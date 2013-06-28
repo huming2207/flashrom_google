@@ -453,6 +453,28 @@ int find_romentry(char *name)
 }
 
 /*
+ * num_include_files - count filenames used with -i args
+ *
+ * This function is intended to help command syntax parser determine if
+ * operations such as read and write require a file as an argument. This can
+ * be used with get_num_include_args() to determine if all -i args have
+ * filenames.
+ *
+ * returns number of filenames supplied with -i args
+ */
+int num_include_files(void)
+{
+	int i, count = 0;
+
+	for (i = 0; i < get_num_include_args(); i++) {
+		if (strchr(include_args[i], ':'))
+			count++;
+	}
+
+	return count;
+}
+
+/*
  * process_include_args - process -i arguments
  *
  * returns 0 to indicate success, <0 to indicate failure
@@ -506,6 +528,45 @@ int find_next_included_romentry(unsigned int start)
 		}
 	}
 	return best_entry;
+}
+
+/* returns boolean 1 if regions overlap, 0 otherwise */
+int included_regions_overlap()
+{
+	int i;
+	int overlap_detected = 0;
+
+	for (i = 0; i < romimages; i++) {
+		int j;
+
+		if (!rom_entries[i].included)
+			continue;
+
+		for (j = 0; j < romimages; j++) {
+			if (!rom_entries[j].included)
+				continue;
+
+			if (i == j)
+				continue;
+
+			if (rom_entries[i].start > rom_entries[j].end)
+				continue;
+
+			if (rom_entries[i].end < rom_entries[j].start)
+				continue;
+
+			msg_gdbg("Regions %s [0x%08x-0x%08x] and "
+				"%s [0x%08x-0x%08x] overlap\n",
+				rom_entries[i].name, rom_entries[i].start,
+				rom_entries[i].end, rom_entries[j].name,
+				rom_entries[j].start, rom_entries[j].end);
+			overlap_detected = 1;
+			goto out;
+		}
+
+	}
+out:
+	return overlap_detected;
 }
 
 static int read_content_from_file(int entry, uint8_t *newcontents) {

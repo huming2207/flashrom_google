@@ -237,12 +237,12 @@ int main(int argc, char *argv[])
 	enum programmer prog = PROGRAMMER_INVALID;
 	int rc = 0;
 
-	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhbx";
+	const char *optstring = "rRwvnVEfc:m:l:i:p:Lzhbx";
 	static struct option long_options[] = {
-		{"read", 1, 0, 'r'},
-		{"write", 1, 0, 'w'},
+		{"read", 0, 0, 'r'},
+		{"write", 0, 0, 'w'},
 		{"erase", 0, 0, 'E'},
-		{"verify", 1, 0, 'v'},
+		{"verify", 0, 0, 'v'},
 		{"noverify", 0, 0, 'n'},
 		{"chip", 1, 0, 'c'},
 		{"mainboard", 1, 0, 'm'},
@@ -296,7 +296,6 @@ int main(int argc, char *argv[])
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
-			filename = strdup(optarg);
 			read_it = 1;
 #if CONFIG_USE_OS_TIMER == 0
 			/* horrible workaround for excess time spent in
@@ -310,7 +309,6 @@ int main(int argc, char *argv[])
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
-			filename = strdup(optarg);
 			write_it = 1;
 #if CONFIG_USE_OS_TIMER == 0
 			/* horrible workaround for excess time spent in
@@ -330,7 +328,6 @@ int main(int argc, char *argv[])
 					"mutually exclusive. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
-			filename = strdup(optarg);
 			if (!verify_it) verify_it = VERIFY_FULL;
 #if CONFIG_USE_OS_TIMER == 0
 			/* horrible workaround for excess time spent in
@@ -561,6 +558,11 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+	if (read_it || write_it || verify_it) {
+		if (argv[optind])
+			filename = argv[optind];
+	}
+
 	if (chip_to_probe) {
 		for (flash = flashchips; flash && flash->name; flash++)
 			if (!strcmp(flash->name, chip_to_probe))
@@ -681,11 +683,64 @@ int main(int argc, char *argv[])
 		goto cli_mfg_silent_exit;
 	}
 
-	if (!filename && (read_it | write_it | verify_it)) {
-		printf("Error: No filename specified.\n");
-		// FIXME: flash writes stay enabled!
-		rc = 1;
-		goto cli_mfg_silent_exit;
+	/*
+	 * Common rules for -r/-w/-v syntax parsing:
+	 * - If no filename is specified at all, quit.
+	 * - If no filename is specified for -r/-w/-v, but files are specified
+	 *   for -i, then the number of file arguments for -i options must be
+	 *   equal to the total number of -i options.
+	 *
+	 * Rules for reading:
+	 * - If files are specified for -i args but not -r, do partial reads for
+	 *   each -i arg, creating a new file for each region. Each -i option
+	 *   must specify a filename.
+	 * - If filenames are specified for -r and -i args, then:
+	 *     - Do partial read for each -i arg, creating a new file for
+	 *       each region where a filename is provided (-i region:filename).
+	 *     - Create a ROM-sized file with partially filled content. For each
+	 *       -i arg, fill the corresponding offset with content from ROM.
+	 *
+	 * Rules for writing and verifying:
+	 * - If files are specified for both -w/-v and -i args, -i files take
+	 *   priority. (Note: We determined this was the most useful syntax for
+	 *   chromium.org's flashrom after some discussion. Upstream may wish
+	 *   to quit in this case due to ambiguity).
+	 *   See: http://crbug.com/263495.
+	 * - If file is specified for -w/-v and no files are specified with -i
+	 *   args, then the file is to be used for writing/verifying the entire
+	 *   ROM.
+	 * - If files are specified for -i args but not -w, do partial writes
+	 *   for each -i arg. Likewise for -v and -i args. All -i args must
+	 *   supply a filename. Any omission is considered ambiguous.
+	 * - Regions with a filename associated must not overlap. This is also
+	 *   considered ambiguous. Note: This is checked later since it requires
+	 *   processing the layout/fmap first.
+	 */
+	if (read_it || write_it || verify_it) {
+		char op;
+
+		if (read_it)
+			op = 'r';
+		else if (write_it)
+			op = 'w';
+		else if (verify_it)
+			op = 'v';
+
+		if (!filename) {
+			if (!get_num_include_args()) {
+				printf("Error: No file specified for -%c.\n",
+						op);
+				rc = 1;
+				goto cli_mfg_silent_exit;
+			}
+
+			if (num_include_files() != get_num_include_args()) {
+				printf("Error: One or more -i arguments is "
+					" missing a filename.\n");
+				rc = 1;
+				goto cli_mfg_silent_exit;
+			}
+		}
 	}
 
 	/* Always verify write operations unless -n is used. */

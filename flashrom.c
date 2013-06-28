@@ -1277,7 +1277,16 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 		ret = 1;
 		goto out_free;
 	} else if (ret > 0) {
-		/* Partial read has been handled, pass the whole flash read. */
+		int num_regions = get_num_include_args();
+
+		if (ret != num_regions) {
+			msg_cerr("Requested %d regions, but only read %d\n",
+					num_regions, ret);
+			ret = 1;
+			goto out_free;
+		}
+
+		ret = 0;
 	} else {
 		if (read_flash(flash, buf, 0, size)) {
 			msg_cerr("Read operation failed!\n");
@@ -1286,7 +1295,9 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 		}
 	}
 
-	ret = write_buf_to_file(buf, size, filename);
+	if (filename)
+		ret = write_buf_to_file(buf, size, filename);
+
 out_free:
 	free(buf);
 	if (ret)
@@ -1929,9 +1940,25 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 	}
 
 	if (write_it || verify_it) {
-		if (read_buf_from_file(newcontents, size, filename)) {
-			ret = 1;
-			goto out;
+		/*
+		 * Note: This must be done before any files specified by -i
+		 * arguments are processed merged into the newcontents since
+		 * -i files take priority. See http://crbug.com/263495.
+		 */
+		if (filename) {
+			if (read_buf_from_file(newcontents, size, filename)) {
+				ret = 1;
+				goto out;
+			}
+		} else {
+			/* Content will be read from -i args, so they must
+			 * not overlap. */
+			if (included_regions_overlap()) {
+				msg_gerr("Error: Included regions must "
+						"not overlap.\n");
+				ret = 1;
+				goto out;
+			}
 		}
 
 #if 0
@@ -1978,8 +2005,12 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 	}
 	msg_cdbg("done.\n");
 
-	// This should be moved into each flash part's code to do it
-	// cleanly. This does the job.
+	/*
+	 * Note: This must be done after reading the file specified for the
+	 * -w/-v argument, if any, so that files specified using -i end up
+	 * in the "newcontents" buffer before being written.
+	 * See http://crbug.com/263495.
+	 */
 	if (handle_romentries(flash, oldcontents, newcontents)) {
 		ret = 1;
 		msg_cerr("Error handling ROM entries.\n");
