@@ -121,6 +121,29 @@ static int gec_get_current_image(struct gec_priv *priv)
 }
 
 
+static int gec_get_region_info(struct gec_priv *priv,
+			       enum ec_flash_region region,
+			       struct ec_response_flash_region_info *info)
+{
+	struct ec_params_flash_region_info req;
+	struct ec_response_flash_region_info resp;
+	int rc;
+
+	req.region = region;
+	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
+			      EC_VER_FLASH_REGION_INFO, &req, sizeof(req),
+			      &resp, sizeof(resp));
+	if (rc < 0) {
+		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
+		return rc;
+	}
+
+	info->offset = resp.offset;
+	info->size = resp.size;
+	return 0;
+}
+
+
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
  * then this functions picks a NEW firmware copy and jumps to it. Note that
  * RO is preferred, then A, finally B.
@@ -348,13 +371,10 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 static int gec_list_ranges(const struct flashchip *flash) {
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	struct ec_params_flash_region_info p;
-	struct ec_response_flash_region_info r;
+	struct ec_response_flash_region_info info;
 	int rc;
 
-	p.region = EC_FLASH_REGION_WP_RO;
-	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
-		EC_VER_FLASH_REGION_INFO, &p, sizeof(p), &r, sizeof(r));
+	rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
@@ -362,7 +382,8 @@ static int gec_list_ranges(const struct flashchip *flash) {
 
 	msg_pinfo("Supported write protect range:\n");
 	msg_pinfo("  disable: start=0x%06x len=0x%06x\n", 0, 0);
-	msg_pinfo("  enable:  start=0x%06x len=0x%06x\n", r.offset, r.size);
+	msg_pinfo("  enable:  start=0x%06x len=0x%06x\n", info.offset,
+		  info.size);
 
 	return 0;
 }
@@ -521,27 +542,25 @@ exit:
 static int gec_set_range(const struct flashchip *flash,
                          unsigned int start, unsigned int len) {
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
-	struct ec_params_flash_region_info p;
-	struct ec_response_flash_region_info r;
+	struct ec_response_flash_region_info info;
 	int rc;
 
 	/* Check if the given range is supported */
-	p.region = EC_FLASH_REGION_WP_RO;
-	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
-		EC_VER_FLASH_REGION_INFO, &p, sizeof(p), &r, sizeof(r));
+	rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
 	}
 	if ((!start && !len) ||  /* list supported ranges */
-	    ((start == r.offset) && (len == r.size))) {
+	    ((start == info.offset) && (len == info.size))) {
 		/* pass */
 	} else {
 		msg_perr("FAILED: Unsupported write protection range "
 			 "(0x%06x,0x%06x)\n\n", start, len);
 		msg_perr("Currently supported range:\n");
 		msg_perr("  disable: (0x%06x,0x%06x)\n", 0, 0);
-		msg_perr("  enable:  (0x%06x,0x%06x)\n", r.offset, r.size);
+		msg_perr("  enable:  (0x%06x,0x%06x)\n", info.offset,
+			 info.size);
 		return 1;
 	}
 
@@ -596,22 +615,18 @@ static int gec_wp_status(const struct flashchip *flash) {
 
 	start = len = 0;
 	if (r.flags & EC_FLASH_PROTECT_RO_AT_BOOT) {
-		struct ec_params_flash_region_info reg_p;
-		struct ec_response_flash_region_info reg_r;
+		struct ec_response_flash_region_info info;
 
 		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is set.\n",
 			 __func__);
-		reg_p.region = EC_FLASH_REGION_WP_RO;
-		rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
-			EC_VER_FLASH_REGION_INFO,
-			&reg_p, sizeof(reg_p), &reg_r, sizeof(reg_r));
+		rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 		if (rc < 0) {
 			msg_perr("FAILED: Cannot get the WP_RO region info: "
 				 "%d\n", rc);
 			return 1;
 		}
-		start = reg_r.offset;
-		len = reg_r.size;
+		start = info.offset;
+		len = info.size;
 	} else {
 		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is clear.\n",
 			 __func__);
