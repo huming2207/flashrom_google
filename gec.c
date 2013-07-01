@@ -101,6 +101,26 @@ static void gec_invalidate_copy(unsigned int addr, unsigned int len)
 }
 
 
+static int gec_get_current_image(struct gec_priv *priv)
+{
+	struct ec_response_get_version resp;
+	int rc;
+
+	rc = priv->ec_command(EC_CMD_GET_VERSION, 0, NULL, 0, &resp,
+			      sizeof(resp));
+	if (rc < 0) {
+		msg_perr("GEC cannot get the running copy: rc=%d\n", rc);
+		return rc;
+	}
+	if (resp.current_image == EC_IMAGE_UNKNOWN) {
+		msg_perr("GEC gets unknown running copy\n");
+		return -1;
+	}
+
+	return resp.current_image;
+}
+
+
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
  * then this functions picks a NEW firmware copy and jumps to it. Note that
  * RO is preferred, then A, finally B.
@@ -118,12 +138,9 @@ static int gec_jump_copy(enum ec_current_image target) {
 	 * set the OBF=1 and the next command cannot be executed.
 	 * Thus, we call EC to jump only if the target is different.
 	 */
-	rc = priv->ec_command(EC_CMD_GET_VERSION, 0, NULL, 0, &c, sizeof(c));
-	if (rc < 0 || c.current_image == EC_IMAGE_UNKNOWN) {
-		msg_perr("GEC cannot get the running copy: rc=%d image=%s\n",
-			 rc, sections[c.current_image]);
+	rc = gec_get_current_image(priv);
+	if (rc < 0)
 		return 1;
-	}
 
 	memset(&p, 0, sizeof(p));
 	p.cmd = target != EC_IMAGE_UNKNOWN ? target :
@@ -146,6 +163,7 @@ static int gec_jump_copy(enum ec_current_image target) {
 	} else {
 		msg_pdbg("GEC has jumped to [%s]\n", sections[p.cmd]);
 		rc = EC_RES_SUCCESS;
+		priv->current_image = target;
 	}
 
 	/* Sleep 1 sec to wait the EC re-init. */
@@ -638,6 +656,13 @@ int gec_probe_size(struct flashchip *flash) {
 		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
 		return 0;
 	}
+	rc = gec_get_current_image(priv);
+	if (rc < 0) {
+		msg_perr("%s(): Failed to probe (no current image): %d\n",
+			 __func__, rc);
+		return 0;
+	}
+	priv->current_image = rc;
 
 	flash->total_size = info.flash_size / 1024;
 	flash->page_size = 64;
