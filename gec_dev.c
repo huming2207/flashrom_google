@@ -48,6 +48,7 @@
 #include "file.h"
 #include "flash.h"
 #include "gec_ec_commands.h"
+#include "gec.h"
 #include "programmer.h"
 
 #define GEC_DEV_NAME		"/dev/cros_ec"

@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
+#include "gec.h"
 #include "gec_lock.h"
 #include "gec_ec_commands.h"
 #include "programmer.h"

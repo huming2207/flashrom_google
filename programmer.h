@@ -707,18 +707,6 @@ int gec_probe_lpc(const char *name);
 int gec_need_2nd_pass(void);
 int gec_finish(void);
 int gec_prepare(uint8_t *image, int size);
-struct gec_priv {
-	int detected;
-	int (*ec_command)(int command, int ver, const void *indata, int insize,
-			  void *outdata, int outsize);
-};
-int gec_probe_size(struct flashchip *flash);
-int gec_block_erase(struct flashchip *flash,
-                    unsigned int blockaddr, unsigned int len);
-int gec_read(struct flashchip *flash, uint8_t *readarr,
-             unsigned int blockaddr, unsigned int readcnt);
-int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
-                    unsigned int nbytes);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

@@ -44,6 +44,7 @@
 #endif
 #include "gec_ec_commands.h"
 #include "programmer.h"
+#include "gec.h"
 #include "spi.h"
 #include "writeprotect.h"
 
