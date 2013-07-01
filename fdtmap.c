@@ -152,7 +152,7 @@ static int scan_flashmap(const void *blob, romlayout_t *rom_entries,
 		if (depth != 1)
 			continue;
 
-		name = fdt_get_name(blob, node, NULL);
+		name = fdt_getprop(blob, node, "label", NULL);
 		ret = read_entry(blob, node, name, &entry);
 		if (ret)
 			return ret;
