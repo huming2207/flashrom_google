@@ -31,7 +31,6 @@
  * LIABILITY, ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE,
  * EVEN IF GOOGLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,6 +80,9 @@ static const char *sections[3] = {
 	"EC_RW",
 };
 
+/* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
+ * the number of regions */
+static struct ec_response_flash_region_info regions[EC_FLASH_REGION_WP_RO + 1];
 
 /* Given the range not able to update, mark the corresponding
  * firmware as old.
@@ -164,17 +166,43 @@ static int gec_jump_copy(enum ec_current_image target) {
 	rc = gec_get_current_image(priv);
 	if (rc < 0)
 		return 1;
+	if (rc == target)
+		return 0;
 
 	memset(&p, 0, sizeof(p));
-	p.cmd = target != EC_IMAGE_UNKNOWN ? target :
-	        fwcopy[EC_IMAGE_RO].flags ? EC_IMAGE_RO :
-	        fwcopy[EC_IMAGE_RW].flags ? EC_IMAGE_RW :
-	        EC_IMAGE_UNKNOWN;
+
+	/* Translate target --> EC reboot command parameter */
+	switch (target) {
+	case EC_IMAGE_RO:
+		p.cmd = EC_REBOOT_JUMP_RO;
+		break;
+	case EC_IMAGE_RW:
+		p.cmd = EC_REBOOT_JUMP_RW;
+		break;
+	default:
+		/*
+		 * If target is unspecified, set EC reboot command to use
+		 * a new image. Also set "target" so that it may be used
+		 * to update the priv->current_image if jump is successful.
+		 */
+		if (fwcopy[EC_IMAGE_RO].flags) {
+			p.cmd = EC_REBOOT_JUMP_RO;
+			target = EC_IMAGE_RO;
+		} else if (fwcopy[EC_IMAGE_RW].flags) {
+			p.cmd = EC_REBOOT_JUMP_RW;
+			target = EC_IMAGE_RW;
+		} else {
+			p.cmd = EC_IMAGE_UNKNOWN;
+		}
+		break;
+	}
+
 	msg_pdbg("GEC is jumping to [%s]\n", sections[p.cmd]);
 	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
 	if (c.current_image == p.cmd) {
 		msg_pdbg("GEC is already in [%s]\n", sections[p.cmd]);
+		priv->current_image = target;
 		return 0;
 	}
 
@@ -304,12 +332,42 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 }
 
 
+/*
+ * returns 0 to indicate area does not overlap current EC image
+ * returns 1 to indicate area overlaps current EC image or error
+ */
+static int in_current_image(struct gec_priv *priv,
+		unsigned int addr, unsigned int len)
+{
+	int ret;
+	enum ec_current_image image;
+	uint32_t region_offset;
+	uint32_t region_size;
+
+	image = priv->current_image;
+	region_offset = priv->region[image].offset;
+	region_size = priv->region[image].size;
+
+	if ((addr + len - 1 < region_offset) ||
+		(addr > region_offset + region_size - 1)) {
+		return 0;
+	}
+	return 1;
+}
+
+
 int gec_block_erase(struct flashchip *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
 	struct ec_params_flash_erase erase;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int rc;
+
+	if (in_current_image(priv, blockaddr, len)) {
+		gec_invalidate_copy(blockaddr, len);
+		need_2nd_pass = 1;
+		return ACCESS_DENIED;
+	}
 
 	erase.offset = blockaddr;
 	erase.size = len;
@@ -348,6 +406,13 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		written = min(nbytes - i, maxlen);
 		p.offset = addr + i;
 		p.size = written;
+
+		if (in_current_image(priv, p.offset, p.size)) {
+			gec_invalidate_copy(addr, nbytes);
+			need_2nd_pass = 1;
+			return ACCESS_DENIED;
+		}
+
 		memcpy(p.data, &buf[i], written);
 		rc = priv->ec_command(EC_CMD_FLASH_WRITE, 0,
 				      &p, sizeof(p), NULL, 0);
@@ -678,6 +743,7 @@ int gec_probe_size(struct flashchip *flash) {
 		return 0;
 	}
 	priv->current_image = rc;
+	priv->region = &regions[0];
 
 	flash->total_size = info.flash_size / 1024;
 	flash->page_size = 64;
@@ -687,6 +753,24 @@ int gec_probe_size(struct flashchip *flash) {
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
 	flash->wp = &wp;
+
+	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
+	 * so we need to be careful about using these enums as array indices */
+	rc = gec_get_region_info(priv, EC_FLASH_REGION_RO,
+				 &priv->region[EC_IMAGE_RO]);
+	if (rc) {
+		msg_perr("%s(): Failed to probe (cannot find RO region): %d\n",
+			 __func__, rc);
+		return 0;
+	}
+
+	rc = gec_get_region_info(priv, EC_FLASH_REGION_RW,
+				 &priv->region[EC_IMAGE_RW]);
+	if (rc) {
+		msg_perr("%s(): Failed to probe (cannot find RW region): %d\n",
+			 __func__, rc);
+		return 0;
+	}
 
 	return 1;
 };

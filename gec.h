@@ -28,6 +28,7 @@
 struct gec_priv {
 	int detected;
 	enum ec_current_image current_image;
+	struct ec_response_flash_region_info *region;
 	int (*ec_command)(int command, int ver, const void *indata, int insize,
 			  void *outdata, int outsize);
 };
