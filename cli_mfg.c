@@ -154,6 +154,7 @@ void cli_mfg_usage(const char *name)
 	       "   -i | --image <name>[:<file>]      only access image <name> "
 	         "from flash layout\n"
 	       "   -L | --list-supported             print supported devices\n"
+	       "   -x | --extract-map <file>         extract flashmap to file\n"
 #if CONFIG_PRINT_WIKI == 1
 	       "   -z | --list-supported-wiki        print supported devices "
 	         "in wiki syntax\n"
@@ -227,7 +228,7 @@ int main(int argc, char *argv[])
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
 	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
 	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
-	int dont_verify_it = 0, list_supported = 0;
+	int dont_verify_it = 0, list_supported = 0, extract_it = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -236,7 +237,7 @@ int main(int argc, char *argv[])
 	enum programmer prog = PROGRAMMER_INVALID;
 	int rc = 0;
 
-	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhb";
+	const char *optstring = "r:Rw:v:nVEfc:m:l:i:p:Lzhbx";
 	static struct option long_options[] = {
 		{"read", 1, 0, 'r'},
 		{"write", 1, 0, 'w'},
@@ -251,6 +252,7 @@ int main(int argc, char *argv[])
 		{"image", 1, 0, 'i'},
 		{"list-supported", 0, 0, 'L'},
 		{"list-supported-wiki", 0, 0, 'z'},
+		{"extract", 0, 0, 'x'},
 		{"programmer", 1, 0, 'p'},
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'R'},
@@ -394,6 +396,14 @@ int main(int argc, char *argv[])
 				cli_mfg_abort_usage(argv[0]);
 			}
 			list_supported = 1;
+			break;
+		case 'x':
+			if (++operation_specified > 1) {
+				fprintf(stderr, "More than one operation "
+					"specified. Aborting.\n");
+				cli_mfg_abort_usage(argv[0]);
+			}
+			extract_it = 1;
 			break;
 		case 'z':
 #if CONFIG_PRINT_WIKI == 1
@@ -658,7 +668,7 @@ int main(int argc, char *argv[])
 
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
 	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
-	      wp_status | wp_list)) {
+	      wp_status | wp_list | extract_it)) {
 		printf("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
@@ -795,15 +805,15 @@ int main(int argc, char *argv[])
 
 	/* If the user doesn't specify any -i argument, then we can skip the
 	 * fmap parsing to speed up. */
-	if (get_num_include_args() == 0) {
+	if (get_num_include_args() == 0 && !extract_it) {
 		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
 		set_ignore_fmap = 1;
 	}
 
-	if (read_it || write_it || erase_it || verify_it) {
+	if (read_it || write_it || erase_it || verify_it || extract_it) {
 		rc = doit(fill_flash, force, filename,
 		          read_it, write_it, erase_it, verify_it,
-		          diff_file);
+		          extract_it, diff_file);
 	}
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");

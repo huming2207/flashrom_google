@@ -36,6 +36,7 @@
 #endif
 #include "flash.h"
 #include "flashchips.h"
+#include "layout.h"
 #include "programmer.h"
 
 const char flashrom_version[] = FLASHROM_VERSION;
@@ -1847,7 +1848,9 @@ int chip_safety_check(struct flashchip *flash, int force, int read_it, int write
  * but right now it allows us to split off the CLI code.
  * Besides that, the function itself is a textbook example of abysmal code flow.
  */
-int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it, const char *diff_file)
+int doit(struct flashchip *flash, int force, const char *filename, int read_it,
+	 int write_it, int erase_it, int verify_it, int extract_it,
+	 const char *diff_file)
 {
 	uint8_t *oldcontents;
 	uint8_t *newcontents;
@@ -1869,6 +1872,11 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it, 
 	/* add entries for regions specified in flashmap */
 	if (!set_ignore_fmap && add_fmap_entries(flash) < 0) {
 		ret = 1;
+		goto out_nofree;
+	}
+
+	if (extract_it) {
+		ret = extract_regions(flash);
 		goto out_nofree;
 	}
 

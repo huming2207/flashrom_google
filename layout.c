@@ -696,3 +696,53 @@ int handle_partial_verify(
 
 	return 0;
 }
+
+int extract_regions(struct flashchip *flash)
+{
+	unsigned long size = flash->total_size * 1024;
+	unsigned char *buf = calloc(size, sizeof(char));
+	int i, ret = 0;
+
+	if (!buf) {
+		msg_gerr("Memory allocation failed!\n");
+		msg_cinfo("FAILED.\n");
+		return 1;
+	}
+
+	msg_cinfo("Reading flash... ");
+	if (read_flash(flash, buf, 0, size)) {
+		msg_cerr("Read operation failed!\n");
+		ret = 1;
+		goto out_free;
+	}
+
+	msg_gdbg("Extracting %d images\n", romimages);
+	for (i = 0; !ret && i < romimages; i++) {
+		romlayout_t *region = &rom_entries[i];
+		char fname[256];
+		char *from, *to;
+		unsigned long region_size;
+
+		for (to = fname, from = region->name; *from; from++, to++) {
+			if (*from == ' ')
+				*to = '_';
+			else
+				*to = *from;
+		}
+		*to = '\0';
+
+		msg_gdbg("dumping region %s to %s\n", region->name,
+			fname);
+		region_size = region->end - region->start + 1;
+		ret = write_buf_to_file(buf + region->start, region_size,
+					fname);
+	}
+
+out_free:
+	free(buf);
+	if (ret)
+		msg_cerr("FAILED.");
+	else
+		msg_cdbg("done.");
+	return ret;
+}

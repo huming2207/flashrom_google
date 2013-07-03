@@ -240,7 +240,9 @@ void print_version(void);
 void print_banner(void);
 void list_programmers_linebreak(int startcol, int cols, int paren);
 int selfcheck(void);
-int doit(struct flashchip *flash, int force, const char *filename, int read_it, int write_it, int erase_it, int verify_it, const char *diff_file);
+int doit(struct flashchip *flash, int force, const char *filename, int read_it,
+	 int write_it, int erase_it, int verify_it, int extract_it,
+	 const char *diff_file);
 int read_buf_from_file(unsigned char *buf, unsigned long size, const char *filename);
 int write_buf_to_file(unsigned char *buf, unsigned long size, const char *filename);
 

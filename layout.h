@@ -28,4 +28,12 @@ typedef struct romlayout {
 	char file[256];  /* file[0]=='\0' means not specified. */
 } romlayout_t;
 
+/**
+ * Extract regions to current directory
+ *
+ * @flash: Information about flash chip to access
+ * @return 0 if OK, non-zero on error
+ */
+int extract_regions(struct flashchip *flash);
+
 #endif
