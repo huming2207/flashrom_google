@@ -113,6 +113,12 @@ static int dummy_shutdown(void *data)
 	return 0;
 }
 
+/* Values for the 'size' parameter */
+enum {
+	SIZE_UNKNOWN	= -1,
+	SIZE_AUTO	= -2,
+};
+
 int dummy_init(void)
 {
 	char *bustext = NULL;
@@ -120,9 +126,10 @@ int dummy_init(void)
 #if EMULATE_CHIP
 	struct stat image_stat;
 #if EMULATE_SPI_CHIP
-	int size = -1;  /* size for generic chip */
+	int size = SIZE_UNKNOWN;  /* size for generic chip */
 #endif
 #endif
+	int image_size = SIZE_UNKNOWN;
 
 	msg_pspew("%s\n", __func__);
 
@@ -169,7 +176,9 @@ int dummy_init(void)
 	tmp = extract_programmer_param("size");
 	if (tmp) {
 		int multiplier = 1;
-		if (strlen(tmp)) {
+		if (!strcmp(tmp, "auto"))
+			size = SIZE_AUTO;
+		else if (strlen(tmp)) {
 			int remove_last_char = 1;
 			switch (tmp[strlen(tmp) - 1]) {
 			case 'k': case 'K':
@@ -183,8 +192,8 @@ int dummy_init(void)
 				break;
 			}
 			if (remove_last_char) tmp[strlen(tmp) - 1] = '\0';
+			size = atoi(tmp) * multiplier;
 		}
-		size = atoi(tmp) * multiplier;
 	}
 #endif
 
@@ -234,13 +243,25 @@ int dummy_init(void)
 		msg_pdbg("Emulating SST SST25VF032B SPI flash chip (RDID, AAI "
 			 "write)\n");
 	}
+	emu_persistent_image = extract_programmer_param("image");
+	if (!stat(emu_persistent_image, &image_stat))
+		image_size = image_stat.st_size;
+
 	if (!strncmp(tmp, VARIABLE_SIZE_CHIP_NAME,
 	                  strlen(VARIABLE_SIZE_CHIP_NAME))) {
-		if (size == -1) {
+		if (size == SIZE_UNKNOWN) {
 			msg_perr("%s: the size parameter is not given.\n",
 			         __func__);
 			free(tmp);
 			return 1;
+		} else if (size == SIZE_AUTO) {
+			if (image_size == SIZE_UNKNOWN) {
+				msg_perr("%s: no image so cannot use automatic size.\n",
+					 __func__);
+				free(tmp);
+				return 1;
+			}
+			size = image_size;
 		}
 		emu_chip = EMULATE_VARIABLE_SIZE;
 		emu_chip_size = size;
@@ -270,7 +291,6 @@ int dummy_init(void)
 	msg_pdbg("Filling fake flash chip with 0xff, size %i\n", emu_chip_size);
 	memset(flashchip_contents, 0xff, emu_chip_size);
 
-	emu_persistent_image = extract_programmer_param("image");
 	if (!emu_persistent_image) {
 		/* Nothing else to do. */
 		goto dummy_init_out;
