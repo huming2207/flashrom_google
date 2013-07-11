@@ -671,8 +671,8 @@ struct opaque_programmer {
 	int (*erase) (struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
 	const void *data;
 };
-extern const struct opaque_programmer *opaque_programmer;
-void register_opaque_programmer(const struct opaque_programmer *pgm);
+extern struct opaque_programmer *opaque_programmer;
+void register_opaque_programmer(struct opaque_programmer *pgm);
 
 /* serprog.c */
 #if CONFIG_SERPROG == 1

@@ -350,7 +350,7 @@ static struct gec_priv gec_lpc_priv = {
 	.ec_command	= gec_command_lpc,
 };
 
-static const struct opaque_programmer opaque_programmer_gec = {
+static struct opaque_programmer opaque_programmer_gec = {
 	.max_data_read	= EC_HOST_CMD_REGION_SIZE,
 	.max_data_write	= 64,
 	.probe		= gec_probe_size,

@@ -30,7 +30,7 @@
 #include "chipdrivers.h"
 #include "programmer.h"
 
-const struct opaque_programmer opaque_programmer_none = {
+struct opaque_programmer opaque_programmer_none = {
 	.max_data_read = MAX_DATA_UNSPECIFIED,
 	.max_data_write = MAX_DATA_UNSPECIFIED,
 	.probe = NULL,
@@ -39,7 +39,7 @@ const struct opaque_programmer opaque_programmer_none = {
 	.erase = NULL,
 };
 
-const struct opaque_programmer *opaque_programmer = &opaque_programmer_none;
+struct opaque_programmer *opaque_programmer = &opaque_programmer_none;
 
 int probe_opaque(struct flashchip *flash)
 {
@@ -86,7 +86,7 @@ int erase_opaque(struct flashchip *flash, unsigned int blockaddr, unsigned int b
 	return opaque_programmer->erase(flash, blockaddr, blocklen);
 }
 
-void register_opaque_programmer(const struct opaque_programmer *pgm)
+void register_opaque_programmer(struct opaque_programmer *pgm)
 {
 	if (!pgm->probe || !pgm->read || !pgm->write || !pgm->erase) {
 		msg_perr("%s called with one of probe/read/write/erase being "

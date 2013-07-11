@@ -146,7 +146,7 @@ static struct gec_priv gec_dev_priv = {
 	.ec_command	= gec_command_dev,
 };
 
-static const struct opaque_programmer opaque_programmer_gec_dev = {
+static struct opaque_programmer opaque_programmer_gec_dev = {
 	.max_data_read	= 128,
 	.max_data_write	= 128,
 	.probe		= gec_probe_size,
