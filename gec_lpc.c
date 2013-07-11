@@ -90,6 +90,11 @@ static int wait_for_ec(int status_addr, int timeout_usec)
 /*
  **************************** EC API v0 ****************************
  */
+
+/* preserve legacy naming to be consistent with legacy implementation. */
+#define EC_LPC_ADDR_OLD_PARAM	EC_HOST_CMD_REGION1
+#define EC_OLD_PARAM_SIZE	EC_HOST_CMD_REGION_SIZE
+
 static enum ec_status gec_get_result() {
 	return inb(EC_LPC_ADDR_HOST_DATA);
 }
@@ -346,7 +351,7 @@ static struct gec_priv gec_lpc_priv = {
 };
 
 static const struct opaque_programmer opaque_programmer_gec = {
-	.max_data_read	= EC_OLD_PARAM_SIZE,
+	.max_data_read	= EC_HOST_CMD_REGION_SIZE,
 	.max_data_write	= 64,
 	.probe		= gec_probe_size,
 	.read		= gec_read,

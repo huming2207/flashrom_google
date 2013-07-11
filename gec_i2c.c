@@ -286,8 +286,11 @@ static struct gec_priv gec_i2c_priv = {
 };
 
 static const struct opaque_programmer opaque_programmer_gec_i2c = {
-	.max_data_read	= EC_OLD_PARAM_SIZE,
-	.max_data_write	= 64,
+	/* These should be EC_PROTO2_MAX_PARAM_SIZE but for now we
+	 * use values from earlier on to be safe. */
+	.max_data_read	= 128,
+	.max_data_write	= EC_FLASH_WRITE_VER0_SIZE,
+
 	.probe		= gec_probe_size,
 	.read		= gec_read,
 	.write		= gec_write,

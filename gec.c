@@ -401,6 +401,11 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	struct ec_params_flash_write p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_write;
+	uint8_t *packet;
+
+	packet = malloc(sizeof(p) + maxlen);
+	if (!packet)
+		return -1;
 
 	for (i = 0; i < nbytes; i += written) {
 		written = min(nbytes - i, maxlen);
@@ -413,9 +418,11 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 			return ACCESS_DENIED;
 		}
 
-		memcpy(p.data, &buf[i], written);
+		memcpy(packet, &p, sizeof(p));
+		memcpy(packet + sizeof(p), &buf[i], written);
 		rc = priv->ec_command(EC_CMD_FLASH_WRITE, 0,
-				      &p, sizeof(p), NULL, 0);
+				      packet, sizeof(p) + p.size, NULL, 0);
+
 		if (rc == -EC_RES_ACCESS_DENIED) {
 			// this is active image.
 			gec_invalidate_copy(addr, nbytes);
@@ -430,6 +437,7 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 #ifndef SOFTWARE_SYNC_ENABLED
 	try_latest_firmware = 1;
 #endif
+	free(packet);
 	return rc;
 }
 

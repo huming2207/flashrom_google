@@ -147,8 +147,8 @@ static struct gec_priv gec_dev_priv = {
 };
 
 static const struct opaque_programmer opaque_programmer_gec_dev = {
-	.max_data_read	= EC_OLD_PARAM_SIZE,
-	.max_data_write	= 64,
+	.max_data_read	= 128,
+	.max_data_write	= 128,
 	.probe		= gec_probe_size,
 	.read		= gec_read,
 	.write		= gec_write,
