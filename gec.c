@@ -145,6 +145,83 @@ static int gec_get_region_info(struct gec_priv *priv,
 	return 0;
 }
 
+/**
+ * Get the versions of the command supported by the EC.
+ *
+ * @param cmd		Command
+ * @param pmask		Destination for version mask; will be set to 0 on
+ *			error.
+ * @return 0 if success, <0 if error
+ */
+static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
+{
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct ec_params_get_cmd_versions pver;
+	struct ec_response_get_cmd_versions rver;
+	int rc;
+
+	*pmask = 0;
+
+	pver.cmd = cmd;
+	rc = priv->ec_command(EC_CMD_GET_CMD_VERSIONS, 0,
+			&pver, sizeof(pver), &rver, sizeof(rver));
+
+	if (rc < 0)
+		return rc;
+
+	*pmask = rver.version_mask;
+	return rc;
+}
+
+/**
+ * Return non-zero if the EC supports the command and version
+ *
+ * @param cmd		Command to check
+ * @param ver		Version to check
+ * @return non-zero if command version supported; 0 if not.
+ */
+static int ec_cmd_version_supported(int cmd, int ver)
+{
+	uint32_t mask = 0;
+	int rc;
+
+	rc = ec_get_cmd_versions(cmd, &mask);
+	if (rc < 0)
+		return rc;
+
+	return (mask & EC_VER_MASK(ver)) ? 1 : 0;
+}
+
+static int gec_set_max_write_size(void)
+{
+	int rc;
+	struct ec_response_flash_info info;
+	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	unsigned int pdata_max_size;
+
+	/*
+	 * Determine whether we can use version 1 of the command with more
+	 * data, or only version 0.
+	 */
+	rc = ec_cmd_version_supported(EC_CMD_FLASH_WRITE, EC_VER_FLASH_WRITE);
+	if (rc < 0)
+		return rc;
+	else if (rc == 0)
+		pdata_max_size = EC_FLASH_WRITE_VER0_SIZE;
+	else
+		pdata_max_size = EC_PROTO2_MAX_PARAM_SIZE - 8;
+
+	rc = priv->ec_command(EC_CMD_FLASH_INFO, 0,
+			      NULL, 0, &info, sizeof(info));
+	if (rc < 0) {
+		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
+		return rc;
+	}
+
+	opaque_programmer->max_data_write =
+		(pdata_max_size/info.write_block_size) * info.write_block_size;
+	return rc;
+}
 
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
  * then this functions picks a NEW firmware copy and jumps to it. Note that
@@ -219,6 +296,10 @@ static int gec_jump_copy(enum ec_current_image target) {
 
 	/* Sleep 1 sec to wait the EC re-init. */
 	usleep(1000000);
+
+	/* update max data write size in case we're jumping to an EC
+	 * firmware with different protocol */
+	gec_set_max_write_size();
 
 	return rc;
 }
@@ -761,6 +842,8 @@ int gec_probe_size(struct flashchip *flash) {
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
 	flash->wp = &wp;
+
+	gec_set_max_write_size();
 
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
 	 * so we need to be careful about using these enums as array indices */
