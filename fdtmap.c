@@ -189,7 +189,7 @@ static int scan_flashmap(const void *blob, romlayout_t *rom_entries,
 		rl->included = 0;
 
 		msg_gdbg("added fdtmap region \"%s\" (file=\"%s\") as %sincluded,"
-			 " offset: 0x%08x, size: 0x%08x\n",
+			 " offset: 0x%08x, end: 0x%08x\n",
 			  rl->name,
 			  rl->file,
 			  rl->included ? "" : "not ",

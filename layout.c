@@ -321,7 +321,7 @@ static int add_fmap_entries_from_buf(struct flashchip *flash,
 		strcpy(rom_entries[romimages].file, "");
 
 		msg_gdbg("added fmap region \"%s\" (file=\"%s\") as %sincluded,"
-			 " offset: 0x%08x, size: 0x%08x\n",
+			 " start: 0x%08x, end: 0x%08x\n",
 			  rom_entries[romimages].name,
 			  rom_entries[romimages].file,
 			  rom_entries[romimages].included ? "" : "not ",
