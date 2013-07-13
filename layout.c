@@ -606,9 +606,8 @@ int handle_partial_read(
     int write_to_file) {
 
 	unsigned int start = 0;
-	int entry;
 	unsigned int size = flash->total_size * 1024;
-	int count = 0;
+	int i, count = 0;
 
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to read the complete image.
@@ -616,37 +615,28 @@ int handle_partial_read(
 	if (num_include_args == 0)
 		return 0;
 
-	/* Walk through the table and write content to file for those included
-	 * partition. */
-	while (start < size) {
+	for (i = 0; i < romimages; i++) {
 		int len;
 
-		entry = find_next_included_romentry(start);
-		/* No more romentries for remaining region? */
-		if (entry < 0) {
-			break;
-		}
-		++count;
+		if (!rom_entries[i].included)
+			continue;
 
 		/* read content from flash. */
-		len = rom_entries[entry].end - rom_entries[entry].start + 1;
-		if (read(flash, buf + rom_entries[entry].start,
-		         rom_entries[entry].start, len)) {
+		len = rom_entries[i].end - rom_entries[i].start + 1;
+		if (read(flash, buf + rom_entries[i].start,
+		         rom_entries[i].start, len)) {
 			msg_perr("flash partial read failed.");
 			return -1;
 		}
+
 		/* If file is specified, write this partition to file. */
 		if (write_to_file) {
-			if (write_content_to_file(entry, buf) < 0) return -1;
+			if (write_content_to_file(i, buf) < 0)
+				return -1;
 		}
 
-		/* Skip to location after current romentry. */
-		start = rom_entries[entry].end + 1;
-		/* Catch overflow. */
-		if (!start)
-			break;
+		count++;
 	}
-
 	return count;
 }
 
