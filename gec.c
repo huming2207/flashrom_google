@@ -835,7 +835,7 @@ int gec_probe_size(struct flashchip *flash) {
 	priv->region = &regions[0];
 
 	flash->total_size = info.flash_size / 1024;
-	flash->page_size = 64;
+	flash->page_size = opaque_programmer->max_data_read;
 	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
 	eraser->eraseblocks[0].size = info.erase_block_size;
