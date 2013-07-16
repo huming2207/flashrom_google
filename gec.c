@@ -809,6 +809,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 int gec_probe_size(struct flashchip *flash) {
 	int rc;
 	struct ec_response_flash_info info;
+	struct ec_response_get_chip_info chip_info;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
@@ -842,6 +843,22 @@ int gec_probe_size(struct flashchip *flash) {
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
 	flash->wp = &wp;
+
+	/*
+	 * Some STM32 variants erase bits to 0. For now, assume that this
+	 * applies to STM32L parts.
+	 *
+	 * FIXME: This info will eventually be exposed via some EC command.
+	 * See chrome-os-partner:20973.
+	 */
+	rc = priv->ec_command(EC_CMD_GET_CHIP_INFO, 0,
+				NULL, 0, &chip_info, sizeof(chip_info));
+	if (rc < 0) {
+		msg_perr("%s(): CHIP_INFO returned %d.\n", __func__, rc);
+		return 0;
+	}
+	if (!strncmp(chip_info.name, "stm32l", 6))
+		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	gec_set_max_write_size();
 
