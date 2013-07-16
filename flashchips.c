@@ -10059,3 +10059,13 @@ const struct flashchip flashchips[] = {
 
 	{ NULL 	}
 };
+
+int flash_erase_value(struct flashchip *flash)
+{
+	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0 : 0xff;
+}
+
+int flash_unerased_value(struct flashchip *flash)
+{
+	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0xff : 0;
+}

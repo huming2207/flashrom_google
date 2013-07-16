@@ -110,6 +110,9 @@ extern enum chipbustype target_bus;
 #define FEATURE_WRSR_WREN	(1 << 7)
 #define FEATURE_WRSR_EITHER	(FEATURE_WRSR_EWSR | FEATURE_WRSR_WREN)
 
+/* Erasing flash produces zeroes rather than ones */
+#define FEATURE_ERASE_TO_ZERO	(1 << 8)
+
 struct flashchip {
 	const char *vendor;
 	const char *name;
@@ -176,6 +179,12 @@ struct flashchip {
 	struct wp *wp;
 };
 
+/* This is the byte value we expect to see in erased regions of the flash */
+int flash_erase_value(struct flashchip *flash);
+
+/* This is a byte value that indicates that the region is not erased */
+int flash_unerased_value(struct flashchip *flash);
+
 #define TEST_UNTESTED	0
 
 #define TEST_OK_PROBE	(1 << 0)
@@ -234,7 +243,6 @@ int max(int a, int b);
 void tolower_string(char *str);
 char *extract_param(char **haystack, const char *needle, const char *delim);
 int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len, const char *message);
-int need_erase(uint8_t *have, uint8_t *want, unsigned int len, enum write_granularity gran);
 char *strcat_realloc(char *dest, const char *src);
 void print_version(void);
 void print_banner(void);

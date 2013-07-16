@@ -602,7 +602,7 @@ int check_erased_range(struct flashchip *flash, unsigned int start, unsigned int
 		msg_gerr("Could not allocate memory!\n");
 		exit(1);
 	}
-	memset(cmpbuf, 0xff, len);
+	memset(cmpbuf, flash_erase_value(flash), len);
 	ret = verify_range(flash, cmpbuf, start, len, "ERASE");
 	free(cmpbuf);
 	return ret;
@@ -712,10 +712,12 @@ out_free:
  * @gran	write granularity (enum, not count)
  * @return      0 if no erase is needed, 1 otherwise
  */
-int need_erase(uint8_t *have, uint8_t *want, unsigned int len, enum write_granularity gran)
+static int need_erase(struct flashchip *flash, uint8_t *have, uint8_t *want,
+		      unsigned int len, enum write_granularity gran)
 {
 	int result = 0;
 	unsigned int i, j, limit;
+	int erase_value = flash_erase_value(flash);
 
 	switch (gran) {
 	case write_gran_1bit:
@@ -727,7 +729,7 @@ int need_erase(uint8_t *have, uint8_t *want, unsigned int len, enum write_granul
 		break;
 	case write_gran_1byte:
 		for (i = 0; i < len; i++)
-			if ((have[i] != want[i]) && (have[i] != 0xff)) {
+			if ((have[i] != want[i]) && (have[i] != erase_value)) {
 				result = 1;
 				break;
 			}
@@ -740,7 +742,7 @@ int need_erase(uint8_t *have, uint8_t *want, unsigned int len, enum write_granul
 				continue;
 			/* have needs to be in erased state. */
 			for (i = 0; i < limit; i++)
-				if (have[j * 256 + i] != 0xff) {
+				if (have[j * 256 + i] != erase_value) {
 					result = 1;
 					break;
 				}
@@ -1259,7 +1261,7 @@ int read_flash_to_file(struct flashchip *flash, const char *filename)
 
 	/* To support partial read, fill buffer to all 0xFF at beginning to make
 	 * debug easier. */
-	memset(buf, 0xFF, size);
+	memset(buf, flash_erase_value(flash), size);
 
 	if (!flash->read) {
 		msg_cerr("No read function available for this flash chip.\n");
@@ -1382,7 +1384,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 	newcontents += start;
 	msg_cdbg(":");
 	/* FIXME: Assume 256 byte granularity for now to play it safe. */
-	if (need_erase(curcontents, newcontents, len, gran)) {
+	if (need_erase(flash, curcontents, newcontents, len, gran)) {
 		msg_cdbg("E");
 		ret = erasefn(flash, start, len);
 		if (ret) {
@@ -1398,7 +1400,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 			return -1;
 		}
 		/* Erase was successful. Adjust curcontents. */
-		memset(curcontents, 0xff, len);
+		memset(curcontents, flash_erase_value(flash), len);
 		skip = 0;
 	}
 	/* get_next_write() sets starthere to a new value after the call. */
@@ -1897,19 +1899,19 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 		msg_gerr("Out of memory!\n");
 		exit(1);
 	}
-	/* Assume worst case: All bits are 0. */
-	memset(oldcontents, 0x00, size);
+	/* Assume worst case: All blocks are not erased. */
+	memset(oldcontents, flash_unerased_value(flash), size);
 	newcontents = malloc(size);
 	if (!newcontents) {
 		msg_gerr("Out of memory!\n");
 		exit(1);
 	}
-	/* Assume best case: All bits should be 1. */
-	memset(newcontents, 0xff, size);
+	/* Assume best case: All blocks are erased. */
+	memset(newcontents, flash_erase_value(flash), size);
 	/* Side effect of the assumptions above: Default write action is erase
 	 * because newcontents looks like a completely erased chip, and
-	 * oldcontents being completely 0x00 means we have to erase everything
-	 * before we can write.
+	 * oldcontents being completely unerased means we have to erase
+	 * everything before we can write.
 	 */
 
 	if (erase_it) {
