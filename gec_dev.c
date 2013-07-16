@@ -81,10 +81,17 @@ static int command_wait_for_response(void)
 
 	for (i = 1; i <= GEC_COMMAND_RETRIES; i++) {
 		ret = ioctl(gec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
-		if (ret) {
-			msg_perr("%s(): CrOS EC command failed: %d\n",
-				 __func__, ret);
+		if (ret < 0) {
+			msg_perr("%s(): CrOS EC command failed: %d, errno=%d\n",
+				 __func__, ret, errno);
 			ret = -EC_RES_ERROR;
+			break;
+		}
+
+		if (cmd.result) {
+			msg_perr("%s(): CrOS EC command failed: result=%d\n",
+				 __func__, cmd.result);
+			ret = -cmd.result;
 			break;
 		}
 
@@ -130,15 +137,22 @@ static int gec_command_dev(int command, int version,
 	cmd.indata = indata;
 	cmd.insize = insize;
 	ret = ioctl(gec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
-	if (ret < 0 && errno == -EAGAIN)
+	if (ret < 0 && errno == EAGAIN) {
 		ret = command_wait_for_response();
-
-	if (ret) {
-		msg_perr("%s(): Transfer failed: %d\n", __func__, ret);
+		cmd.result = 0;
+	}
+	if (ret < 0) {
+		msg_perr("%s(): Transfer %02x failed: %d, errno=%d\n", __func__,
+			 command, ret, errno);
 		return -EC_RES_ERROR;
 	}
+	if (cmd.result) {
+		msg_perr("%s(): Transfer %02x returned result: %d\n",
+			 __func__, command, cmd.result);
+		return -cmd.result;
+	}
 
-	return cmd.insize;
+	return ret;
 }
 
 static struct gec_priv gec_dev_priv = {
