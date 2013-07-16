@@ -79,6 +79,9 @@ static int command_wait_for_response(void)
 	cmd.indata = (uint8_t *)&status;
 	cmd.insize = sizeof(status);
 
+	/* FIXME: magic delay until we fix the underlying problem (probably in
+	   the kernel driver) */
+	usleep(10 * 1000);
 	for (i = 1; i <= GEC_COMMAND_RETRIES; i++) {
 		ret = ioctl(gec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
 		if (ret < 0) {
