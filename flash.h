@@ -206,7 +206,7 @@ int flash_unerased_value(struct flashchip *flash);
 
 /* Timing used in probe routines. ZERO is -2 to differentiate between an unset
  * field and zero delay.
- * 
+ *
  * SPI devices will always have zero delay and ignore this field.
  */
 #define TIMING_FIXME	-1

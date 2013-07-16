@@ -540,7 +540,7 @@ char *extract_param(char **haystack, const char *needle, const char *delim)
 			return NULL;
 		/* Needle followed by '='? */
 		if (param_pos[needlelen] == '=') {
-			
+
 			/* Beginning of the string? */
 			if (param_pos == *haystack)
 				break;
@@ -1589,7 +1589,7 @@ void list_programmers(const char *delim)
 		if (p < PROGRAMMER_INVALID - 1)
 			msg_ginfo("%s", delim);
 	}
-	msg_ginfo("\n");	
+	msg_ginfo("\n");
 }
 
 void list_programmers_linebreak(int startcol, int cols, int paren)

@@ -944,7 +944,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 64 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -976,7 +976,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 128 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -1008,7 +1008,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 256 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -1040,7 +1040,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 512 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -1073,7 +1073,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 1024 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -1105,7 +1105,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 2048 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l40p,
 		.unlock		= spi_disable_blockprotect,
@@ -1143,7 +1143,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 4096 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25l032,
 		.unlock		= NULL, /* Two status reg bytes (read with 0x35 and 0x05) */
@@ -1181,7 +1181,7 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { { 4096 * 1024, 1 } },
 				.block_erase = spi_block_erase_c7,
-			}			
+			}
 		},
 		.printlock	= spi_prettyprint_status_register_amic_a25lq032,
 		.unlock		= NULL, /* Two status reg bytes (read with 0x35 and 0x05) */
@@ -1205,7 +1205,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{32 * 1024, 1},
@@ -1237,7 +1237,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 3},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -2434,7 +2434,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{128 * 1024, 1},
 					{96 * 1024, 1},
 					{8 * 1024, 2},
@@ -3720,7 +3720,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{32 * 1024, 1},
@@ -3752,7 +3752,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 3},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -3784,7 +3784,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{32 * 1024, 1},
@@ -3816,7 +3816,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 7},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -3849,7 +3849,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{32 * 1024, 1},
@@ -4149,7 +4149,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 7},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -4309,7 +4309,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{8 * 1024, 1},
 					{4 * 1024, 2},
 					{112 * 1024, 1},
@@ -4413,7 +4413,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{96 * 1024, 1},
@@ -4440,7 +4440,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{128 * 1024, 3},
 					{96 * 1024, 1},
 					{8 * 1024, 2},
@@ -4468,7 +4468,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{16 * 1024, 1},
 					{8 * 1024, 2},
 					{96 * 1024, 1},
@@ -4496,7 +4496,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{128 * 1024, 3},
 					{96 * 1024, 1},
 					{8 * 1024, 2},
@@ -5086,7 +5086,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{8 * 1024, 1},
 					{4 * 1024, 2},
 					{8 * 1024, 2},
@@ -5119,7 +5119,7 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 1},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -5895,7 +5895,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_EITHER_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME, 
+		.probe_timing	= TIMING_FIXME,
 		.block_erasers	=
 		{
 			{
@@ -5927,7 +5927,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_ADDR_2AA | FEATURE_EITHER_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME, 
+		.probe_timing	= TIMING_FIXME,
 		.block_erasers	=
 		{
 			{
@@ -6037,7 +6037,7 @@ const struct flashchip flashchips[] = {
 		.read		= read_memmapped,
 		.voltage	= {2700, 3600},
 	},
-	
+
 	{
 		.vendor		= "PMC",
 		.name		= "Pm49FL002",
@@ -6806,7 +6806,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_LONG_RESET,
 		.tested		= TEST_OK_PR,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -6830,7 +6830,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_LONG_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -6878,7 +6878,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_LONG_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -7254,7 +7254,7 @@ const struct flashchip flashchips[] = {
 				.eraseblocks = { {4 * 1024, 128} },
 				.block_erase = erase_sector_49lfxxxc,
 			}, {
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 7},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -7319,7 +7319,7 @@ const struct flashchip flashchips[] = {
 				.eraseblocks = { {4 * 1024, 256} },
 				.block_erase = erase_sector_49lfxxxc,
 			}, {
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 15},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -7352,7 +7352,7 @@ const struct flashchip flashchips[] = {
 				.eraseblocks = { {4 * 1024, 512} },
 				.block_erase = erase_sector_49lfxxxc,
 			}, {
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 31},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -7499,7 +7499,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_EITHER_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= TIMING_FIXME, 
+		.probe_timing	= TIMING_FIXME,
 		.block_erasers	=
 		{
 			{
@@ -7536,7 +7536,7 @@ const struct flashchip flashchips[] = {
 				.eraseblocks = { {4 * 1024, 512} },
 				.block_erase = erase_sector_49lfxxxc,
 			}, {
-				.eraseblocks = { 
+				.eraseblocks = {
 					{64 * 1024, 31},
 					{32 * 1024, 1},
 					{8 * 1024, 2},
@@ -9388,7 +9388,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_LONG_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -9559,7 +9559,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
 		.tested		= TEST_OK_PREW,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -9616,7 +9616,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_REGISTERMAP | FEATURE_EITHER_RESET,
 		.tested		= TEST_OK_PRE,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
@@ -9671,7 +9671,7 @@ const struct flashchip flashchips[] = {
 		.feature_bits	= FEATURE_EITHER_RESET,
 		.tested		= TEST_UNTESTED,
 		.probe		= probe_jedec,
-		.probe_timing	= 10, 
+		.probe_timing	= 10,
 		.block_erasers	=
 		{
 			{
