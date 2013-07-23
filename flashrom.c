@@ -1978,8 +1978,6 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 		goto out;
 	}
 
-	// ////////////////////////////////////////////////////////////
-
 	if (write_it) {
 		// parse the new fmap
 		if ((ret = gec_prepare(newcontents, size))) {
