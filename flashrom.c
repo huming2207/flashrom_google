@@ -1949,9 +1949,8 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 
 	/* Obtain a reference image so that we can check whether regions need
 	 * to be erased and to give better diagnostics in case write fails.
-	 * The alternative would be to read only the regions which are to be
-	 * preserved, but in that case we might perform unneeded erase which
-	 * takes time as well.
+	 * If --fast-verify is used then only the regions which are included
+	 * using -i will be read.
 	 */
 	if (diff_file) {
 		msg_cdbg("Reading old contents from file... ");
@@ -1962,10 +1961,19 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 		}
 	} else {
 		msg_cdbg("Reading old contents from flash chip... ");
-		if (read_flash(flash, oldcontents, 0, size)) {
-			ret = 1;
-			msg_cdbg("FAILED.\n");
-			goto out;
+		if (verify_it == VERIFY_FULL) {
+			if (read_flash(flash, oldcontents, 0, size)) {
+				ret = 1;
+				msg_cdbg("FAILED.\n");
+				goto out;
+			}
+		} else if (verify_it == VERIFY_PARTIAL) {
+			if (handle_partial_read(flash, oldcontents,
+						read_flash, 0) < 0) {
+				ret = 1;
+				msg_cdbg("FAILED.\n");
+				goto out;
+			}
 		}
 	}
 	msg_cdbg("done.\n");
