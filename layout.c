@@ -23,6 +23,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "flash.h"
 #include "fdtmap.h"
@@ -580,12 +582,26 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 	len = rom_entries[entry].end - rom_entries[entry].start + 1;
 	if (file[0]) {
 		int numbytes;
+		struct stat s;
+
+		if (stat(file, &s) < 0) {
+			msg_gerr("Cannot stat file %s: %s.\n",
+					file, strerror(errno));
+			return -1;
+		}
+
+		if (s.st_size > len) {
+			msg_gerr("File %s is %d bytes, region %s is %d bytes.\n"
+				,file, s.st_size, rom_entries[entry].name, len);
+			return -1;
+		}
+
 		if ((fp = fopen(file, "rb")) == NULL) {
 			perror(file);
 			return -1;
 		}
 		numbytes = fread(newcontents + rom_entries[entry].start,
-		                 1, len, fp);
+		                 1, s.st_size, fp);
 		fclose(fp);
 		if (numbytes == -1) {
 			perror(file);
