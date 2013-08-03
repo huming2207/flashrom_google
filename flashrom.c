@@ -1988,15 +1988,15 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 		}
 	} else {
 		msg_cdbg("Reading old contents from flash chip... ");
-		if (verify_it == VERIFY_FULL) {
-			if (read_flash(flash, oldcontents, 0, size)) {
+		if (verify_it == VERIFY_PARTIAL) {
+			if (handle_partial_read(flash, oldcontents,
+						read_flash, 0) < 0) {
 				ret = 1;
 				msg_cdbg("FAILED.\n");
 				goto out;
 			}
-		} else if (verify_it == VERIFY_PARTIAL) {
-			if (handle_partial_read(flash, oldcontents,
-						read_flash, 0) < 0) {
+		} else {
+			if (read_flash(flash, oldcontents, 0, size)) {
 				ret = 1;
 				msg_cdbg("FAILED.\n");
 				goto out;
