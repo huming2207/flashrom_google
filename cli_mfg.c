@@ -747,6 +747,10 @@ int main(int argc, char *argv[])
 	if (write_it && !dont_verify_it)
 		if (!verify_it) verify_it = VERIFY_FULL;
 
+	/* Partial verify requested, but no -i args: Need to full verify. */
+	if (verify_it == VERIFY_PARTIAL && !specified_partition())
+		verify_it = VERIFY_FULL;
+
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
 		if (fill_flash->wp && fill_flash->wp->disable) {
