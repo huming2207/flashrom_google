@@ -347,7 +347,7 @@ enum found_t {
 /* returns the number of entries added, or <0 to indicate error */
 int add_fmap_entries(struct flashctx *flash)
 {
-	enum found_t found = FOUND_NONE;
+	static enum found_t found = FOUND_NONE;
 	int ret = -1;
 	struct search_info search;
 	union {
@@ -356,6 +356,11 @@ int add_fmap_entries(struct flashctx *flash)
 	} hdr;
 	uint8_t *buf = NULL;
 	off_t offset;
+
+	if (found != FOUND_NONE) {
+		msg_gdbg("Already found fmap entries, not searching again.\n");
+		return 0;
+	}
 
 	search_init(&search, flash, sizeof(hdr));
 	search.handler = get_crossystem_fmap_base;
