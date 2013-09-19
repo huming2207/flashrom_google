@@ -230,20 +230,20 @@ static int gec_set_max_write_size(void)
  * Returns 0 for success.
  */
 static int gec_jump_copy(enum ec_current_image target) {
-	struct ec_response_get_version c;
 	struct ec_params_reboot_ec p;
 	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
 	int rc;
+	int current_image;
 
 	/* Since the EC may return EC_RES_SUCCESS twice if the EC doesn't
 	 * jump to different firmware copy. The second EC_RES_SUCCESS would
 	 * set the OBF=1 and the next command cannot be executed.
 	 * Thus, we call EC to jump only if the target is different.
 	 */
-	rc = gec_get_current_image(priv);
-	if (rc < 0)
+	current_image = gec_get_current_image(priv);
+	if (current_image < 0)
 		return 1;
-	if (rc == target)
+	if (current_image == target)
 		return 0;
 
 	memset(&p, 0, sizeof(p));
@@ -277,7 +277,7 @@ static int gec_jump_copy(enum ec_current_image target) {
 	msg_pdbg("GEC is jumping to [%s]\n", sections[p.cmd]);
 	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
-	if (c.current_image == p.cmd) {
+	if (current_image == p.cmd) {
 		msg_pdbg("GEC is already in [%s]\n", sections[p.cmd]);
 		priv->current_image = target;
 		return 0;
