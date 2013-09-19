@@ -125,7 +125,7 @@ int linux_i2c_xfer(int bus, int addr, const void *inbuf,
 		msg[data.nmsgs].addr = addr;
 		msg[data.nmsgs].flags = 0;
 		msg[data.nmsgs].len = outsize;
-		msg[data.nmsgs].buf = (char *)outbuf;
+		msg[data.nmsgs].buf = (void *)outbuf;
 		data.nmsgs++;
 	}
 
@@ -134,7 +134,7 @@ int linux_i2c_xfer(int bus, int addr, const void *inbuf,
 		msg[data.nmsgs].addr = addr;
 		msg[data.nmsgs].flags = I2C_M_RD;
 		msg[data.nmsgs].len = insize;
-		msg[data.nmsgs].buf = (char *)inbuf;
+		msg[data.nmsgs].buf = (void *)inbuf;
 		data.nmsgs++;
 	}
 

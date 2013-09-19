@@ -592,7 +592,8 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 
 		if (s.st_size > len) {
 			msg_gerr("File %s is %d bytes, region %s is %d bytes.\n"
-				,file, s.st_size, rom_entries[entry].name, len);
+				 , file, (int)s.st_size,
+				 rom_entries[entry].name, len);
 			return -1;
 		}
 

@@ -34,7 +34,7 @@ PKG_CONFIG ?= pkg-config
 
 WARNERROR ?= yes
 
-ifeq ($(WARNERROR), yes)
+ifneq ($(NOWARNERROR),yes)
 CFLAGS += -Werror
 endif
 

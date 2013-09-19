@@ -60,8 +60,7 @@
  *
  *  Assume the host is little endian.
  */
-__attribute__((packed))
-struct wpce775x_wcb {
+struct __attribute__((packed)) wpce775x_wcb {
 	/* Byte 0: semaphore byte */
 	unsigned char exe:1;  /* Bit0-RW- set by host. means wcb is ready to execute.
 	                         should be cleared by host after RDY=1. */

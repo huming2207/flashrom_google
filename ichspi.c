@@ -1223,7 +1223,7 @@ static void ich_hwseq_set_addr(uint32_t addr)
 static uint32_t ich_hwseq_get_erase_block_size(unsigned int addr)
 {
 	uint8_t enc_berase;
-	static const uint32_t const dec_berase[4] = {
+	static const uint32_t dec_berase[4] = {
 		256,
 		4 * 1024,
 		8 * 1024,
@@ -1385,7 +1385,7 @@ int ich_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 
-	if (addr < 0 || addr + len > flash->total_size * 1024) {
+	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to read from an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
@@ -1423,7 +1423,7 @@ int ich_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 
-	if (addr < 0 || addr + len > flash->total_size * 1024) {
+	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to write to an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
@@ -1609,7 +1609,7 @@ static const struct spi_programmer spi_programmer_ich9 = {
 };
 
 
-static const struct opaque_programmer opaque_programmer_ich_hwseq = {
+static struct opaque_programmer opaque_programmer_ich_hwseq = {
 	.max_data_read = 64,
 	.max_data_write = 64,
 	.probe = ich_hwseq_probe,

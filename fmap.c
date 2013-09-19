@@ -56,7 +56,7 @@ int fmap_find(struct flashchip *flash, struct fmap *fmap, loff_t offset,
 
 	if (read_flash(flash, *buf, offset, fmap_size)) {
 		msg_gdbg("[L%d] failed to read %d bytes at offset 0x%lx\n",
-			__LINE__, fmap_size, offset);
+			 __LINE__, fmap_size, (unsigned long)offset);
 		return -1;
 	}
 

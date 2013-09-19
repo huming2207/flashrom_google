@@ -227,7 +227,7 @@ int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr, loff_t offset,
 		return 0;
 
 	msg_gdbg("%s: found possible fdtmap at offset %#lx\n",
-			__func__, offset);
+		 __func__, (unsigned long)offset);
 
 	fmap_size = hdr->size;
 	*buf = malloc(fmap_size);
@@ -236,14 +236,15 @@ int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr, loff_t offset,
 	/* We may as well just read it here, to simplify the code */
 	if (flash->read(flash, *buf, offset + sizeof(*hdr), fmap_size)) {
 		msg_gdbg("[L%d] failed to read %d bytes at offset %#lx\n",
-			 __LINE__, fmap_size, offset);
+			 __LINE__, fmap_size, (unsigned long)offset);
 		return 0;
 	}
 
 	/* Sanity check, the FDT total size should equal fmap_size */
 	if (fdt_totalsize(*buf) != fmap_size) {
 		msg_gdbg("[L%d] FDT size %#x did not match header size %#x at %#lx\n",
-			 __LINE__, fdt_totalsize(*buf), fmap_size, offset);
+			 __LINE__, fdt_totalsize(*buf),
+			 fmap_size, (unsigned long)offset);
 		return 0;
 	}
 
@@ -252,7 +253,7 @@ int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr, loff_t offset,
 	/* Sanity check, the FDT total size should equal fmap_size */
 	if (crc != hdr->crc32) {
 		msg_gdbg("[L%d] CRC32 %#08x did not match expected %#08x at %#lx\n",
-			 __LINE__, crc, hdr->crc32, offset);
+			 __LINE__, crc, hdr->crc32, (unsigned long)offset);
 		return 0;
 	}
 
