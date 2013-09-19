@@ -9038,7 +9038,7 @@ const struct flashchip flashchips[] = {
 		.bustype	= BUS_SPI,
 		.manufacture_id	= WINBOND_NEX_ID,
 		.model_id	= WINBOND_NEX_W25Q128,
-		.total_size	= 16384,
+		.total_size	= 16384/2,
 		.page_size	= 256,
 		.feature_bits	= FEATURE_WRSR_WREN,
 		.tested		= TEST_OK_PROBE,
@@ -9047,19 +9047,19 @@ const struct flashchip flashchips[] = {
 		.block_erasers	=
 		{
 			{
-				.eraseblocks = { {4 * 1024, 4096} },
+				.eraseblocks = { {4 * 1024, 4096/2} },
 				.block_erase = spi_block_erase_20,
 			}, {
-				.eraseblocks = { {32 * 1024, 512} },
+				.eraseblocks = { {32 * 1024, 512/2} },
 				.block_erase = spi_block_erase_52,
 			}, {
-				.eraseblocks = { {64 * 1024, 256} },
+				.eraseblocks = { {64 * 1024, 256/2} },
 				.block_erase = spi_block_erase_d8,
 			}, {
-				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.eraseblocks = { {16 * 1024 * 1024 / 2, 1} },
 				.block_erase = spi_block_erase_60,
 			}, {
-				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.eraseblocks = { {16 * 1024 * 1024 / 2, 1} },
 				.block_erase = spi_block_erase_c7,
 			}
 		},
