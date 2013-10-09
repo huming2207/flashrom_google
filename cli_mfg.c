@@ -154,7 +154,7 @@ void cli_mfg_usage(const char *name)
 	       "   -i | --image <name>[:<file>]      only access image <name> "
 	         "from flash layout\n"
 	       "   -L | --list-supported             print supported devices\n"
-	       "   -x | --extract-map <file>         extract flashmap to file\n"
+	       "   -x | --extract                    extract regions to files\n"
 #if CONFIG_PRINT_WIKI == 1
 	       "   -z | --list-supported-wiki        print supported devices "
 	         "in wiki syntax\n"
