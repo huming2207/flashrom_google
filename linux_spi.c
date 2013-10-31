@@ -28,6 +28,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include "file.h"
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
@@ -42,6 +43,8 @@
 #define SPIDEV_MAJOR 153  /* refer to kernel/files/drivers/spi/spidev.c */
 #endif
 
+#define MODALIAS_FILE		"modalias"
+#define LINUX_SPI_SYSFS_ROOT	"/sys/bus/spi/devices"
 
 static int fd = -1;
 
@@ -63,43 +66,44 @@ static const struct spi_programmer spi_programmer_linux = {
 	.write_256	= linux_spi_write_256,
 };
 
-
-/* Detect the SPI chip behind /dev/spidevX.Y.
- * We scan every /dev/spidevX.0 and if it's /dev/spidevX.1 is a MTD device
- * (by looking /sys/bus/spi/devices/spidevX.1/modalias), then we assume the
- * spidevX.0 is the SPI flash.
- */
-static char* linux_spi_probe(void)
+static char devfs_path[32]; 	/* at least big enough to fit /dev/spidevX.Y */
+static char *linux_spi_probe(void)
 {
-	char filename[] = "/sys/bus/spi/devices/spiX.0/modalias";
-	int X = strchr(filename, 'X') - filename;  /* offset to the X char */
-	int i;  /* for for-loop */
+	int i;
+	const char *sysfs_path = NULL;
+	char *p;
+	char *modalias[] = {
+		"m25p80",	/* generic MTD device */
+		"spi:spidev",	/* raw access over SPI bus */
+	};
 
-	for (i = '0'; i <= '9'; i++) {
-		int fd, bytes_read;
-		char buf[32];
+	for (i = 0; i < ARRAY_SIZE(modalias); i++) {
+		int major, minor;
 
-		filename[X] = i;
-		if ((fd = open(filename, O_RDONLY)) < 0 ||
-		    ((bytes_read = read(fd, buf, sizeof(buf) - 1)) < 0)) {
-			msg_pdbg("read(%s) < 0, try next.\n", filename);
+		/* Path should look like: /sys/blah/spiX.Y/modalias */
+		sysfs_path = scanft(LINUX_SPI_SYSFS_ROOT,
+				MODALIAS_FILE, modalias[i], 2);
+		if (!sysfs_path)
 			continue;
-		}
-		buf[bytes_read] = '\0';
 
-		if (strstr(buf, "spidev")) {
-			static char name[] = "/dev/spidevX.0";
-			*strchr(name, 'X') = i;
-			msg_pdbg("Detected linux_spi:dev=%s\n", name);
-			return name;
-		}
+		p = (char *)sysfs_path + strlen(LINUX_SPI_SYSFS_ROOT);
+		if (p[0] == '/')
+			p++;
 
-		close(fd);
+		if (sscanf(p, "spi%u.%u", &major, &minor) == 2) {
+			msg_pinfo("Found SPI device %s on spi%u.%u\n",
+				modalias[i], major, minor);
+			sprintf(devfs_path, "/dev/spidev%u.%u", major, minor);
+			free((void *)sysfs_path);
+			break;
+		}
+		free((void *)sysfs_path);
 	}
 
-	return NULL;
+	if (i == ARRAY_SIZE(modalias))
+		return NULL;
+	return devfs_path;
 }
-
 
 /*
  * This is used when /dev/spidevX.Y is not created yet, for example, when
@@ -148,11 +152,10 @@ int linux_spi_init(void)
 		return 1;
 
 	dev = extract_programmer_param("dev");
-	if (!dev) {
+	if (!dev)
 		dev = linux_spi_probe();
-	}
 	if (!dev || !strlen(dev)) {
-		msg_perr("No SPI device given. Use flashrom -p "
+		msg_perr("No SPI device found. Use flashrom -p "
 			 "linux_spi:dev=/dev/spidevX.Y\n");
 		return 1;
 	}
