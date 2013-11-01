@@ -92,7 +92,7 @@ static char *linux_spi_probe(void)
 			p++;
 
 		if (sscanf(p, "spi%u.%u", &major, &minor) == 2) {
-			msg_pinfo("Found SPI device %s on spi%u.%u\n",
+			msg_pdbg("Found SPI device %s on spi%u.%u\n",
 				modalias[i], major, minor);
 			sprintf(devfs_path, "/dev/spidev%u.%u", major, minor);
 			free((void *)sysfs_path);
