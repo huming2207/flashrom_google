@@ -434,11 +434,14 @@ int internal_init(void)
 	/* probe for programmers that bridge LPC <--> SPI */
 	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
 	    (alias && alias->type == ALIAS_EC)) {
-		gec_probe_lpc(NULL);
-		wpce775x_probe_spi_flash(NULL);
-		mec1308_probe_spi_flash(NULL);
-		ene_probe_spi_flash(NULL);
-		init_superio_ite();
+		if (gec_probe_lpc(NULL) &&
+			wpce775x_probe_spi_flash(NULL) &&
+			mec1308_probe_spi_flash(NULL) &&
+			ene_probe_spi_flash(NULL) &&
+			init_superio_ite())
+			return 1;	/* EC not found */
+		else
+			return 0;
 	}
 
 #endif

@@ -417,7 +417,7 @@ int mec1308_probe_spi_flash(const char *name)
 
 	if (mec1308_get_sio_index(&sio_port) < 0) {
 		msg_pdbg("MEC1308 not found (probe failed).\n");
-		return 0;
+		return 1;
 	}
 	device_id = sio_read(sio_port, MEC1308_DEVICE_ID_REG);
 	switch(device_id) {
@@ -433,7 +433,7 @@ int mec1308_probe_spi_flash(const char *name)
 		break;
 	default:
 		msg_pdbg("MEC1308 not found\n");
-		return 0;
+		return 1;
 	}
 
 	/*

@@ -531,7 +531,7 @@ int ene_probe_spi_flash(const char *name)
 
 	if (i == ENE_LAST) {
 		msg_pdbg("ENE EC not found (probe failed)\n");
-		return 0;
+		return 1;
 	}
 
 	/* TODO: probe the EC stop protocol

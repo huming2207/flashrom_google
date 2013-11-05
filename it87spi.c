@@ -134,7 +134,7 @@ static uint16_t it87spi_probe(uint16_t port)
 		msg_pdbg("No IT87* serial flash segment enabled.\n");
 		exit_conf_mode_ite(port);
 		/* Nothing to do. */
-		return 0;
+		return 1;
 	}
 	msg_pdbg("Serial flash segment 0x%08x-0x%08x %sabled\n",
 		 0xFFFE0000, 0xFFFFFFFF, (tmp & 1 << 1) ? "en" : "dis");
@@ -201,8 +201,7 @@ static uint16_t it87spi_probe(uint16_t port)
 
 int init_superio_ite(void)
 {
-	int i;
-	int ret = 0;
+	int i, ret, chips_found = 0;
 
 	for (i = 0; i < superio_count; i++) {
 		if (superios[i].vendor != SUPERIO_VENDOR_ITE)
@@ -219,24 +218,38 @@ int init_superio_ite(void)
 			 * which can go wrong if the EC firmware does not
 			 * implement the interface we want.
 			 */
-			it85xx_spi_init(superios[i]);
+			if (!it85xx_spi_init(superios[i]))
+				chips_found++;
 			break;
 		case 0x8518:
-			it8518_spi_init(superios[i]);
+			if (!it8518_spi_init(superios[i]))
+				chips_found++;
 			break;
 		case 0x8705:
-			ret |= it8705f_write_enable(superios[i].port);
+			if (!it8705f_write_enable(superios[i].port))
+				chips_found++;
 			break;
 		case 0x8716:
 		case 0x8718:
 		case 0x8720:
-			ret |= it87spi_probe(superios[i].port);
+			if (!it87spi_probe(superios[i].port))
+				chips_found++;
 			break;
 		default:
 			msg_pdbg("Super I/O ID 0x%04hx is not on the list of "
 				 "flash capable controllers.\n",
 				 superios[i].model);
 		}
+	}
+
+	if (chips_found == 0) {
+		ret = 1;	/* failed to probe/initialize/enable chip */
+	} else if (chips_found == 1) {
+		ret = 0;	/* success */
+	} else {
+		msg_pdbg("%s: Found %d programmable ECs/SuperIOs, aborting.\n",
+				__func__, chips_found);
+		ret = 1;
 	}
 	return ret;
 }
