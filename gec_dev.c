@@ -158,6 +158,31 @@ static int gec_command_dev(int command, int version,
 	return ret;
 }
 
+static int test_ec(void)
+{
+	struct ec_params_hello request;
+	struct ec_response_hello response;
+	struct ec_response_proto_version proto;
+	int rc = 0;
+
+	/* Say hello to EC. */
+	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
+	msg_pdbg("%s: sending HELLO request with 0x%08x\n",
+	         __func__, request.in_data);
+	rc = gec_command_dev(EC_CMD_HELLO, 0, &request,
+			     sizeof(request), &response, sizeof(response));
+	msg_pdbg("%s: response: 0x%08x\n", __func__, response.out_data);
+
+	if (rc < 0 || response.out_data != 0xf1e2d3c4) {
+		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
+		         "rc=%d, request=0x%x response=0x%x\n",
+		         rc, request.in_data, response.out_data);
+		return 1;
+	}
+
+	return 0;
+}
+
 static struct gec_priv gec_dev_priv = {
 	.detected	= 0,
 	.ec_command	= gec_command_dev,
@@ -188,6 +213,9 @@ int gec_probe_dev(void)
 	gec_fd = open(GEC_DEV_NAME, O_RDWR);
 	if (gec_fd < 0)
 		return gec_fd;
+
+	if (test_ec())
+		return 1;
 
 	msg_pdbg("GEC detected at %s\n", GEC_DEV_NAME);
 	register_opaque_programmer(&opaque_programmer_gec_dev);

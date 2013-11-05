@@ -312,11 +312,11 @@ int internal_init(void)
 		target_bus = BUS_SPI;
 
 	if (target_bus != BUS_SPI) {
-		/* Give preference to the devfs interface if it exists. */
-		if (!gec_probe_dev())
-			return 0;
-
-		if (!gec_probe_i2c(NULL))
+		/*
+		 * Give preference to the cros_ec dev interface if it exists
+		 * and passes the "hello" test, otherwise fall back on raw I2C.
+		 */
+		if (!gec_probe_dev() || !gec_probe_i2c(NULL))
 			return 0;
 	}
 #endif
