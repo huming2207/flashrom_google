@@ -251,6 +251,10 @@ static int gec_command_lpc(int command, int version,
 	return args.data_size;
 }
 
+static struct gec_priv gec_lpc_priv = {
+	.detected	= 0,
+	.ec_command	= gec_command_lpc,
+};
 
 /*
  * The algorithm is following:
@@ -326,29 +330,12 @@ static int detect_ec(void) {
 	 */
 	/* reduce timeout period temporarily in case EC is not present */
 	ec_timeout_usec = 25000;
-
-	/* Say hello to EC. */
-	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
-	rc = gec_command_lpc_old(EC_CMD_HELLO, &request,
-				 sizeof(request), &response, sizeof(response));
-
-	ec_timeout_usec = old_timeout;
-
-	if (rc || response.out_data != 0xf1e2d3c4) {
-		msg_pdbg("HELLO response.out_data is not 0xf1e2d3c4.\n"
-		         "rc=%d, request=0x%x response=0x%x\n",
-		         rc, request.in_data, response.out_data);
+	if (gec_test(&gec_lpc_priv))
 		return 1;
-	}
+	ec_timeout_usec = old_timeout;
 
 	return 0;
 }
-
-
-static struct gec_priv gec_lpc_priv = {
-	.detected	= 0,
-	.ec_command	= gec_command_lpc,
-};
 
 static struct opaque_programmer opaque_programmer_gec = {
 	.max_data_read	= EC_HOST_CMD_REGION_SIZE,

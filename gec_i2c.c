@@ -249,37 +249,6 @@ done:
 	return ret;
 }
 
-static int detect_ec(void)
-{
-	struct ec_params_hello request;
-	struct ec_response_hello response;
-	struct ec_response_proto_version proto;
-	int rc = 0;
-	int old_timeout = ec_timeout_usec;
-
-	/* reduce timeout period temporarily in case EC is not present */
-	ec_timeout_usec = 25000;
-
-	/* Say hello to EC. */
-	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
-	msg_pdbg("%s: sending HELLO request with 0x%08x\n",
-	         __func__, request.in_data);
-	rc = gec_command_i2c(EC_CMD_HELLO, 0, &request,
-			     sizeof(request), &response, sizeof(response));
-	msg_pdbg("%s: response: 0x%08x\n", __func__, response.out_data);
-
-	ec_timeout_usec = old_timeout;
-
-	if (rc < 0 || response.out_data != 0xf1e2d3c4) {
-		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
-		         "rc=%d, request=0x%x response=0x%x\n",
-		         rc, request.in_data, response.out_data);
-		return 1;
-	}
-
-	return 0;
-}
-
 static struct gec_priv gec_i2c_priv = {
 	.detected	= 0,
 	.ec_command	= gec_command_i2c,
@@ -302,6 +271,7 @@ int gec_probe_i2c(const char *name)
 {
 	const char *path, *s, *p;
 	int ret = 1;
+	int old_timeout = ec_timeout_usec;
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
@@ -348,7 +318,9 @@ int gec_probe_i2c(const char *name)
 	if (linux_i2c_open(bus, GEC_I2C_ADDRESS, 1))
 		goto gec_probe_i2c_done;
 
-	if (detect_ec()) {
+	/* reduce timeout period temporarily in case EC is not present */
+	ec_timeout_usec = 25000;
+	if (gec_test(&gec_i2c_priv)) {
 		linux_i2c_close();
 		goto gec_probe_i2c_done;
 	}
@@ -362,6 +334,7 @@ int gec_probe_i2c(const char *name)
 	ret = 0;
 
 gec_probe_i2c_done:
+	ec_timeout_usec = old_timeout;
 	free((void*)path);
 	return ret;
 }

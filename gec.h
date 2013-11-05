@@ -33,6 +33,7 @@ struct gec_priv {
 			  void *outdata, int outsize);
 };
 
+int gec_test(struct gec_priv *priv);
 int gec_probe_size(struct flashchip *flash);
 int gec_block_erase(struct flashchip *flash,
                     unsigned int blockaddr, unsigned int len);

@@ -805,6 +805,31 @@ static int gec_wp_status(const struct flashchip *flash) {
 	return 0;
 }
 
+/* perform basic "hello" test to see if we can talk to the EC */
+int gec_test(struct gec_priv *priv)
+{
+	struct ec_params_hello request;
+	struct ec_response_hello response;
+	struct ec_response_proto_version proto;
+	int rc = 0;
+
+	/* Say hello to EC. */
+	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
+	msg_pdbg("%s: sending HELLO request with 0x%08x\n",
+	         __func__, request.in_data);
+	rc = priv->ec_command(EC_CMD_HELLO, 0, &request,
+			     sizeof(request), &response, sizeof(response));
+	msg_pdbg("%s: response: 0x%08x\n", __func__, response.out_data);
+
+	if (rc < 0 || response.out_data != 0xf1e2d3c4) {
+		msg_pdbg("response.out_data is not 0xf1e2d3c4.\n"
+		         "rc=%d, request=0x%x response=0x%x\n",
+		         rc, request.in_data, response.out_data);
+		return 1;
+	}
+
+	return 0;
+}
 
 int gec_probe_size(struct flashchip *flash) {
 	int rc;
