@@ -112,6 +112,8 @@ const char *scanft(const char *root, const char *filename,
 			return NULL;
 		else if (symdepth > 0)	/* Follow if not too deep in */
 			symdepth--;
+	} else if (!S_ISDIR(s.st_mode)) {
+		return NULL;
 	}
 
 	if ((dp = opendir(root)) == NULL)
