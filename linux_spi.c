@@ -83,7 +83,7 @@ static char *linux_spi_probe(void)
 
 		/* Path should look like: /sys/blah/spiX.Y/modalias */
 		sysfs_path = scanft(LINUX_SPI_SYSFS_ROOT,
-				MODALIAS_FILE, modalias[i], 2);
+				MODALIAS_FILE, modalias[i], 1);
 		if (!sysfs_path)
 			continue;
 
