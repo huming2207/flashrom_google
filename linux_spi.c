@@ -73,9 +73,9 @@ static char *linux_spi_probe(void)
 	const char *sysfs_path = NULL;
 	char *p;
 	char *modalias[] = {
-		"m25p80",	/* generic MTD device */
-		"spidev",	/* raw access over SPI bus (older kernels) */
 		"spi:spidev",	/* raw access over SPI bus (newer kernels) */
+		"spidev",	/* raw access over SPI bus (older kernels) */
+		"m25p80",	/* generic MTD device */
 	};
 
 	for (i = 0; i < ARRAY_SIZE(modalias); i++) {
