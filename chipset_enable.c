@@ -424,6 +424,132 @@ idsel_garbage_out:
 	return enable_flash_ich(dev, name, 0xdc);
 }
 
+static int enable_flash_byt(struct pci_dev *dev, const char *name)
+{
+	uint32_t old, new, wanted, fwh_conf;
+	int i, tmp;
+	char *idsel = NULL;
+	int max_decode_fwh_idsel = 0, max_decode_fwh_decode = 0;
+	int contiguous = 1;
+	uint32_t ilb_base;
+	void *ilb;
+
+	/* Determine iLB base address */
+	ilb_base = pci_read_long(dev, 0x50);
+	ilb_base &= 0xfffffe00; /* bits 31:9 */
+	if (ilb_base == 0) {
+		msg_perr("Error: Invalid ILB_BASE_ADDRESS\n");
+		return ERROR_FATAL;
+	}
+	ilb = physmap("BYT IBASE", ilb_base, 512);
+
+	idsel = extract_programmer_param("fwh_idsel");
+	if (idsel && strlen(idsel)) {
+		uint64_t fwh_idsel_old, fwh_idsel;
+		errno = 0;
+		/* Base 16, nothing else makes sense. */
+		fwh_idsel = (uint64_t)strtoull(idsel, NULL, 16);
+		if (errno) {
+			msg_perr("Error: fwh_idsel= specified, but value could "
+				 "not be converted.\n");
+			free(idsel);
+			return ERROR_FATAL;
+		}
+		if (fwh_idsel & 0xffff000000000000ULL) {
+			msg_perr("Error: fwh_idsel= specified, but value had "
+				 "unused bits set.\n");
+			free(idsel);
+			return ERROR_FATAL;
+		}
+		fwh_idsel_old = mmio_readl(ilb + 0x18);
+		msg_pdbg("\nSetting IDSEL from 0x%08" PRIx64 " to "
+			 "0x%08" PRIx64 " for top 16 MB.", fwh_idsel_old,
+			 fwh_idsel);
+		rmmio_writel(fwh_idsel, ilb + 0x18);
+		/* FIXME: Decode settings are not changed. */
+	} else if (idsel) {
+		msg_perr("Error: fwh_idsel= specified, but no value given.\n");
+		free(idsel);
+		return ERROR_FATAL;
+	}
+	free(idsel);
+
+	/* Ignore all legacy ranges below 1 MB.
+	 * We currently only support flashing the chip which responds to
+	 * IDSEL=0. To support IDSEL!=0, flashbase and decode size calculations
+	 * have to be adjusted.
+	 */
+	/* FS - FWH ID Select */
+	fwh_conf = mmio_readl(ilb + 0x18);
+	for (i = 7; i >= 0; i--) {
+		tmp = (fwh_conf >> (i * 4)) & 0xf;
+		msg_pdbg("\n0x%08x/0x%08x FWH IDSEL: 0x%x",
+			 (0x1ff8 + i) * 0x80000,
+			 (0x1ff0 + i) * 0x80000,
+			 tmp);
+		if ((tmp == 0) && contiguous) {
+			max_decode_fwh_idsel = (8 - i) * 0x80000;
+		} else {
+			contiguous = 0;
+		}
+	}
+	contiguous = 1;
+	/* PCIE_REG_BIOS_DECODE_EN */
+	fwh_conf = pci_read_word(dev, 0xd8);
+	for (i = 7; i >= 0; i--) {
+		tmp = (fwh_conf >> (i + 0x8)) & 0x1;
+		msg_pdbg("\n0x%08x/0x%08x FWH decode %sabled",
+			 (0x1ff8 + i) * 0x80000,
+			 (0x1ff0 + i) * 0x80000,
+			 tmp ? "en" : "dis");
+		if ((tmp == 1) && contiguous) {
+			max_decode_fwh_decode = (8 - i) * 0x80000;
+		} else {
+			contiguous = 0;
+		}
+	}
+	for (i = 3; i >= 0; i--) {
+		tmp = (fwh_conf >> i) & 0x1;
+		msg_pdbg("\n0x%08x/0x%08x FWH decode %sabled",
+			 (0xff4 + i) * 0x100000,
+			 (0xff0 + i) * 0x100000,
+			 tmp ? "en" : "dis");
+		if ((tmp == 1) && contiguous) {
+			max_decode_fwh_decode = (8 - i) * 0x100000;
+		} else {
+			contiguous = 0;
+		}
+	}
+	max_rom_decode.fwh = min(max_decode_fwh_idsel, max_decode_fwh_decode);
+	msg_pdbg("\nMaximum FWH chip size: 0x%x bytes", max_rom_decode.fwh);
+
+	/* Enable BIOS writing */
+	old = mmio_readl(ilb + 0x1c);
+	wanted = old;
+
+	msg_pdbg("\nBIOS Lock Enable: %sabled, ",
+		 (old & (1 << 1)) ? "en" : "dis");
+	msg_pdbg("BIOS Write Enable: %sabled, ",
+		 (old & (1 << 0)) ? "en" : "dis");
+	msg_pdbg("BIOS_CNTL is 0x%x\n", old);
+
+	wanted |= (1 << 0);
+
+	/* Only write the register if it's necessary */
+	if (wanted == old)
+		return 0;
+
+	rmmio_writel(wanted, ilb + 0x1c);
+
+	if ((new = mmio_readl(ilb + 0x1c)) != wanted) {
+		msg_pinfo("WARNING: Setting ILB+0x%x from 0x%x to 0x%x on %s "
+			  "failed. New value is 0x%x.\n",
+			  0x1c, old, wanted, name, new);
+		return ERROR_FATAL;
+	}
+	return 0;
+}
+
 static int enable_flash_poulsbo(struct pci_dev *dev, const char *name)
 {
 	uint16_t old, new;
@@ -718,6 +844,74 @@ static int enable_flash_lynxpoint_lp(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name,
 				       CHIPSET_8_SERIES_LYNX_POINT_LP);
+}
+
+/* Baytrail */
+static int enable_flash_baytrail(struct pci_dev *dev, const char *name)
+{
+	int ret, ret_spi;
+	uint8_t bbs, buc;
+	uint32_t tmp, gcs;
+	void *rcrb, *spibar;
+	enum ich_chipset ich_generation = CHIPSET_BAYTRAIL;
+
+	static const char *const straps_names[] = { "LPC", "unknown",
+						    "unknown", "SPI" };
+
+	/* Enable Flash Writes */
+	ret = enable_flash_byt(dev, name);
+	if (ret == ERROR_FATAL)
+		return ret;
+
+	/* Get physical address of Root Complex Register Block */
+	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+	msg_pdbg("Root Complex Register Block address = 0x%x\n", tmp);
+
+	/* Map RCBA to virtual memory */
+	rcrb = physmap("BYT RCRB", tmp, 0x4000);
+
+	/* Set BBS (Boot BIOS Straps) field of GCS register. */
+	gcs = mmio_readl(rcrb + 0);
+
+	/* Bay Trail BBS (Boot BIOS Straps) field of GCS register.
+	 *   00b: LPC
+	 *   01b: reserved
+	 *   10b: reserved
+	 *   11b: SPI
+	 */
+	if (target_bus == BUS_LPC) {
+		msg_pdbg("Setting BBS to LPC\n");
+		gcs = (gcs & ~0xc00) | (0x0 << 10);
+	} else if (target_bus == BUS_SPI) {
+		msg_pdbg("Setting BBS to SPI\n");
+		gcs = (gcs & ~0xc00) | (0x3 << 10);
+	}
+	rmmio_writel(gcs, rcrb + 0);
+
+	msg_pdbg("GCS = 0x%x: ", gcs);
+	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
+		 (gcs & 0x1) ? "en" : "dis");
+
+	bbs = (gcs >> 10) & 0x3;
+	msg_pdbg("Boot BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
+
+	buc = mmio_readb(rcrb + 0x3414);
+	msg_pdbg("Top Swap : %s\n",
+		 (buc & 1) ? "enabled (A16 inverted)" : "not enabled");
+
+	/* This adds BUS_SPI */
+	tmp = pci_read_long(dev, 0x54) & 0xfffffe00;
+	msg_pdbg("SPI_BASE_ADDRESS = 0x%x\n", tmp);
+	spibar = physmap("BYT SBASE", tmp, 512);
+
+	ret_spi = ich_init_spi(dev, tmp, spibar, ich_generation);
+	if (ret_spi == ERROR_FATAL)
+		return ret_spi;
+
+	if (ret || ret_spi)
+		ret = ERROR_NONFATAL;
+
+	return ret;
 }
 
 static int via_no_byte_merge(struct pci_dev *dev, const char *name)
@@ -1457,6 +1651,7 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x9c43, OK, "Intel", "LP Premium", enable_flash_lynxpoint_lp},
 	{0x8086, 0x9c45, OK, "Intel", "LP Mainstream", enable_flash_lynxpoint_lp},
 	{0x8086, 0x9c47, OK, "Intel", "LP Value", enable_flash_lynxpoint_lp},
+	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
 #endif
 	{},
 };
@@ -1544,6 +1739,10 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 				   enable_flash_lynxpoint_lp) {
 				/* The new LP chipsets have 1 bit BBS */
 				is_new_ich = 2;
+			} else if (chipset_enables[i].doit ==
+				   enable_flash_baytrail) {
+				/* Baytrail has 2 bit BBS at different offset */
+				is_new_ich = 3;
 			}
 			break;
 		}
@@ -1558,6 +1757,28 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 	rcrb = physmap("ICH RCRB", tmp, 0x4000);
 
 	switch (is_new_ich) {
+	case 3:
+		/* Bay Trail BBS field of GCS register.
+		 *   00b: LPC
+		 *   01b: reserved
+		 *   10b: reserved
+		 *   11b: SPI
+		 */
+		gcs = mmio_readl(rcrb + 0);
+		switch ((gcs & 0xc00) >> 10) {
+		case 0x0:
+			*bus = BUS_LPC;
+			ret = 0;
+			break;
+		case 0x3:
+			*bus = BUS_SPI;
+			ret = 0;
+			break;
+		default:
+			*bus = BUS_NONE;
+			ret = -2; /* unknown bus type */
+		}
+		break;
 	case 2:
 		/* Lynx Point LP BBS (Boot BIOS Straps) field of GCS register.
 		 *   0b: SPI

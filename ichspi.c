@@ -1637,6 +1637,9 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	ich_generation = ich_gen;
 
 	switch (ich_generation) {
+	case CHIPSET_BAYTRAIL:
+		spibar_offset = 0;
+		break;
 	case CHIPSET_ICH_UNKNOWN:
 		return ERROR_FATAL;
 	case CHIPSET_ICH7:
@@ -1852,20 +1855,25 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		break;
 	}
 
-	old = pci_read_byte(dev, 0xdc);
-	msg_pdbg("SPI Read Configuration: ");
-	new = (old >> 2) & 0x3;
-	switch (new) {
-	case 0:
-	case 1:
-	case 2:
-		msg_pdbg("prefetching %sabled, caching %sabled, ",
-			     (new & 0x2) ? "en" : "dis",
-			     (new & 0x1) ? "dis" : "en");
+	switch (ich_generation) {
+	case CHIPSET_BAYTRAIL:
 		break;
 	default:
-		msg_pdbg("invalid prefetching/caching settings, ");
-		break;
+		old = pci_read_byte(dev, 0xdc);
+		msg_pdbg("SPI Read Configuration: ");
+		new = (old >> 2) & 0x3;
+		switch (new) {
+		case 0:
+		case 1:
+		case 2:
+			msg_pdbg("prefetching %sabled, caching %sabled, ",
+				 (new & 0x2) ? "en" : "dis",
+				 (new & 0x1) ? "dis" : "en");
+			break;
+		default:
+			msg_pdbg("invalid prefetching/caching settings, ");
+			break;
+		}
 	}
 	return 0;
 }
