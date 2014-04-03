@@ -751,6 +751,7 @@ static int w25_range_table(const struct flashchip *flash,
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
 		case GIGADEVICE_GD25Q64:
+		case GIGADEVICE_GD25LQ64:
 			*w25q_ranges = gd25q64_ranges;
 			*num_entries = ARRAY_SIZE(gd25q64_ranges);
 			break;
