@@ -165,6 +165,26 @@ struct w25q_range en25q128_ranges[] = {
 	{ 0, 1, 0x7, {0x000000, 16384 * 1024} },
 };
 
+struct w25q_range en25s64_ranges[] = {
+	{ 0, 0, 0, {0, 0} },    /* none */
+	{ 0, 0, 0x1, {0x000000, 8064 * 1024} },
+	{ 0, 0, 0x2, {0x000000, 7936 * 1024} },
+	{ 0, 0, 0x3, {0x000000, 7680 * 1024} },
+	{ 0, 0, 0x4, {0x000000, 7168 * 1024} },
+	{ 0, 0, 0x5, {0x000000, 6144 * 1024} },
+	{ 0, 0, 0x6, {0x000000, 4096 * 1024} },
+	{ 0, 0, 0x7, {0x000000, 8192 * 1024} },
+
+	{ 0, 1, 0, {0, 0} },	/* none */
+	{ 0, 1, 0x1, {0x7e0000, 128 * 1024} },
+	{ 0, 1, 0x2, {0x7c0000, 256 * 1024} },
+	{ 0, 1, 0x3, {0x780000, 512 * 1024} },
+	{ 0, 1, 0x4, {0x700000, 1024 * 1024} },
+	{ 0, 1, 0x5, {0x600000, 2048 * 1024} },
+	{ 0, 1, 0x6, {0x400000, 4096 * 1024} },
+	{ 0, 1, 0x7, {0x000000, 8192 * 1024} },
+};
+
 /* mx25l1005 ranges also work for the mx25l1005c */
 static struct w25q_range mx25l1005_ranges[] = {
 	{ X, X, 0, {0, 0} },	/* none */
@@ -653,6 +673,10 @@ static int w25_range_table(const struct flashchip *flash,
 		case EON_EN25Q128:
 			*w25q_ranges = en25q128_ranges;
 			*num_entries = ARRAY_SIZE(en25q128_ranges);
+			break;
+		case EON_EN25S64:
+			*w25q_ranges = en25s64_ranges;
+			*num_entries = ARRAY_SIZE(en25s64_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: EON flash chip mismatch (0x%04x)"
