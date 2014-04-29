@@ -3676,6 +3676,40 @@ const struct flashchip flashchips[] = {
 		.read		= spi_chip_read,
 		.voltage        = {2700, 3600},
 	},
+	{
+		.vendor		= "Eon",
+		.name		= "EN25S64",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= EON_ID_NOPREFIX,
+		.model_id	= EON_EN25S64,
+		.total_size	= 8192,
+		.page_size	= 256,
+		/* FIXME: add FEATURE_OTP and FEATURE_QPI removed */
+		/* OTP: 512B total; enter 0x3A */
+		.feature_bits	= FEATURE_WRSR_WREN,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	= {
+			{
+				.eraseblocks = { {4 * 1024, 2048} },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {64 * 1024, 128} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {8192 * 1024, 1} },
+				.block_erase = spi_block_erase_60,
+			}, {
+				.eraseblocks = { {8192 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {1650, 1950},
+	},
 
 	{
 		.vendor		= "Eon",
