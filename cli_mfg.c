@@ -113,7 +113,7 @@ static enum programmer default_programmer =
 void cli_mfg_usage(const char *name)
 {
 
-	printf("Usage: flashrom [-n] [-V] [-f] [-h|-R|-L|"
+	msg_ginfo("Usage: flashrom [-n] [-V] [-f] [-h|-R|-L|"
 #if CONFIG_PRINT_WIKI == 1
 	         "-z|"
 #endif
@@ -122,7 +122,7 @@ void cli_mfg_usage(const char *name)
 	               "[-m [<vendor>:]<part>] [-l <file>]\n"
 	       "       [-p <programmer>[:<parameters>]]\n\n");
 
-	printf("Please note that the command line interface for flashrom has "
+	msg_ginfo("Please note that the command line interface for flashrom has "
 	         "changed between\n"
 	       "0.9.1 and 0.9.2 and will change again before flashrom 1.0.\n"
 	       "Do not use flashrom in scripts or other automated tools "
@@ -130,7 +130,7 @@ void cli_mfg_usage(const char *name)
 	       "that your flashrom version won't interpret options in a "
 	         "different way.\n\n");
 
-	printf("   -h | --help                       print this help text\n"
+	msg_ginfo("   -h | --help                       print this help text\n"
 	       "   -R | --version                    print version (release)\n"
 	       "   -r | --read <file>                read flash and save to "
 	         "<file>\n"
@@ -167,7 +167,7 @@ void cli_mfg_usage(const char *name)
 
 	list_programmers_linebreak(37, 80, 1);
 
-	printf("Long-options:\n"
+	msg_ginfo("Long-options:\n"
 	       "   --diff <file>                     diff from file instead of ROM\n"
 	       "   --fast-verify                     only verify -i part\n"
 	       "   --flash-name                      flash vendor and device name\n"
@@ -181,7 +181,7 @@ void cli_mfg_usage(const char *name)
 	       "   --wp-status                       show write protect status\n"
 	       );
 
-	printf("\nYou can specify one of -h, -R, -L, "
+	msg_ginfo("\nYou can specify one of -h, -R, -L, "
 #if CONFIG_PRINT_WIKI == 1
 	         "-z, "
 #endif
@@ -192,7 +192,7 @@ void cli_mfg_usage(const char *name)
 
 void cli_mfg_abort_usage(const char *name)
 {
-	printf("Please run \"%s --help\" for usage info.\n", name);
+	msg_ginfo("Please run \"%s --help\" for usage info.\n", name);
 	exit(1);
 }
 
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'r':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'w':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -319,12 +319,12 @@ int main(int argc, char *argv[])
 		case 'v':
 			//FIXME: gracefully handle superfluous -v
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
 			if (dont_verify_it) {
-				fprintf(stderr, "--verify and --noverify are"
+				msg_gerr("--verify and --noverify are"
 					"mutually exclusive. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -337,7 +337,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'n':
 			if (verify_it) {
-				fprintf(stderr, "--verify and --noverify are"
+				msg_gerr("--verify and --noverify are"
 					"mutually exclusive. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -351,7 +351,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'E':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -367,7 +367,7 @@ int main(int argc, char *argv[])
 			tempstr = strdup(optarg);
 			lb_vendor_dev_from_string(tempstr);
 #else
-			fprintf(stderr, "Error: Internal programmer support "
+			msg_gerr("Error: Internal programmer support "
 				"was not compiled in and --mainboard only\n"
 				"applies to the internal programmer. Aborting.\n");
 			cli_mfg_abort_usage(argv[0]);
@@ -388,7 +388,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'L':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -396,7 +396,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'x':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -405,20 +405,20 @@ int main(int argc, char *argv[])
 		case 'z':
 #if CONFIG_PRINT_WIKI == 1
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
 			list_supported_wiki = 1;
 #else
-			fprintf(stderr, "Error: Wiki output was not compiled "
+			msg_gerr("Error: Wiki output was not compiled "
 				"in. Aborting.\n");
 			cli_mfg_abort_usage(argv[0]);
 #endif
 			break;
 		case 'p':
 			if (prog != PROGRAMMER_INVALID) {
-				fprintf(stderr, "Error: --programmer specified "
+				msg_gerr("Error: --programmer specified "
 					"more than once. You can separate "
 					"multiple\nparameters for a programmer "
 					"with \",\". Please see the man page "
@@ -464,13 +464,13 @@ int main(int argc, char *argv[])
 			}
 
 			if ((prog == PROGRAMMER_INVALID) && !alias) {
-				fprintf(stderr, "Error: Unknown programmer "
+				msg_gerr("Error: Unknown programmer "
 					"%s.\n", optarg);
 				cli_mfg_abort_usage(argv[0]);
 			}
 
 			if ((prog != PROGRAMMER_INVALID) && alias) {
-				fprintf(stderr, "Error: Alias cannot be used "
+				msg_gerr("Error: Alias cannot be used "
 					"with programmer name.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
 		case 'R':
 			/* print_version() is always called during startup. */
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -486,7 +486,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'h':
 			if (++operation_specified > 1) {
-				fprintf(stderr, "More than one operation "
+				msg_gerr("More than one operation "
 					"specified. Aborting.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
@@ -553,7 +553,7 @@ int main(int argc, char *argv[])
 
 #if 0
 	if (optind < argc) {
-		fprintf(stderr, "Error: Extra parameter found.\n");
+		msg_gerr("Error: Extra parameter found.\n");
 		cli_mfg_abort_usage(argv[0]);
 	}
 #endif
@@ -568,9 +568,9 @@ int main(int argc, char *argv[])
 			if (!strcmp(flash->name, chip_to_probe))
 				break;
 		if (!flash || !flash->name) {
-			fprintf(stderr, "Error: Unknown chip '%s' specified.\n",
+			msg_gerr("Error: Unknown chip '%s' specified.\n",
 				chip_to_probe);
-			printf("Run flashrom -L to view the hardware supported "
+			msg_ginfo("Run flashrom -L to view the hardware supported "
 				"in this flashrom version.\n");
 			exit(1);
 		}
@@ -583,7 +583,7 @@ int main(int argc, char *argv[])
 
 #if CONFIG_INTERNAL == 1
 	if ((prog != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
-		fprintf(stderr, "Error: --mainboard requires the internal "
+		msg_gerr("Error: --mainboard requires the internal "
 				"programmer. Aborting.\n");
 		cli_mfg_abort_usage(argv[0]);
 	}
@@ -613,7 +613,7 @@ int main(int argc, char *argv[])
 	myusec_calibrate_delay();
 
 	if (programmer_init(prog, pparam)) {
-		fprintf(stderr, "Error: Programmer initialization failed.\n");
+		msg_gerr("Error: Programmer initialization failed.\n");
 		rc = 1;
 		goto cli_mfg_silent_exit;
 	}
@@ -628,26 +628,26 @@ int main(int argc, char *argv[])
 	}
 
 	if (chipcount > 1) {
-		printf("Multiple flash chips were detected:");
+		msg_ginfo("Multiple flash chips were detected:");
 		for (i = 0; i < chipcount; i++)
-			printf(" %s", flashes[i].name);
-		printf("\nPlease specify which chip to use with the -c <chipname> option.\n");
+			msg_ginfo(" %s", flashes[i].name);
+		msg_ginfo("\nPlease specify which chip to use with the -c <chipname> option.\n");
 		programmer_shutdown();
 		exit(1);
 	} else if (!chipcount) {
-		printf("No EEPROM/flash device found.\n");
+		msg_ginfo("No EEPROM/flash device found.\n");
 		if (!force || !chip_to_probe) {
-			printf("Note: flashrom can never write if the flash chip isn't found automatically.\n");
+			msg_ginfo("Note: flashrom can never write if the flash chip isn't found automatically.\n");
 		}
 		if (force && read_it && chip_to_probe) {
-			printf("Force read (-f -r -c) requested, pretending the chip is there:\n");
+			msg_ginfo("Force read (-f -r -c) requested, pretending the chip is there:\n");
 			startchip = probe_flash(0, &flashes[0], 1);
 			if (startchip == -1) {
-				printf("Probing for flash chip '%s' failed.\n", chip_to_probe);
+				msg_ginfo("Probing for flash chip '%s' failed.\n", chip_to_probe);
 				rc = 1;
 				goto cli_mfg_silent_exit;
 			}
-			printf("Please note that forced reads most likely contain garbage.\n");
+			msg_ginfo("Please note that forced reads most likely contain garbage.\n");
 			return read_flash_to_file(&flashes[0], filename);
 		}
 		// FIXME: flash writes stay enabled!
@@ -662,7 +662,7 @@ int main(int argc, char *argv[])
 	size = fill_flash->total_size * 1024;
 	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
 	    (!force)) {
-		fprintf(stderr, "Chip is too big for this programmer "
+		msg_gerr("Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
 		rc = 1;
 		goto cli_mfg_silent_exit;
@@ -671,14 +671,14 @@ int main(int argc, char *argv[])
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
 	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
 	      wp_status | wp_list | extract_it)) {
-		printf("No operations were specified.\n");
+		msg_ginfo("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
 		goto cli_mfg_silent_exit;
 	}
 
 	if (set_wp_enable && set_wp_disable) {
-		printf("Error: --wp-enable and --wp-disable are mutually exclusive\n");
+		msg_ginfo("Error: --wp-enable and --wp-disable are mutually exclusive\n");
 		rc = 1;
 		goto cli_mfg_silent_exit;
 	}
@@ -728,14 +728,14 @@ int main(int argc, char *argv[])
 
 		if (!filename) {
 			if (!get_num_include_args()) {
-				printf("Error: No file specified for -%c.\n",
+				msg_ginfo("Error: No file specified for -%c.\n",
 						op);
 				rc = 1;
 				goto cli_mfg_silent_exit;
 			}
 
 			if (num_include_files() != get_num_include_args()) {
-				printf("Error: One or more -i arguments is "
+				msg_ginfo("Error: One or more -i arguments is "
 					" missing a filename.\n");
 				rc = 1;
 				goto cli_mfg_silent_exit;
@@ -756,7 +756,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->disable) {
 			rc |= fill_flash->wp->disable(fill_flash);
 		} else {
-			printf("Error: write protect is not supported "
+			msg_ginfo("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -765,7 +765,7 @@ int main(int argc, char *argv[])
 
 	if (flash_name) {
 		if (fill_flash->vendor && fill_flash->name) {
-			printf("vendor=\"%s\" name=\"%s\"\n",
+			msg_ginfo("vendor=\"%s\" name=\"%s\"\n",
 			       fill_flash->vendor, fill_flash->name);
 			goto cli_mfg_silent_exit;
 		} else {
@@ -780,7 +780,7 @@ int main(int argc, char *argv[])
 		char *endptr = NULL;
 
 		if ((argc - optind) != 2) {
-			printf("Error: invalid number of arguments\n");
+			msg_gerr("Error: invalid number of arguments\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
@@ -788,14 +788,14 @@ int main(int argc, char *argv[])
 		/* FIXME: add some error checking */
 		start = strtoul(argv[optind], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
-			printf("Error: value \"%s\" invalid\n", argv[optind]);
+			msg_ginfo("Error: value \"%s\" invalid\n", argv[optind]);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
 
 		len = strtoul(argv[optind + 1], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
-			printf("Error: value \"%s\" invalid\n", argv[optind + 1]);
+			msg_ginfo("Error: value \"%s\" invalid\n", argv[optind + 1]);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
@@ -803,7 +803,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->set_range) {
 			rc |= fill_flash->wp->set_range(fill_flash, start, len);
 		} else {
-			printf("Error: write protect is not supported "
+			msg_ginfo("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -819,7 +819,7 @@ int main(int argc, char *argv[])
 			wp_mode = WP_MODE_HARDWARE;	/* default */
 
 		if (wp_mode == WP_MODE_UNKNOWN) {
-			printf("Error: Invalid WP mode: \"%s\"\n", wp_mode_opt);
+			msg_ginfo("Error: Invalid WP mode: \"%s\"\n", wp_mode_opt);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
@@ -827,7 +827,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->enable) {
 			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
 		} else {
-			printf("Error: write protect is not supported "
+			msg_ginfo("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -835,7 +835,7 @@ int main(int argc, char *argv[])
 	}
 	
 	if (get_size) {
-		printf("%d\n", fill_flash->total_size * 1024);
+		msg_ginfo("%d\n", fill_flash->total_size * 1024);
 		goto cli_mfg_silent_exit;
 	}
 
@@ -843,7 +843,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->wp_status) {
 			rc |= fill_flash->wp->wp_status(fill_flash);
 		} else {
-			printf("Error: write protect is not supported "
+			msg_ginfo("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
@@ -851,11 +851,11 @@ int main(int argc, char *argv[])
 	}
 	
 	if (wp_list) {
-		printf("Valid write protection ranges:\n");
+		msg_ginfo("Valid write protection ranges:\n");
 		if (fill_flash->wp && fill_flash->wp->list_ranges) {
 			rc |= fill_flash->wp->list_ranges(fill_flash);
 		} else {
-			printf("Error: write protect is not supported "
+			msg_ginfo("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
