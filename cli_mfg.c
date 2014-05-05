@@ -192,7 +192,7 @@ void cli_mfg_usage(const char *name)
 
 void cli_mfg_abort_usage(const char *name)
 {
-	msg_ginfo("Please run \"%s --help\" for usage info.\n", name);
+	msg_gerr("Please run \"%s --help\" for usage info.\n", name);
 	exit(1);
 }
 
@@ -570,7 +570,7 @@ int main(int argc, char *argv[])
 		if (!flash || !flash->name) {
 			msg_gerr("Error: Unknown chip '%s' specified.\n",
 				chip_to_probe);
-			msg_ginfo("Run flashrom -L to view the hardware supported "
+			msg_gerr("Run flashrom -L to view the hardware supported "
 				"in this flashrom version.\n");
 			exit(1);
 		}
@@ -628,22 +628,22 @@ int main(int argc, char *argv[])
 	}
 
 	if (chipcount > 1) {
-		msg_ginfo("Multiple flash chips were detected:");
+		msg_gerr("Multiple flash chips were detected:");
 		for (i = 0; i < chipcount; i++)
-			msg_ginfo(" %s", flashes[i].name);
-		msg_ginfo("\nPlease specify which chip to use with the -c <chipname> option.\n");
+			msg_gerr(" %s", flashes[i].name);
+		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
 		programmer_shutdown();
 		exit(1);
 	} else if (!chipcount) {
-		msg_ginfo("No EEPROM/flash device found.\n");
+		msg_gerr("No EEPROM/flash device found.\n");
 		if (!force || !chip_to_probe) {
-			msg_ginfo("Note: flashrom can never write if the flash chip isn't found automatically.\n");
+			msg_gerr("Note: flashrom can never write if the flash chip isn't found automatically.\n");
 		}
 		if (force && read_it && chip_to_probe) {
 			msg_ginfo("Force read (-f -r -c) requested, pretending the chip is there:\n");
 			startchip = probe_flash(0, &flashes[0], 1);
 			if (startchip == -1) {
-				msg_ginfo("Probing for flash chip '%s' failed.\n", chip_to_probe);
+				msg_gerr("Probing for flash chip '%s' failed.\n", chip_to_probe);
 				rc = 1;
 				goto cli_mfg_silent_exit;
 			}
@@ -671,7 +671,7 @@ int main(int argc, char *argv[])
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
 	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
 	      wp_status | wp_list | extract_it)) {
-		msg_ginfo("No operations were specified.\n");
+		msg_gerr("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
 		goto cli_mfg_silent_exit;
@@ -728,14 +728,14 @@ int main(int argc, char *argv[])
 
 		if (!filename) {
 			if (!get_num_include_args()) {
-				msg_ginfo("Error: No file specified for -%c.\n",
+				msg_gerr("Error: No file specified for -%c.\n",
 						op);
 				rc = 1;
 				goto cli_mfg_silent_exit;
 			}
 
 			if (num_include_files() != get_num_include_args()) {
-				msg_ginfo("Error: One or more -i arguments is "
+				msg_gerr("Error: One or more -i arguments is "
 					" missing a filename.\n");
 				rc = 1;
 				goto cli_mfg_silent_exit;
@@ -756,7 +756,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->disable) {
 			rc |= fill_flash->wp->disable(fill_flash);
 		} else {
-			msg_ginfo("Error: write protect is not supported "
+			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -788,14 +788,14 @@ int main(int argc, char *argv[])
 		/* FIXME: add some error checking */
 		start = strtoul(argv[optind], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
-			msg_ginfo("Error: value \"%s\" invalid\n", argv[optind]);
+			msg_gerr("Error: value \"%s\" invalid\n", argv[optind]);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
 
 		len = strtoul(argv[optind + 1], &endptr, 0);
 		if (errno == ERANGE || errno == EINVAL || *endptr != '\0') {
-			msg_ginfo("Error: value \"%s\" invalid\n", argv[optind + 1]);
+			msg_gerr("Error: value \"%s\" invalid\n", argv[optind + 1]);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
@@ -803,7 +803,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->set_range) {
 			rc |= fill_flash->wp->set_range(fill_flash, start, len);
 		} else {
-			msg_ginfo("Error: write protect is not supported "
+			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -819,7 +819,7 @@ int main(int argc, char *argv[])
 			wp_mode = WP_MODE_HARDWARE;	/* default */
 
 		if (wp_mode == WP_MODE_UNKNOWN) {
-			msg_ginfo("Error: Invalid WP mode: \"%s\"\n", wp_mode_opt);
+			msg_gerr("Error: Invalid WP mode: \"%s\"\n", wp_mode_opt);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
@@ -827,7 +827,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->enable) {
 			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
 		} else {
-			msg_ginfo("Error: write protect is not supported "
+			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 			goto cli_mfg_silent_exit;
@@ -843,7 +843,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->wp_status) {
 			rc |= fill_flash->wp->wp_status(fill_flash);
 		} else {
-			msg_ginfo("Error: write protect is not supported "
+			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
@@ -855,7 +855,7 @@ int main(int argc, char *argv[])
 		if (fill_flash->wp && fill_flash->wp->list_ranges) {
 			rc |= fill_flash->wp->list_ranges(fill_flash);
 		} else {
-			msg_ginfo("Error: write protect is not supported "
+			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
@@ -883,7 +883,7 @@ cli_mfg_silent_exit:
 		release_big_lock();
 #endif
 	if (restore_power_management()) {
-		msg_perr("Unable to re-enable power management\n");
+		msg_gerr("Unable to re-enable power management\n");
 		rc |= 1;
 	}
 
