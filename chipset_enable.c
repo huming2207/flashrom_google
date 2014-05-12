@@ -660,6 +660,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		straps_names = straps_names_lpt;
 		break;
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+	case CHIPSET_9_SERIES_WILDCAT_POINT:
 		straps_names = straps_names_lpt_lp;
 		break;
 	default:
@@ -717,6 +718,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		}
 		break;
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+	case CHIPSET_9_SERIES_WILDCAT_POINT:
 		/* Lynx Point LP BBS (Boot BIOS Straps) field of GCS register.
 		 *   0b: SPI
 		 *   1b: LPC
@@ -760,6 +762,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 
 	switch (ich_generation) {
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
+	case CHIPSET_9_SERIES_WILDCAT_POINT:
 		/* Lynx Point LP uses a single bit for GCS */
 		bbs = (gcs >> 10) & 0x1;
 		break;
@@ -844,6 +847,13 @@ static int enable_flash_lynxpoint_lp(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name,
 				       CHIPSET_8_SERIES_LYNX_POINT_LP);
+}
+
+/* Wildcat Point */
+static int enable_flash_wildcatpoint(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name,
+				       CHIPSET_9_SERIES_WILDCAT_POINT);
 }
 
 /* Baytrail */
@@ -1651,6 +1661,14 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x9c43, OK, "Intel", "LP Premium", enable_flash_lynxpoint_lp},
 	{0x8086, 0x9c45, OK, "Intel", "LP Mainstream", enable_flash_lynxpoint_lp},
 	{0x8086, 0x9c47, OK, "Intel", "LP Value", enable_flash_lynxpoint_lp},
+	{0x8086, 0x9cc1, OK, "Intel", "Haswell U Sample", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc2, OK, "Intel", "Broadwell U Sample", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc3, OK, "Intel", "Broadwell U Premium", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc5, OK, "Intel", "Broadwell U Base", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc6, OK, "Intel", "Broadwell Y Sample", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc7, OK, "Intel", "Broadwell Y Premium", enable_flash_wildcatpoint},
+	{0x8086, 0x9cc9, OK, "Intel", "Broadwell Y Base", enable_flash_wildcatpoint},
+	{0x8086, 0x9ccb, OK, "Intel", "Broadwell H", enable_flash_wildcatpoint},
 	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
 #endif
 	{},
@@ -1735,8 +1753,10 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 			    /* TODO: add once enable_flash_ich_dc_spi(..., \
 			               CHIPSET_7_SERIES_PANTHER_POINT); */) {
 				is_new_ich = 1;
-			} else if (chipset_enables[i].doit ==
-				   enable_flash_lynxpoint_lp) {
+			} else if ((chipset_enables[i].doit ==
+				    enable_flash_lynxpoint_lp) ||
+				   (chipset_enables[i].doit ==
+				    enable_flash_wildcatpoint)) {
 				/* The new LP chipsets have 1 bit BBS */
 				is_new_ich = 2;
 			} else if (chipset_enables[i].doit ==
