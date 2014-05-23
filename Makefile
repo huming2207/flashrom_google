@@ -38,6 +38,10 @@ ifneq ($(NOWARNERROR),yes)
 CFLAGS += -Werror
 endif
 
+ifeq ($(CONFIG_STATIC),yes)
+PKG_CONFIG += --static
+endif
+
 # FIXME We have to differentiate between host and target OS architecture.
 OS_ARCH	?= $(shell uname)
 ifneq ($(OS_ARCH), SunOS)
