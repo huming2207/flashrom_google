@@ -486,6 +486,7 @@
 #define SPANSION_S25FL016A	0x0214
 #define SPANSION_S25FL032A	0x0215
 #define SPANSION_S25FL064A	0x0216
+#define SPANSION_S25FS128S	0x2018
 
 /*
  * SST25 chips are SPI, first byte of device ID is memory type, second
