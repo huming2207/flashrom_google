@@ -6393,6 +6393,7 @@ const struct flashchip flashchips[] = {
 		.model_id	= SPANSION_S25FS128S,
 		.total_size	= 16384,
 		.page_size	= 256,
+		.feature_bits   = FEATURE_WRSR_WREN,
 		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
