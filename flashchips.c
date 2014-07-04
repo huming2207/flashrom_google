@@ -6399,13 +6399,10 @@ const struct flashchip flashchips[] = {
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
-#if 0
 			{
 				.eraseblocks = { {64 * 1024, 256} },
-				.block_erase = spi_block_erase_d8,
+				.block_erase = s25fs_block_erase_d8,
 			}, {
-#endif
-			{
 				.eraseblocks = { {16 * 1024 * 1024, 1} },
 				.block_erase = spi_block_erase_60,
 			}, {
