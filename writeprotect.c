@@ -35,22 +35,11 @@
 #define WRITE_STATUS_REGISTER_DELAY 100 * 1000  /* unit: us */
 
 /*
- * Mask to extract write-protect enable and range bits
- *   Status register 1:
- *     SRP0:           bit 7
- *     range(BP2-BP0): bit 4-2
- *   Status register 2:
- *     SRP1:           bit 1
- */
-#define MASK_WP_AREA (0x9C)
-#define MASK_WP2_AREA (0x01)
-
-/*
  * The following procedures rely on look-up tables to match the user-specified
  * range with the chip's supported ranges. This turned out to be the most
  * elegant approach since diferent flash chips use different levels of
  * granularity and methods to determine protected ranges. In other words,
- * be stupid and simple since clever arithmetic will not for many chips.
+ * be stupid and simple since clever arithmetic will not work for many chips.
  */
 
 struct wp_range {
@@ -64,12 +53,54 @@ enum bit_state {
 	X	= -1	/* don't care. Must be bigger than max # of bp. */
 };
 
+/*
+ * Generic write-protection schema for 25-series SPI flash chips. This assumes
+ * there is a status register that contains one or more consecutive bits which
+ * determine which address range is protected.
+ */
+
+struct status_register_layout {
+	int bp0_pos;	/* position of BP0 */
+	int bp_bits;	/* number of block protect bits */
+	int srp_pos;	/* position of status register protect enable bit */
+};
+
+struct generic_range {
+	unsigned int bp;		/* block protect bitfield */
+	struct wp_range range;
+};
+
+struct generic_wp {
+	struct status_register_layout sr1;	/* status register 1 */
+	struct generic_range *ranges;
+};
+
+/*
+ * The following ranges and functions are useful for representing Winbond-
+ * style writeprotect schema in which there are typically 5 bits of
+ * relevant information stored in status register 1:
+ * sec: This bit indicates the units (sectors vs. blocks)
+ * tb: The top-bottom bit indicates if the affected range is at the top of
+ *     the flash memory's address space or at the bottom.
+ * bp[2:0]: The number of affected sectors/blocks.
+ */
 struct w25q_range {
 	enum bit_state sec;		/* if 1, bp[2:0] describe sectors */
 	enum bit_state tb;		/* top/bottom select */
 	int bp;				/* block protect bitfield */
 	struct wp_range range;
 };
+
+/*
+ * Mask to extract write-protect enable and range bits
+ *   Status register 1:
+ *     SRP0:           bit 7
+ *     range(BP2-BP0): bit 4-2
+ *   Status register 2:
+ *     SRP1:           bit 1
+ */
+#define MASK_WP_AREA (0x9C)
+#define MASK_WP2_AREA (0x01)
 
 struct w25q_range en25f40_ranges[] = {
 	{ X, X, 0, {0, 0} },    /* none */
@@ -1302,4 +1333,235 @@ struct wp wp_w25q = {
 	 */
 	.disable	= w25q_disable_writeprotect_default,
 	.wp_status	= w25q_wp_status,
+};
+
+
+/* Given a flash chip, this function returns its writeprotect info. */
+static int generic_range_table(const struct flashchip *flash,
+                           struct generic_wp **wp,
+                           int *num_entries)
+{
+	*wp = NULL;
+	*num_entries = 0;
+
+	switch (flash->manufacture_id) {
+	default:
+		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
+		         __func__, flash->manufacture_id);
+		return -1;
+	}
+
+	return 0;
+}
+
+/* Given a [start, len], this function finds a block protect bit combination
+ * (if possible) and sets the corresponding bits in "status". Remaining bits
+ * are preserved. */
+static int generic_range_to_status(const struct flashchip *flash,
+                        unsigned int start, unsigned int len,
+                        uint8_t *status)
+{
+	struct generic_wp *wp;
+	struct generic_range *r;
+	int i, range_found = 0, num_entries;
+	uint8_t bp_mask;
+
+	if (generic_range_table(flash, &wp, &num_entries))
+		return -1;
+
+	bp_mask = ((1 << (wp->sr1.bp0_pos + wp->sr1.bp_bits)) - 1) - \
+		  ((1 << wp->sr1.bp0_pos) - 1);
+
+	for (i = 0, r = &wp->ranges[0]; i < num_entries; i++, r++) {
+		msg_cspew("comparing range 0x%x 0x%x / 0x%x 0x%x\n",
+			  start, len, r->range.start, r->range.len);
+		if ((start == r->range.start) && (len == r->range.len)) {
+			*status &= ~(bp_mask);
+			*status |= r->bp << (wp->sr1.bp0_pos);
+			range_found = 1;
+			break;
+		}
+	}
+
+	if (!range_found) {
+		msg_cerr("matching range not found\n");
+		return -1;
+	}
+	return 0;
+}
+
+static int generic_status_to_range(const struct flashchip *flash,
+		const uint8_t sr1, unsigned int *start, unsigned int *len)
+{
+	struct generic_wp *wp;
+	struct generic_range *r;
+	int num_entries, wp_en, i, status_found = 0;
+	uint8_t sr1_bp;
+
+	if (generic_range_table(flash, &wp, &num_entries))
+		return -1;
+
+	sr1_bp = (sr1 >> wp->sr1.bp0_pos) & ((1 << wp->sr1.bp_bits) - 1);
+
+	for (i = 0, r = &wp->ranges[0]; i < num_entries; i++, r++) {
+		msg_cspew("comparing  0x%02x 0x%02x\n", sr1_bp, r->bp);
+		if (sr1_bp == r->bp) {
+			*start = r->range.start;
+			*len = r->range.len;
+			status_found = 1;
+			break;
+		}
+	}
+
+	if (!status_found) {
+		msg_cerr("matching status not found\n");
+		return -1;
+	}
+	return 0;
+}
+
+/* Given a [start, len], this function calls generic_range_to_status() to
+ * convert it to flash-chip-specific range bits, then sets into status register.
+ */
+static int generic_set_range(const struct flashchip *flash,
+                         unsigned int start, unsigned int len)
+{
+	uint8_t status, expected;
+
+	status = spi_read_status_register();
+	msg_cdbg("%s: old status: 0x%02x\n", __func__, status);
+
+	expected = status;	/* preserve non-bp bits */
+	if (generic_range_to_status(flash, start, len, &expected))
+		return -1;
+
+	spi_write_status_register_WREN(expected);
+
+	status = spi_read_status_register();
+	msg_cdbg("%s: new status: 0x%02x\n", __func__, status);
+	if (status != expected) {
+		msg_cerr("expected=0x%02x, but actual=0x%02x.\n",
+		          expected, status);
+		return 1;
+	}
+
+	return 0;
+}
+
+/* Set/clear the status regsiter write protect bit in SR1. */
+static int generic_set_srp0(const struct flashchip *flash, int enable)
+{
+	uint8_t status, expected;
+	struct generic_wp *wp;
+	int num_entries;
+
+	if (generic_range_table(flash, &wp, &num_entries))
+		return -1;
+
+	expected = spi_read_status_register();
+	msg_cdbg("%s: old status: 0x%02x\n", __func__, expected);
+
+	if (enable)
+		expected |= 1 << wp->sr1.srp_pos;
+	else
+		expected &= ~(1 << wp->sr1.srp_pos);
+
+	spi_write_status_register_WREN(expected);
+
+	status = spi_read_status_register();
+	msg_cdbg("%s: new status: 0x%02x\n", __func__, status);
+	if (status != expected)
+		return -1;
+
+	return 0;
+}
+
+static int generic_enable_writeprotect(const struct flashchip *flash,
+		enum wp_mode wp_mode)
+{
+	int ret;
+
+	switch (wp_mode) {
+	case WP_MODE_HARDWARE:
+		ret = generic_set_srp0(flash, 1);
+		break;
+	default:
+		msg_cerr("%s(): unsupported write-protect mode\n", __func__);
+		return 1;
+	}
+
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
+	return ret;
+}
+
+static int generic_disable_writeprotect(const struct flashchip *flash)
+{
+	int ret;
+
+	ret = generic_set_srp0(flash, 0);
+	if (ret)
+		msg_cerr("%s(): error=%d.\n", __func__, ret);
+	return ret;
+}
+
+static int generic_list_ranges(const struct flashchip *flash)
+{
+	struct generic_wp *wp;
+	struct generic_range *r;
+	int i, num_entries;
+
+	if (generic_range_table(flash, &wp, &num_entries))
+		return -1;
+
+	r = &wp->ranges[0];
+	for (i = 0; i < num_entries; i++) {
+		msg_cinfo("start: 0x%06x, length: 0x%06x\n",
+		          r->range.start, r->range.len);
+		r++;
+	}
+
+	return 0;
+}
+
+static int generic_wp_status(const struct flashchip *flash)
+{
+	uint8_t sr1;
+	unsigned int start, len;
+	int ret = 0;
+	struct generic_wp *wp;
+	struct generic_range *g;
+	int num_entries, wp_en;
+
+	if (generic_range_table(flash, &wp, &num_entries))
+		return -1;
+
+	sr1 = spi_read_status_register();
+	wp_en = (sr1 >> wp->sr1.srp_pos) & 1;
+
+	msg_cinfo("WP: status: 0x%04x\n", sr1);
+	msg_cinfo("WP: status.srp0: %x\n", wp_en);
+	/* FIXME: SRP1 is not really generic, but we probably should print
+	 * it anyway to have consistent output. #legacycruft */
+	msg_cinfo("WP: status.srp1: %x\n", 0);
+	msg_cinfo("WP: write protect is %s.\n",
+		          wp_en ? "enabled" : "disabled");
+
+	msg_cinfo("WP: write protect range: ");
+	if (generic_status_to_range(flash, sr1, &start, &len)) {
+		msg_cinfo("(cannot resolve the range)\n");
+		ret = -1;
+	} else {
+		msg_cinfo("start=0x%08x, len=0x%08x\n", start, len);
+	}
+
+	return ret;
+}
+
+struct wp wp_generic = {
+	.list_ranges	= generic_list_ranges,
+	.set_range	= generic_set_range,
+	.enable		= generic_enable_writeprotect,
+	.disable	= generic_disable_writeprotect,
+	.wp_status	= generic_wp_status,
 };
