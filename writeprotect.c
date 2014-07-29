@@ -1285,6 +1285,95 @@ struct wp wp_w25q = {
 	.wp_status	= w25q_wp_status,
 };
 
+struct generic_range gd25q32_cmp0_ranges[] = {
+	/* none, bp4 and bp3 => don't care */
+	{ 0x00, {0, 0} },
+	{ 0x08, {0, 0} },
+	{ 0x10, {0, 0} },
+	{ 0x18, {0, 0} },
+
+	{ 0x01, {0x3f0000, 64 * 1024} },
+	{ 0x02, {0x3e0000, 128 * 1024} },
+	{ 0x03, {0x3c0000, 256 * 1024} },
+	{ 0x04, {0x380000, 512 * 1024} },
+	{ 0x05, {0x300000, 1024 * 1024} },
+	{ 0x06, {0x200000, 2048 * 1024} },
+
+	{ 0x09, {0x000000, 64 * 1024} },
+	{ 0x0a, {0x000000, 128 * 1024} },
+	{ 0x0b, {0x000000, 256 * 1024} },
+	{ 0x0c, {0x000000, 512 * 1024} },
+	{ 0x0d, {0x000000, 1024 * 1024} },
+	{ 0x0e, {0x000000, 2048 * 1024} },
+
+	/* all, bp4 and bp3 => don't care */
+	{ 0x07, {0x000000, 4096 * 1024} },
+	{ 0x0f, {0x000000, 4096 * 1024} },
+	{ 0x17, {0x000000, 4096 * 1024} },
+	{ 0x1f, {0x000000, 4096 * 1024} },
+
+	{ 0x11, {0x3ff000, 4 * 1024} },
+	{ 0x12, {0x3fe000, 8 * 1024} },
+	{ 0x13, {0x3fc000, 16 * 1024} },
+	{ 0x14, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
+	{ 0x15, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
+	{ 0x16, {0x3f8000, 32 * 1024} },
+
+	{ 0x19, {0x000000, 4 * 1024} },
+	{ 0x1a, {0x000000, 8 * 1024} },
+	{ 0x1b, {0x000000, 16 * 1024} },
+	{ 0x1c, {0x000000, 32 * 1024} },	/* bp0 => don't care */
+	{ 0x1d, {0x000000, 32 * 1024} },	/* bp0 => don't care */
+	{ 0x1e, {0x000000, 32 * 1024} },
+};
+
+struct generic_range gd25q32_cmp1_ranges[] = {
+	/* none, bp4 and bp3 => don't care */
+	{ 0x00, {0, 0} },
+	{ 0x08, {0, 0} },
+	{ 0x10, {0, 0} },
+	{ 0x18, {0, 0} },
+
+	{ 0x01, {0x000000, 4032 * 1024} },
+	{ 0x02, {0x000000, 3968 * 1024} },
+	{ 0x03, {0x000000, 3840 * 1024} },
+	{ 0x04, {0x000000, 3584 * 1024} },
+	{ 0x05, {0x000000, 3 * 1024 * 1024} },
+	{ 0x06, {0x000000, 2 * 1024 * 1024} },
+
+	{ 0x09, {0x010000, 4032 * 1024} },
+	{ 0x0a, {0x020000, 3968 * 1024} },
+	{ 0x0b, {0x040000, 3840 * 1024} },
+	{ 0x0c, {0x080000, 3584 * 1024} },
+	{ 0x0d, {0x100000, 3 * 1024 * 1024} },
+	{ 0x0e, {0x200000, 2 * 1024 * 1024} },
+
+	/* all, bp4 and bp3 => don't care */
+	{ 0x07, {0x000000, 4096 * 1024} },
+	{ 0x0f, {0x000000, 4096 * 1024} },
+	{ 0x17, {0x000000, 4096 * 1024} },
+	{ 0x1f, {0x000000, 4096 * 1024} },
+
+	{ 0x11, {0x000000, 4092 * 1024} },
+	{ 0x12, {0x000000, 4088 * 1024} },
+	{ 0x13, {0x000000, 4080 * 1024} },
+	{ 0x14, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
+	{ 0x15, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
+	{ 0x16, {0x000000, 4064 * 1024} },
+
+	{ 0x19, {0x001000, 4092 * 1024} },
+	{ 0x1a, {0x002000, 4088 * 1024} },
+	{ 0x1b, {0x040000, 4080 * 1024} },
+	{ 0x1c, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
+	{ 0x1d, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
+	{ 0x1e, {0x080000, 4064 * 1024} },
+};
+
+static struct generic_wp gd25q32_wp = {
+	/* TODO: map second status register */
+	.sr1 = { .bp0_pos = 2, .bp_bits = 5, .srp_pos = 7 },
+};
+
 #if 0
 /* FIXME: MX25L6405D has same ID as MX25L6406 */
 static struct w25q_range mx25l6405d_ranges[] = {
@@ -1343,6 +1432,30 @@ static int generic_range_table(const struct flashchip *flash,
 	*num_entries = 0;
 
 	switch (flash->manufacture_id) {
+	case GIGADEVICE_ID:
+		switch(flash->model_id) {
+		case GIGADEVICE_GD25Q32: {
+			uint8_t sr1 = w25q_read_status_register_2();
+
+			*wp = &gd25q32_wp;
+			if (!(sr1 & (1 << 6))) {	/* CMP == 0 */
+				(*wp)->ranges = &gd25q32_cmp0_ranges[0];
+				*num_entries = ARRAY_SIZE(gd25q32_cmp0_ranges);
+			} else {			/* CMP == 1 */
+				(*wp)->ranges = &gd25q32_cmp1_ranges[0];
+				*num_entries = ARRAY_SIZE(gd25q32_cmp1_ranges);
+			}
+
+			break;
+		/* TODO(shawnn): add support for other GD parts */
+		}
+		default:
+			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->model_id);
+			return -1;
+		}
+		break;
 	case MACRONIX_ID:
 		switch (flash->model_id) {
 		case MACRONIX_MX25L6405:

@@ -4064,7 +4064,7 @@ const struct flashchip flashchips[] = {
 		/* FIXME: add FEATURE_OTP when we sync w/ upstream */
 		/* OTP: 1024B total, 256B reserved; read 0x48; write 0x42 */
 		.feature_bits	= FEATURE_WRSR_WREN,
-		.tested		= TEST_UNTESTED,
+		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -4089,6 +4089,7 @@ const struct flashchip flashchips[] = {
 		.unlock		= spi_disable_blockprotect,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
+		.wp		= &wp_generic,
 		.voltage	= {2700, 3600},
 	},
 
