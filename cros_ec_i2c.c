@@ -40,11 +40,11 @@
 #include "file.h"
 #include "flash.h"
 #if USE_GEC_LOCK == 1
-#include "gec_lock.h"
+#include "cros_ec_lock.h"
 #endif
-#include "gec_ec_commands.h"
+#include "cros_ec_commands.h"
 #include "programmer.h"
-#include "gec.h"
+#include "cros_ec.h"
 
 #define SYSFS_I2C_DEV_ROOT	"/sys/bus/i2c/devices"
 #define GEC_I2C_DEVICE_NAME1	"cros-ec-i2c"		/* upstream name */

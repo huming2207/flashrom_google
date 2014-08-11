@@ -44,11 +44,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "gec_dev.h"
+#include "cros_ec_dev.h"
 #include "file.h"
 #include "flash.h"
-#include "gec_ec_commands.h"
-#include "gec.h"
+#include "cros_ec_commands.h"
+#include "cros_ec.h"
 #include "programmer.h"
 
 #define GEC_DEV_NAME		"/dev/cros_ec"

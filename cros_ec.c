@@ -37,9 +37,9 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
-#include "gec.h"
-#include "gec_lock.h"
-#include "gec_ec_commands.h"
+#include "cros_ec.h"
+#include "cros_ec_lock.h"
+#include "cros_ec_commands.h"
 #include "programmer.h"
 #include "spi.h"
 #include "writeprotect.h"

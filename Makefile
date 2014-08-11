@@ -261,7 +261,7 @@ LIBS += -lfdt -lz
 endif
 endif
 
-LOCK_OBJS = csem.o ipc_lock.o big_lock.o gec_lock.o
+LOCK_OBJS = csem.o ipc_lock.o big_lock.o cros_ec_lock.o
 ifeq ($(shell ./util/use_big_lock.sh), 0)
 LIB_OBJS += $(LOCK_OBJS)
 FEATURE_CFLAGS += -D'USE_BIG_LOCK=1' -D'USE_GEC_LOCK=1'
@@ -374,19 +374,19 @@ endif
 
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
-PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o gec.o
+PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o cros_ec.o
 ifeq ($(ARCH),"x86")
-PROGRAMMER_OBJS += gec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
+PROGRAMMER_OBJS += cros_ec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o
 else
 ifeq ($(ARCH),"arm")
-PROGRAMMER_OBJS += gec_i2c.o
+PROGRAMMER_OBJS += cros_ec_i2c.o
 endif
 NEED_PCI := yes
 endif
 endif
 
-PROGRAMMER_OBJS += gec_dev.o
+PROGRAMMER_OBJS += cros_ec_dev.o
 
 ifeq ($(CONFIG_SERPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_SERPROG=1'

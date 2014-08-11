@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
-#include "gec_lock.h"
+#include "cros_ec_lock.h"
 #include "ipc_lock.h"
 #include "locks.h"
 

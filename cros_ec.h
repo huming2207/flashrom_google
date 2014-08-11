@@ -23,7 +23,7 @@
 
 /* FIXME: We should be able to forward declare enum ec_current_image here
  * instead of including gec_ec_commands.h */
-#include "gec_ec_commands.h"
+#include "cros_ec_commands.h"
 
 struct gec_priv {
 	int detected;
