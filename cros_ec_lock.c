@@ -19,14 +19,14 @@
 #include "ipc_lock.h"
 #include "locks.h"
 
-static struct ipc_lock gec_lock = IPC_LOCK_INIT(GECLOCK);
+static struct ipc_lock cros_ec_lock = IPC_LOCK_INIT(CROS_EC_LOCK);
 
-int acquire_gec_lock(int timeout_secs)
+int acquire_cros_ec_lock(int timeout_secs)
 {
-	return acquire_lock(&gec_lock, timeout_secs * 1000);
+	return acquire_lock(&cros_ec_lock, timeout_secs * 1000);
 }
 
-int release_gec_lock(void)
+int release_cros_ec_lock(void)
 {
-	return release_lock(&gec_lock);
+	return release_lock(&cros_ec_lock);
 }

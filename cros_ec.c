@@ -87,7 +87,7 @@ static struct ec_response_flash_region_info regions[EC_FLASH_REGION_WP_RO + 1];
 /* Given the range not able to update, mark the corresponding
  * firmware as old.
  */
-static void gec_invalidate_copy(unsigned int addr, unsigned int len)
+static void cros_ec_invalidate_copy(unsigned int addr, unsigned int len)
 {
 	int i;
 
@@ -103,7 +103,7 @@ static void gec_invalidate_copy(unsigned int addr, unsigned int len)
 }
 
 
-static int gec_get_current_image(struct gec_priv *priv)
+static int cros_ec_get_current_image(struct cros_ec_priv *priv)
 {
 	struct ec_response_get_version resp;
 	int rc;
@@ -111,11 +111,11 @@ static int gec_get_current_image(struct gec_priv *priv)
 	rc = priv->ec_command(EC_CMD_GET_VERSION, 0, NULL, 0, &resp,
 			      sizeof(resp));
 	if (rc < 0) {
-		msg_perr("GEC cannot get the running copy: rc=%d\n", rc);
+		msg_perr("CROS_EC cannot get the running copy: rc=%d\n", rc);
 		return rc;
 	}
 	if (resp.current_image == EC_IMAGE_UNKNOWN) {
-		msg_perr("GEC gets unknown running copy\n");
+		msg_perr("CROS_EC gets unknown running copy\n");
 		return -1;
 	}
 
@@ -123,7 +123,7 @@ static int gec_get_current_image(struct gec_priv *priv)
 }
 
 
-static int gec_get_region_info(struct gec_priv *priv,
+static int cros_ec_get_region_info(struct cros_ec_priv *priv,
 			       enum ec_flash_region region,
 			       struct ec_response_flash_region_info *info)
 {
@@ -155,7 +155,7 @@ static int gec_get_region_info(struct gec_priv *priv,
  */
 static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
 {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_get_cmd_versions pver;
 	struct ec_response_get_cmd_versions rver;
 	int rc;
@@ -192,11 +192,11 @@ static int ec_cmd_version_supported(int cmd, int ver)
 	return (mask & EC_VER_MASK(ver)) ? 1 : 0;
 }
 
-static int gec_set_max_write_size(void)
+static int cros_ec_set_max_write_size(void)
 {
 	int rc;
 	struct ec_response_flash_info info;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	unsigned int pdata_max_size;
 
 	/*
@@ -229,9 +229,9 @@ static int gec_set_max_write_size(void)
  *
  * Returns 0 for success.
  */
-static int gec_jump_copy(enum ec_current_image target) {
+static int cros_ec_jump_copy(enum ec_current_image target) {
 	struct ec_params_reboot_ec p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int rc;
 	int current_image;
 
@@ -240,7 +240,7 @@ static int gec_jump_copy(enum ec_current_image target) {
 	 * set the OBF=1 and the next command cannot be executed.
 	 * Thus, we call EC to jump only if the target is different.
 	 */
-	current_image = gec_get_current_image(priv);
+	current_image = cros_ec_get_current_image(priv);
 	if (current_image < 0)
 		return 1;
 	if (current_image == target)
@@ -274,11 +274,11 @@ static int gec_jump_copy(enum ec_current_image target) {
 		break;
 	}
 
-	msg_pdbg("GEC is jumping to [%s]\n", sections[p.cmd]);
+	msg_pdbg("CROS_EC is jumping to [%s]\n", sections[p.cmd]);
 	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
 	if (current_image == p.cmd) {
-		msg_pdbg("GEC is already in [%s]\n", sections[p.cmd]);
+		msg_pdbg("CROS_EC is already in [%s]\n", sections[p.cmd]);
 		priv->current_image = target;
 		return 0;
 	}
@@ -286,10 +286,10 @@ static int gec_jump_copy(enum ec_current_image target) {
 	rc = priv->ec_command(EC_CMD_REBOOT_EC, 0,
 			      &p, sizeof(p), NULL, 0);
 	if (rc < 0) {
-		msg_perr("GEC cannot jump to [%s]:%d\n",
+		msg_perr("CROS_EC cannot jump to [%s]:%d\n",
 			 sections[p.cmd], rc);
 	} else {
-		msg_pdbg("GEC has jumped to [%s]\n", sections[p.cmd]);
+		msg_pdbg("CROS_EC has jumped to [%s]\n", sections[p.cmd]);
 		rc = EC_RES_SUCCESS;
 		priv->current_image = target;
 	}
@@ -299,7 +299,7 @@ static int gec_jump_copy(enum ec_current_image target) {
 
 	/* update max data write size in case we're jumping to an EC
 	 * firmware with different protocol */
-	gec_set_max_write_size();
+	cros_ec_set_max_write_size();
 
 	return rc;
 }
@@ -308,8 +308,8 @@ static int gec_jump_copy(enum ec_current_image target) {
 /* Given an image, this function parses FMAP and recognize the firmware
  * ranges.
  */
-int gec_prepare(uint8_t *image, int size) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+int cros_ec_prepare(uint8_t *image, int size) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct fmap *fmap;
 	int i, j;
 
@@ -332,9 +332,9 @@ int gec_prepare(uint8_t *image, int size) {
 	}
 
 	/* Warning: before update, we jump the EC to RO copy. If you want to
-	 *          change this behavior, please also check the gec_finish().
+	 *          change this behavior, please also check the cros_ec_finish().
 	 */
-	return gec_jump_copy(EC_IMAGE_RO);
+	return cros_ec_jump_copy(EC_IMAGE_RO);
 }
 
 
@@ -344,13 +344,13 @@ int gec_prepare(uint8_t *image, int size) {
  *
  * This function also jumps to new-updated firmware copy before return >0.
  */
-int gec_need_2nd_pass(void) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+int cros_ec_need_2nd_pass(void) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 
 	if (!(priv && priv->detected)) return 0;
 
 	if (need_2nd_pass) {
-		if (gec_jump_copy(EC_IMAGE_UNKNOWN)) {
+		if (cros_ec_jump_copy(EC_IMAGE_UNKNOWN)) {
 			return -1;
 		}
 	}
@@ -363,30 +363,30 @@ int gec_need_2nd_pass(void) {
  *
  * Try latest firmware: B > A > RO
  *
- * This function assumes the EC jumps to RO at gec_prepare() so that
+ * This function assumes the EC jumps to RO at cros_ec_prepare() so that
  * the fwcopy[RO].flags is old (0) and A/B are new. Please also refine
- * this code logic if you change the gec_prepare() behavior.
+ * this code logic if you change the cros_ec_prepare() behavior.
  */
-int gec_finish(void) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+int cros_ec_finish(void) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 
 	if (!(priv && priv->detected)) return 0;
 
 	if (try_latest_firmware) {
 		if (fwcopy[EC_IMAGE_RW].flags &&
-		    gec_jump_copy(EC_IMAGE_RW) == 0) return 0;
-		return gec_jump_copy(EC_IMAGE_RO);
+		    cros_ec_jump_copy(EC_IMAGE_RW) == 0) return 0;
+		return cros_ec_jump_copy(EC_IMAGE_RO);
 	}
 
 	return 0;
 }
 
 
-int gec_read(struct flashchip *flash, uint8_t *readarr,
+int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
 	int rc = 0;
 	struct ec_params_flash_read p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_read;
 	uint8_t buf[maxlen];
 	int offset = 0, count;
@@ -398,7 +398,7 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
 		rc = priv->ec_command(EC_CMD_FLASH_READ, 0,
 				      &p, sizeof(p), buf, count);
 		if (rc < 0) {
-			msg_perr("GEC: Flash read error at offset 0x%x\n",
+			msg_perr("CROS_EC: Flash read error at offset 0x%x\n",
 			         blockaddr + offset);
 			return rc;
 		} else {
@@ -417,7 +417,7 @@ int gec_read(struct flashchip *flash, uint8_t *readarr,
  * returns 0 to indicate area does not overlap current EC image
  * returns 1 to indicate area overlaps current EC image or error
  */
-static int in_current_image(struct gec_priv *priv,
+static int in_current_image(struct cros_ec_priv *priv,
 		unsigned int addr, unsigned int len)
 {
 	int ret;
@@ -437,15 +437,15 @@ static int in_current_image(struct gec_priv *priv,
 }
 
 
-int gec_block_erase(struct flashchip *flash,
+int cros_ec_block_erase(struct flashchip *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
 	struct ec_params_flash_erase erase;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int rc;
 
 	if (in_current_image(priv, blockaddr, len)) {
-		gec_invalidate_copy(blockaddr, len);
+		cros_ec_invalidate_copy(blockaddr, len);
 		need_2nd_pass = 1;
 		return ACCESS_DENIED;
 	}
@@ -456,12 +456,12 @@ int gec_block_erase(struct flashchip *flash,
 			      &erase, sizeof(erase), NULL, 0);
 	if (rc == -EC_RES_ACCESS_DENIED) {
 		// this is active image.
-		gec_invalidate_copy(blockaddr, len);
+		cros_ec_invalidate_copy(blockaddr, len);
 		need_2nd_pass = 1;
 		return ACCESS_DENIED;
 	}
 	if (rc < 0) {
-		msg_perr("GEC: Flash erase error at address 0x%x, rc=%d\n",
+		msg_perr("CROS_EC: Flash erase error at address 0x%x, rc=%d\n",
 		         blockaddr, rc);
 		return rc;
 	} else {
@@ -475,12 +475,12 @@ int gec_block_erase(struct flashchip *flash,
 }
 
 
-int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0;
 	struct ec_params_flash_write p;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_write;
 	uint8_t *packet;
 
@@ -494,7 +494,7 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		p.size = written;
 
 		if (in_current_image(priv, p.offset, p.size)) {
-			gec_invalidate_copy(addr, nbytes);
+			cros_ec_invalidate_copy(addr, nbytes);
 			need_2nd_pass = 1;
 			return ACCESS_DENIED;
 		}
@@ -506,7 +506,7 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 		if (rc == -EC_RES_ACCESS_DENIED) {
 			// this is active image.
-			gec_invalidate_copy(addr, nbytes);
+			cros_ec_invalidate_copy(addr, nbytes);
 			need_2nd_pass = 1;
 			return ACCESS_DENIED;
 		}
@@ -523,12 +523,12 @@ int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 }
 
 
-static int gec_list_ranges(const struct flashchip *flash) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+static int cros_ec_list_ranges(const struct flashchip *flash) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
-	rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
@@ -564,7 +564,7 @@ static int gec_list_ranges(const struct flashchip *flash) {
  *  every EC supports RO_NOW, thus we then try to protect the entire chip.
  */
 static int set_wp(int enable) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	const int ro_at_boot_flag = EC_FLASH_PROTECT_RO_AT_BOOT;
@@ -693,14 +693,14 @@ exit:
 	return 0;
 }
 
-static int gec_set_range(const struct flashchip *flash,
+static int cros_ec_set_range(const struct flashchip *flash,
                          unsigned int start, unsigned int len) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
 	/* Check if the given range is supported */
-	rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
@@ -722,7 +722,7 @@ static int gec_set_range(const struct flashchip *flash,
 }
 
 
-static int gec_enable_writeprotect(const struct flashchip *flash,
+static int cros_ec_enable_writeprotect(const struct flashchip *flash,
 		enum wp_mode wp_mode) {
 	int ret;
 
@@ -741,13 +741,13 @@ static int gec_enable_writeprotect(const struct flashchip *flash,
 }
 
 
-static int gec_disable_writeprotect(const struct flashchip *flash) {
+static int cros_ec_disable_writeprotect(const struct flashchip *flash) {
 	return set_wp(0);
 }
 
 
-static int gec_wp_status(const struct flashchip *flash) {
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+static int cros_ec_wp_status(const struct flashchip *flash) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	int start, len;  /* wp range */
@@ -773,7 +773,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 
 		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is set.\n",
 			 __func__);
-		rc = gec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+		rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
 		if (rc < 0) {
 			msg_perr("FAILED: Cannot get the WP_RO region info: "
 				 "%d\n", rc);
@@ -806,7 +806,7 @@ static int gec_wp_status(const struct flashchip *flash) {
 }
 
 /* perform basic "hello" test to see if we can talk to the EC */
-int gec_test(struct gec_priv *priv)
+int cros_ec_test(struct cros_ec_priv *priv)
 {
 	struct ec_params_hello request;
 	struct ec_response_hello response;
@@ -831,18 +831,18 @@ int gec_test(struct gec_priv *priv)
 	return 0;
 }
 
-int gec_probe_size(struct flashchip *flash) {
+int cros_ec_probe_size(struct flashchip *flash) {
 	int rc;
 	struct ec_response_flash_info info;
 	struct ec_response_get_chip_info chip_info;
-	struct gec_priv *priv = (struct gec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
-		.list_ranges    = gec_list_ranges,
-		.set_range      = gec_set_range,
-		.enable         = gec_enable_writeprotect,
-		.disable        = gec_disable_writeprotect,
-		.wp_status      = gec_wp_status,
+		.list_ranges    = cros_ec_list_ranges,
+		.set_range      = cros_ec_set_range,
+		.enable         = cros_ec_enable_writeprotect,
+		.disable        = cros_ec_disable_writeprotect,
+		.wp_status      = cros_ec_wp_status,
 	};
 
 	rc = priv->ec_command(EC_CMD_FLASH_INFO, 0,
@@ -851,7 +851,7 @@ int gec_probe_size(struct flashchip *flash) {
 		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
 		return 0;
 	}
-	rc = gec_get_current_image(priv);
+	rc = cros_ec_get_current_image(priv);
 	if (rc < 0) {
 		msg_perr("%s(): Failed to probe (no current image): %d\n",
 			 __func__, rc);
@@ -885,11 +885,11 @@ int gec_probe_size(struct flashchip *flash) {
 	if (!strncmp(chip_info.name, "stm32l", 6))
 		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
-	gec_set_max_write_size();
+	cros_ec_set_max_write_size();
 
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
 	 * so we need to be careful about using these enums as array indices */
-	rc = gec_get_region_info(priv, EC_FLASH_REGION_RO,
+	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_RO,
 				 &priv->region[EC_IMAGE_RO]);
 	if (rc) {
 		msg_perr("%s(): Failed to probe (cannot find RO region): %d\n",
@@ -897,7 +897,7 @@ int gec_probe_size(struct flashchip *flash) {
 		return 0;
 	}
 
-	rc = gec_get_region_info(priv, EC_FLASH_REGION_RW,
+	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_RW,
 				 &priv->region[EC_IMAGE_RW]);
 	if (rc) {
 		msg_perr("%s(): Failed to probe (cannot find RW region): %d\n",

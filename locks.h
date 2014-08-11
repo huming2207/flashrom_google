@@ -32,6 +32,6 @@
 #define BIGLOCK		(IPC_LOCK_KEY + 0)
 
 /* for Google EC */
-#define GECLOCK		(IPC_LOCK_KEY + 1)
+#define CROS_EC_LOCK		(IPC_LOCK_KEY + 1)
 
 #endif /* LOCKS_H__ */

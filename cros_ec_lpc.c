@@ -39,7 +39,7 @@
 #include <unistd.h>
 #include "flashchips.h"
 #include "fmap.h"
-#if USE_GEC_LOCK == 1
+#if USE_CROS_EC_LOCK == 1
 #include "cros_ec_lock.h"
 #endif
 #include "cros_ec_commands.h"
@@ -53,7 +53,7 @@
 static int ec_timeout_usec = 1000000;
 static int lpc_cmd_args_supported;
 
-#define GEC_LOCK_TIMEOUT_SECS 30  /* 30 secs */
+#define CROS_EC_LOCK_TIMEOUT_SECS 30  /* 30 secs */
 
 
 /*
@@ -95,14 +95,14 @@ static int wait_for_ec(int status_addr, int timeout_usec)
 #define EC_LPC_ADDR_OLD_PARAM	EC_HOST_CMD_REGION1
 #define EC_OLD_PARAM_SIZE	EC_HOST_CMD_REGION_SIZE
 
-static enum ec_status gec_get_result() {
+static enum ec_status cros_ec_get_result() {
 	return inb(EC_LPC_ADDR_HOST_DATA);
 }
 
 /* Sends a command to the EC.  Returns the command status code, or
  * -1 if other error. */
-static int gec_command_lpc_old(int command, const void *outdata, int outsize,
-			       void *indata, int insize) {
+static int cros_ec_command_lpc_old(int command, const void *outdata,
+			int outsize, void *indata, int insize) {
 	uint8_t *d;
 	int i;
 
@@ -120,12 +120,12 @@ static int gec_command_lpc_old(int command, const void *outdata, int outsize,
 	/* Write data, if any */
 	/* TODO: optimized copy using outl() */
 	for (i = 0, d = (uint8_t *)outdata; i < outsize; i++, d++) {
-		msg_pdbg2("GEC: Port[0x%x] <-- 0x%x\n",
+		msg_pdbg2("CROS_EC: Port[0x%x] <-- 0x%x\n",
 		          EC_LPC_ADDR_OLD_PARAM + i, *d);
 		outb(*d, EC_LPC_ADDR_OLD_PARAM + i);
 	}
 
-	msg_pdbg2("GEC: Run EC Command: 0x%x ----\n", command);
+	msg_pdbg2("CROS_EC: Run EC Command: 0x%x ----\n", command);
 	outb(command, EC_LPC_ADDR_HOST_CMD);
 
 	if (wait_for_ec(EC_LPC_ADDR_HOST_CMD, ec_timeout_usec)) {
@@ -134,7 +134,7 @@ static int gec_command_lpc_old(int command, const void *outdata, int outsize,
 	}
 
 	/* Check status */
-	if ((i = gec_get_result()) != EC_RES_SUCCESS) {
+	if ((i = cros_ec_get_result()) != EC_RES_SUCCESS) {
 		msg_pdbg2("EC returned error status %d\n", i);
 		return -i;
 	}
@@ -142,7 +142,7 @@ static int gec_command_lpc_old(int command, const void *outdata, int outsize,
 	/* Read data, if any */
 	for (i = 0, d = (uint8_t *)indata; i < insize; i++, d++) {
 		*d = inb(EC_LPC_ADDR_OLD_PARAM + i);
-		msg_pdbg2("GEC: Port[0x%x] ---> 0x%x\n",
+		msg_pdbg2("CROS_EC: Port[0x%x] ---> 0x%x\n",
 		          EC_LPC_ADDR_OLD_PARAM + i, *d);
 	}
 
@@ -153,7 +153,7 @@ static int gec_command_lpc_old(int command, const void *outdata, int outsize,
 /*
  **************************** EC API v1 ****************************
  */
-static int gec_command_lpc(int command, int version,
+static int cros_ec_command_lpc(int command, int version,
 	                   const void *outdata, int outsize,
 	                   void *indata, int insize) {
 
@@ -165,7 +165,7 @@ static int gec_command_lpc(int command, int version,
 
 	/* Fall back to old-style command interface if args aren't supported */
 	if (!lpc_cmd_args_supported)
-		return gec_command_lpc_old(command, outdata, outsize,
+		return cros_ec_command_lpc_old(command, outdata, outsize,
 				           indata, insize);
 
 	/* Fill in args */
@@ -251,9 +251,9 @@ static int gec_command_lpc(int command, int version,
 	return args.data_size;
 }
 
-static struct gec_priv gec_lpc_priv = {
+static struct cros_ec_priv cros_ec_lpc_priv = {
 	.detected	= 0,
-	.ec_command	= gec_command_lpc,
+	.ec_command	= cros_ec_command_lpc,
 };
 
 /*
@@ -274,11 +274,11 @@ static int detect_ec(void) {
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 
-#if USE_GEC_LOCK == 1
-	msg_gdbg("Acquiring GEC lock (timeout=%d sec)...\n",
-		  GEC_LOCK_TIMEOUT_SECS);
-	if (acquire_gec_lock(GEC_LOCK_TIMEOUT_SECS) < 0) {
-		msg_gerr("Could not acquire GEC lock.\n");
+#if USE_CROS_EC_LOCK == 1
+	msg_gdbg("Acquiring CROS_EC lock (timeout=%d sec)...\n",
+		  CROS_EC_LOCK_TIMEOUT_SECS);
+	if (acquire_cros_ec_lock(CROS_EC_LOCK_TIMEOUT_SECS) < 0) {
+		msg_gerr("Could not acquire CROS_EC lock.\n");
 		return 1;
 	}
 #endif
@@ -330,32 +330,32 @@ static int detect_ec(void) {
 	 */
 	/* reduce timeout period temporarily in case EC is not present */
 	ec_timeout_usec = 25000;
-	if (gec_test(&gec_lpc_priv))
+	if (cros_ec_test(&cros_ec_lpc_priv))
 		return 1;
 	ec_timeout_usec = old_timeout;
 
 	return 0;
 }
 
-static struct opaque_programmer opaque_programmer_gec = {
+static struct opaque_programmer opaque_programmer_cros_ec = {
 	.max_data_read	= EC_HOST_CMD_REGION_SIZE,
 	.max_data_write	= 64,
-	.probe		= gec_probe_size,
-	.read		= gec_read,
-	.write		= gec_write,
-	.erase		= gec_block_erase,
-	.data		= &gec_lpc_priv,
+	.probe		= cros_ec_probe_size,
+	.read		= cros_ec_read,
+	.write		= cros_ec_write,
+	.erase		= cros_ec_block_erase,
+	.data		= &cros_ec_lpc_priv,
 };
 
-static int gec_lpc_shutdown(void *data)
+static int cros_ec_lpc_shutdown(void *data)
 {
-#if USE_GEC_LOCK == 1
-	release_gec_lock();
+#if USE_CROS_EC_LOCK == 1
+	release_cros_ec_lock();
 #endif
 	return 0;
 }
 
-int gec_probe_lpc(const char *name) {
+int cros_ec_probe_lpc(const char *name) {
 	msg_pdbg("%s():%d ...\n", __func__, __LINE__);
 
 	if (alias && alias->type != ALIAS_EC)
@@ -363,18 +363,18 @@ int gec_probe_lpc(const char *name) {
 
 	if (detect_ec()) return 1;
 
-	msg_pdbg("GEC detected on LPC bus\n");
-	gec_lpc_priv.detected = 1;
+	msg_pdbg("CROS_EC detected on LPC bus\n");
+	cros_ec_lpc_priv.detected = 1;
 
 	if (buses_supported & BUS_SPI) {
 		msg_pdbg("%s():%d remove BUS_SPI from buses_supported.\n",
 			__func__, __LINE__);
 		buses_supported &= ~BUS_SPI;
 	}
-	register_opaque_programmer(&opaque_programmer_gec);
+	register_opaque_programmer(&opaque_programmer_cros_ec);
 	buses_supported |= BUS_LPC;
 
-	if (register_shutdown(gec_lpc_shutdown, NULL)) {
+	if (register_shutdown(cros_ec_lpc_shutdown, NULL)) {
 		msg_perr("Cannot register LPC shutdown function.\n");
 		return 1;
 	}

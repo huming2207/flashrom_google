@@ -303,7 +303,7 @@ int internal_init(void)
 	 * syntax or some default behavior.
 	 *
 	 * Once everything is finally updated, we should only rely on
-	 * alias == ALIAS_EC in order to call gec_probe_*.
+	 * alias == ALIAS_EC in order to call cros_ec_probe_*.
 	 *
 	 * Also, ensure probing does not get confused when removing the
 	 * "#if defined(__arm__)" (see crbug.com/249568).
@@ -316,7 +316,7 @@ int internal_init(void)
 		 * Give preference to the cros_ec dev interface if it exists
 		 * and passes the "hello" test, otherwise fall back on raw I2C.
 		 */
-		if (!gec_probe_dev() || !gec_probe_i2c(NULL))
+		if (!cros_ec_probe_dev() || !cros_ec_probe_i2c(NULL))
 			return 0;
 	}
 #endif
@@ -434,7 +434,7 @@ int internal_init(void)
 	/* probe for programmers that bridge LPC <--> SPI */
 	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
 	    (alias && alias->type == ALIAS_EC)) {
-		if (gec_probe_lpc(NULL) &&
+		if (cros_ec_probe_lpc(NULL) &&
 			wpce775x_probe_spi_flash(NULL) &&
 			mec1308_probe_spi_flash(NULL) &&
 			ene_probe_spi_flash(NULL) &&

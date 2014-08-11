@@ -695,20 +695,20 @@ typedef int fdtype;
 /* wpce775x.c */
 int wpce775x_probe_spi_flash(const char *name);
 
-/* gec.c */
-int gec_probe_i2c(const char *name);
+/* cros_ec.c */
+int cros_ec_probe_i2c(const char *name);
 
 /**
  * Probe the Google Chrome OS EC device
  *
  * @return 0 if found correct, non-zero if not found or error
  */
-int gec_probe_dev(void);
+int cros_ec_probe_dev(void);
 
-int gec_probe_lpc(const char *name);
-int gec_need_2nd_pass(void);
-int gec_finish(void);
-int gec_prepare(uint8_t *image, int size);
+int cros_ec_probe_lpc(const char *name);
+int cros_ec_need_2nd_pass(void);
+int cros_ec_finish(void);
+int cros_ec_prepare(uint8_t *image, int size);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

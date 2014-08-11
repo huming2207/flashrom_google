@@ -18,14 +18,14 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#ifndef __GEC_H_
-#define __GEC_H_
+#ifndef __CROS_EC_H_
+#define __CROS_EC_H_
 
 /* FIXME: We should be able to forward declare enum ec_current_image here
- * instead of including gec_ec_commands.h */
+ * instead of including cros_ec_ec_commands.h */
 #include "cros_ec_commands.h"
 
-struct gec_priv {
+struct cros_ec_priv {
 	int detected;
 	enum ec_current_image current_image;
 	struct ec_response_flash_region_info *region;
@@ -33,13 +33,13 @@ struct gec_priv {
 			  void *outdata, int outsize);
 };
 
-int gec_test(struct gec_priv *priv);
-int gec_probe_size(struct flashchip *flash);
-int gec_block_erase(struct flashchip *flash,
+int cros_ec_test(struct cros_ec_priv *priv);
+int cros_ec_probe_size(struct flashchip *flash);
+int cros_ec_block_erase(struct flashchip *flash,
                     unsigned int blockaddr, unsigned int len);
-int gec_read(struct flashchip *flash, uint8_t *readarr,
+int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt);
-int gec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes);
 
-#endif	/* __GEC_H_ */
+#endif	/* __CROS_EC_H_ */

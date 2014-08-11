@@ -264,7 +264,7 @@ endif
 LOCK_OBJS = csem.o ipc_lock.o big_lock.o cros_ec_lock.o
 ifeq ($(shell ./util/use_big_lock.sh), 0)
 LIB_OBJS += $(LOCK_OBJS)
-FEATURE_CFLAGS += -D'USE_BIG_LOCK=1' -D'USE_GEC_LOCK=1'
+FEATURE_CFLAGS += -D'USE_BIG_LOCK=1' -D'USE_CROS_EC_LOCK=1'
 endif
 
 CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o

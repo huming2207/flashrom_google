@@ -51,10 +51,10 @@
 #include "cros_ec.h"
 #include "programmer.h"
 
-#define GEC_DEV_NAME		"/dev/cros_ec"
-#define GEC_COMMAND_RETRIES	50
+#define CROS_EC_DEV_NAME		"/dev/cros_ec"
+#define CROS_EC_COMMAND_RETRIES	50
 
-int gec_fd;		/* File descriptor of GEC_DEV_NAME */
+int cros_ec_fd;		/* File descriptor of CROS_EC_DEV_NAME */
 
 /**
  * Wait for a command to complete, then return the response
@@ -82,8 +82,8 @@ static int command_wait_for_response(void)
 	/* FIXME: magic delay until we fix the underlying problem (probably in
 	   the kernel driver) */
 	usleep(10 * 1000);
-	for (i = 1; i <= GEC_COMMAND_RETRIES; i++) {
-		ret = ioctl(gec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
+	for (i = 1; i <= CROS_EC_COMMAND_RETRIES; i++) {
+		ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
 		if (ret < 0) {
 			msg_perr("%s(): CrOS EC command failed: %d, errno=%d\n",
 				 __func__, ret, errno);
@@ -110,7 +110,7 @@ static int command_wait_for_response(void)
 }
 
 /*
- * gec_command_dev - Issue command to GEC device
+ * cros_ec_command_dev - Issue command to CROS_EC device
  *
  * @command:	command code
  * @outdata:	data to send to EC
@@ -126,7 +126,7 @@ static int command_wait_for_response(void)
  *
  * Returns >=0 for success, or negative if other error.
  */
-static int gec_command_dev(int command, int version,
+static int cros_ec_command_dev(int command, int version,
 			   const void *outdata, int outsize,
 			   void *indata, int insize)
 {
@@ -139,7 +139,7 @@ static int gec_command_dev(int command, int version,
 	cmd.outsize = outsize;
 	cmd.indata = indata;
 	cmd.insize = insize;
-	ret = ioctl(gec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
+	ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD, &cmd, sizeof(cmd));
 	if (ret < 0 && errno == EAGAIN) {
 		ret = command_wait_for_response();
 		cmd.result = 0;
@@ -158,44 +158,44 @@ static int gec_command_dev(int command, int version,
 	return ret;
 }
 
-static struct gec_priv gec_dev_priv = {
+static struct cros_ec_priv cros_ec_dev_priv = {
 	.detected	= 0,
-	.ec_command	= gec_command_dev,
+	.ec_command	= cros_ec_command_dev,
 };
 
-static struct opaque_programmer opaque_programmer_gec_dev = {
+static struct opaque_programmer opaque_programmer_cros_ec_dev = {
 	.max_data_read	= 128,
 	.max_data_write	= 128,
-	.probe		= gec_probe_size,
-	.read		= gec_read,
-	.write		= gec_write,
-	.erase		= gec_block_erase,
-	.data		= &gec_dev_priv,
+	.probe		= cros_ec_probe_size,
+	.read		= cros_ec_read,
+	.write		= cros_ec_write,
+	.erase		= cros_ec_block_erase,
+	.data		= &cros_ec_dev_priv,
 };
 
-static int gec_dev_shutdown(void *data)
+static int cros_ec_dev_shutdown(void *data)
 {
-	close(gec_fd);
+	close(cros_ec_fd);
 	return 0;
 }
 
-int gec_probe_dev(void)
+int cros_ec_probe_dev(void)
 {
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
-	msg_pdbg("%s: probing for GEC at %s\n", __func__, GEC_DEV_NAME);
-	gec_fd = open(GEC_DEV_NAME, O_RDWR);
-	if (gec_fd < 0)
-		return gec_fd;
+	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, CROS_EC_DEV_NAME);
+	cros_ec_fd = open(CROS_EC_DEV_NAME, O_RDWR);
+	if (cros_ec_fd < 0)
+		return cros_ec_fd;
 
-	if (gec_test(&gec_dev_priv))
+	if (cros_ec_test(&cros_ec_dev_priv))
 		return 1;
 
-	msg_pdbg("GEC detected at %s\n", GEC_DEV_NAME);
-	register_opaque_programmer(&opaque_programmer_gec_dev);
-	register_shutdown(gec_dev_shutdown, NULL);
-	gec_dev_priv.detected = 1;
+	msg_pdbg("CROS_EC detected at %s\n", CROS_EC_DEV_NAME);
+	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
+	register_shutdown(cros_ec_dev_shutdown, NULL);
+	cros_ec_dev_priv.detected = 1;
 
 	return 0;
 }

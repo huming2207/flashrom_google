@@ -16,24 +16,24 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef GEC_LOCK_H__
-#define GEC_LOCK_H__
+#ifndef CROS_EC_LOCK_H__
+#define CROS_EC_LOCK_H__
 
 /*
- * acquire_gec_lock  -  acquire global lock
+ * acquire_cros_ec_lock  -  acquire global lock
  *
  * returns 0 to indicate lock acquired
  * returns >0 to indicate lock was already held
  * returns <0 to indicate failed to acquire lock
  */
-extern int acquire_gec_lock(int timeout_secs);
+extern int acquire_cros_ec_lock(int timeout_secs);
 
 /*
- * release_gec_lock  -  release global lock
+ * release_cros_ec_lock  -  release global lock
  *
  * returns 0 if lock was released successfully
  * returns -1 if lock had not been held before the call
  */
-extern int release_gec_lock(void);
+extern int release_cros_ec_lock(void);
 
-#endif /* GEC_LOCK_H__ */
+#endif /* CROS_EC_LOCK_H__ */

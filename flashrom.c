@@ -2019,8 +2019,8 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 
 	if (write_it) {
 		// parse the new fmap
-		if ((ret = gec_prepare(newcontents, size))) {
-			msg_cerr("GEC prepare failed, ret=%d.\n", ret);
+		if ((ret = cros_ec_prepare(newcontents, size))) {
+			msg_cerr("CROS_EC prepare failed, ret=%d.\n", ret);
 			goto out;
 		}
 
@@ -2041,16 +2041,16 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 			goto out;
 		}
 
-		ret = gec_need_2nd_pass();
+		ret = cros_ec_need_2nd_pass();
 		if (ret < 0) {
 			// Jump failed
-			msg_cerr("gec_need_2nd_pass() failed. Stop.\n");
+			msg_cerr("cros_ec_need_2nd_pass() failed. Stop.\n");
 			emergency_help_message();
 			ret = 1;
 			goto out;
 		} else if (ret > 0) {
 			// Need 2nd pass. Get the just written content.
-			msg_pdbg("GEC needs 2nd pass.\n");
+			msg_pdbg("CROS_EC needs 2nd pass.\n");
 			if (read_flash(flash, oldcontents, 0, size)) {
 				msg_cerr("Uh oh. Cannot get latest content.\n");
 				emergency_help_message();
@@ -2060,7 +2060,7 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 			// write 2nd pass
 			if (erase_and_write_flash(flash, oldcontents,
 			                          newcontents)) {
-				msg_cerr("Uh oh. GEC 2nd pass failed.\n");
+				msg_cerr("Uh oh. CROS_EC 2nd pass failed.\n");
 				emergency_help_message();
 				ret = 1;
 				goto out;
@@ -2068,8 +2068,8 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 			ret = 0;
 		}
 
-		if (gec_finish() < 0) {
-			msg_cerr("gec_finish() failed. Stop.\n");
+		if (cros_ec_finish() < 0) {
+			msg_cerr("cros_ec_finish() failed. Stop.\n");
 			emergency_help_message();
 			ret = 1;
 			goto out;
