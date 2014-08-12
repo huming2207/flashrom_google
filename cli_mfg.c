@@ -425,6 +425,7 @@ int main(int argc, char *argv[])
 					"for details.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
+
 			for (prog = 0; prog < PROGRAMMER_INVALID; prog++) {
 				name = programmer_table[prog].name;
 				namelen = strlen(name);
@@ -454,13 +455,33 @@ int main(int argc, char *argv[])
 			for (i = 0; aliases[i].name; i++) {
 				name = aliases[i].name;
 				namelen = strlen(aliases[i].name);
-				if (!strncmp(optarg, name, namelen)) {
-					/* FIXME: add parameter parsing? */
-					alias = &aliases[i];
-					msg_gdbg("Programmer alias: \"%s\"\n",
-							alias->name);
+
+				if (strncmp(optarg, name, namelen))
+					continue;
+
+				switch (optarg[namelen]) {
+				case ':':
+					pparam = strdup(optarg + namelen + 1);
+					if (!strlen(pparam)) {
+						free(pparam);
+						pparam = NULL;
+					}
 					break;
+				case '\0':
+					break;
+				default:
+					/* The continue refers to the for-loop.
+					 * It is here to be able to
+					 * differentiate between foo and foobar.
+					 */
+					continue;
 				}
+
+				alias = &aliases[i];
+				msg_gdbg("Programmer alias: \"%s\", parameter: "
+					" \"%s\",\n", alias->name, pparam);
+
+				break;
 			}
 
 			if ((prog == PROGRAMMER_INVALID) && !alias) {
