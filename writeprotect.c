@@ -351,6 +351,26 @@ static struct w25q_range mx25u3235e_ranges[] = {
 	{ 0, 1, 0x7, {0x000000, 4096 * 1024} },
 };
 
+static struct w25q_range mx25u6435e_ranges[] = {
+	{ X, 0, 0, {0, 0} },	/* none */
+	{ 0, 0, 0x1, {0x7f0000,   1 * 64 * 1024} },	/* block 127 */
+	{ 0, 0, 0x2, {0x7e0000,   2 * 64 * 1024} },	/* blocks 126-127 */
+	{ 0, 0, 0x3, {0x7c0000,   4 * 64 * 1024} },	/* blocks 124-127 */
+	{ 0, 0, 0x4, {0x780000,   8 * 64 * 1024} },	/* blocks 120-127 */
+	{ 0, 0, 0x5, {0x700000,  16 * 64 * 1024} },	/* blocks 112-127 */
+	{ 0, 0, 0x6, {0x600000,  32 * 64 * 1024} },	/* blocks 96-127 */
+	{ 0, 0, 0x7, {0x400000,  64 * 64 * 1024} },	/* blocks 64-127 */
+
+	{ 0, 1, 0x0, {0x000000,  64 * 64 * 1024} },	/* blocks 0-63 */
+	{ 0, 1, 0x1, {0x000000,  96 * 64 * 1024} },	/* blocks 0-95 */
+	{ 0, 1, 0x2, {0x000000, 112 * 64 * 1024} },	/* blocks 0-111 */
+	{ 0, 1, 0x3, {0x000000, 120 * 64 * 1024} },	/* blocks 0-119 */
+	{ 0, 1, 0x4, {0x000000, 124 * 64 * 1024} },	/* blocks 0-123 */
+	{ 0, 1, 0x5, {0x000000, 126 * 64 * 1024} },	/* blocks 0-125 */
+	{ 0, 1, 0x6, {0x000000, 127 * 64 * 1024} },	/* blocks 0-126 */
+	{ 0, 1, 0x7, {0x000000, 128 * 64 * 1024} },	/* blocks 0-127 */
+};
+
 static struct w25q_range n25q064_ranges[] = {
 	{ X, 0, 0, {0, 0} },	/* none */
 
@@ -703,6 +723,10 @@ static int w25_range_table(const struct flashchip *flash,
 		case MACRONIX_MX25U3235E:
 			*w25q_ranges = mx25u3235e_ranges;
 			*num_entries = ARRAY_SIZE(mx25u3235e_ranges);
+			break;
+		case MACRONIX_MX25U6435E:
+			*w25q_ranges = mx25u6435e_ranges;
+			*num_entries = ARRAY_SIZE(mx25u6435e_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
