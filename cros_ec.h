@@ -31,9 +31,19 @@ struct cros_ec_priv {
 	struct ec_response_flash_region_info *region;
 	int (*ec_command)(int command, int ver, const void *indata, int insize,
 			  void *outdata, int outsize);
+
+	/*
+	 * Starting in version 3.0, the EC can act as a bridge to pass along
+	 * messages from the host to up to 3 attached devices (device 0 is the
+	 * EC itself) which also use the CrOS EC protocol. The devices can be
+	 * attached to any bus on the EC and the EC will abstract bus details.
+	 * Bits 14 and 15 in the command word indicate the device index.
+	 */
+	unsigned int dev_index;
 };
 
 int cros_ec_test(struct cros_ec_priv *priv);
+int cros_ec_parse_param(struct cros_ec_priv *priv);
 int cros_ec_probe_size(struct flashchip *flash);
 int cros_ec_block_erase(struct flashchip *flash,
                     unsigned int blockaddr, unsigned int len);

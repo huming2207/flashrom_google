@@ -361,6 +361,9 @@ int cros_ec_probe_lpc(const char *name) {
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
+	if (cros_ec_parse_param(&cros_ec_lpc_priv))
+		return 1;
+
 	if (detect_ec()) return 1;
 
 	msg_pdbg("CROS_EC detected on LPC bus\n");

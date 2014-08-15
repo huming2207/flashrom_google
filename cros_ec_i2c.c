@@ -276,6 +276,9 @@ int cros_ec_probe_i2c(const char *name)
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
+	if (cros_ec_parse_param(&cros_ec_i2c_priv))
+		return 1;
+
 #if USE_CROS_EC_LOCK == 1
 	if (acquire_cros_ec_lock(CROS_EC_LOCK_TIMEOUT_SECS) < 0) {
 		msg_gerr("Could not acquire CROS_EC lock.\n");

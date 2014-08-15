@@ -184,6 +184,9 @@ int cros_ec_probe_dev(void)
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
+	if (cros_ec_parse_param(&cros_ec_dev_priv))
+		return 1;
+
 	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, CROS_EC_DEV_NAME);
 	cros_ec_fd = open(CROS_EC_DEV_NAME, O_RDWR);
 	if (cros_ec_fd < 0)
