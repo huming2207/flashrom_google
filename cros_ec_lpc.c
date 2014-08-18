@@ -101,8 +101,9 @@ static enum ec_status cros_ec_get_result() {
 
 /* Sends a command to the EC.  Returns the command status code, or
  * -1 if other error. */
-static int cros_ec_command_lpc_old(int command, const void *outdata,
-			int outsize, void *indata, int insize) {
+static int cros_ec_command_lpc_old(int command, int version,
+	                   const void *outdata, int outsize,
+	                   void *indata, int insize) {
 	uint8_t *d;
 	int i;
 
@@ -149,7 +150,6 @@ static int cros_ec_command_lpc_old(int command, const void *outdata,
 	return 0;
 }
 
-
 /*
  **************************** EC API v1 ****************************
  */
@@ -162,11 +162,6 @@ static int cros_ec_command_lpc(int command, int version,
 	uint8_t *din;
 	int csum;
 	int i;
-
-	/* Fall back to old-style command interface if args aren't supported */
-	if (!lpc_cmd_args_supported)
-		return cros_ec_command_lpc_old(command, outdata, outsize,
-				           indata, insize);
 
 	/* Fill in args */
 	args.flags = EC_HOST_ARGS_FLAG_FROM_HOST;
@@ -251,9 +246,116 @@ static int cros_ec_command_lpc(int command, int version,
 	return args.data_size;
 }
 
+/*
+ **************************** EC API v3 ****************************
+ */
+static int cros_ec_command_lpc_v3(int command, int version,
+	                   const void *outdata, int outsize,
+	                   void *indata, int insize) {
+
+	struct ec_host_request rq;
+	struct ec_host_response rs;
+	const uint8_t *d;
+	uint8_t *dout;
+	int csum = 0;
+	int i;
+
+	/* Fail if output size is too big */
+	if (outsize + sizeof(rq) > EC_LPC_HOST_PACKET_SIZE)
+		return -EC_RES_REQUEST_TRUNCATED;
+
+	/* Fill in request packet */
+	/* TODO(crosbug.com/p/23825): This should be common to all protocols */
+	rq.struct_version = EC_HOST_REQUEST_VERSION;
+	rq.checksum = 0;
+	rq.command = command;
+	rq.command_version = version;
+	rq.reserved = 0;
+	rq.data_len = outsize;
+
+	/* Copy data and start checksum */
+	for (i = 0, d = (const uint8_t *)outdata; i < outsize; i++, d++) {
+		outb(*d, EC_LPC_ADDR_HOST_PACKET + sizeof(rq) + i);
+		csum += *d;
+	}
+
+	/* Finish checksum */
+	for (i = 0, d = (const uint8_t *)&rq; i < sizeof(rq); i++, d++)
+		csum += *d;
+
+	/* Write checksum field so the entire packet sums to 0 */
+	rq.checksum = (uint8_t)(-csum);
+
+	/* Copy header */
+	for (i = 0, d = (const uint8_t *)&rq; i < sizeof(rq); i++, d++)
+		outb(*d, EC_LPC_ADDR_HOST_PACKET + i);
+
+	/* Start the command */
+	outb(EC_COMMAND_PROTOCOL_3, EC_LPC_ADDR_HOST_CMD);
+
+	if (wait_for_ec(EC_LPC_ADDR_HOST_CMD, ec_timeout_usec)) {
+		msg_perr("Timeout waiting for EC response\n");
+		return -EC_RES_ERROR;
+	}
+
+	/* Check result */
+	i = inb(EC_LPC_ADDR_HOST_DATA);
+	if (i) {
+		msg_perr("EC returned error result code %d\n", i);
+		return -i;
+	}
+
+	/* Read back response header and start checksum */
+	csum = 0;
+	for (i = 0, dout = (uint8_t *)&rs; i < sizeof(rs); i++, dout++) {
+		*dout = inb(EC_LPC_ADDR_HOST_PACKET + i);
+		csum += *dout;
+	}
+
+	if (rs.struct_version != EC_HOST_RESPONSE_VERSION) {
+		msg_perr("EC response version mismatch\n");
+		return -EC_RES_INVALID_RESPONSE;
+	}
+
+	if (rs.reserved) {
+		msg_perr("EC response reserved != 0\n");
+		return -EC_RES_INVALID_RESPONSE;
+	}
+
+	if (rs.data_len > insize) {
+		msg_perr("EC returned too much data\n");
+		return -EC_RES_RESPONSE_TOO_BIG;
+	}
+
+	/* Read back data and update checksum */
+	for (i = 0, dout = (uint8_t *)indata; i < rs.data_len; i++, dout++) {
+		*dout = inb(EC_LPC_ADDR_HOST_PACKET + sizeof(rs) + i);
+		csum += *dout;
+	}
+
+	/* Verify checksum */
+	if ((uint8_t)csum) {
+		msg_perr("EC response has invalid checksum\n");
+		return -EC_RES_INVALID_CHECKSUM;
+	}
+
+	/* Return actual amount of data received */
+	return rs.data_len;
+}
+
 static struct cros_ec_priv cros_ec_lpc_priv = {
 	.detected	= 0,
 	.ec_command	= cros_ec_command_lpc,
+};
+
+static struct opaque_programmer cros_ec = {
+	.max_data_read	= EC_HOST_CMD_REGION_SIZE,
+	.max_data_write	= 64,
+	.probe		= cros_ec_probe_size,
+	.read		= cros_ec_read,
+	.write		= cros_ec_write,
+	.erase		= cros_ec_block_erase,
+	.data		= &cros_ec_lpc_priv,
 };
 
 /*
@@ -266,7 +368,7 @@ static struct cros_ec_priv cros_ec_lpc_priv = {
  * TODO: This is an intrusive command for non-Google ECs. Needs a more proper
  *       and more friendly way to detect.
  */
-static int detect_ec(void) {
+static int detect_ec(struct cros_ec_priv *priv) {
 	int i;
 	int byte = 0xff;
 	struct ec_params_hello request;
@@ -282,25 +384,6 @@ static int detect_ec(void) {
 		return 1;
 	}
 #endif
-
-	/*
-	 * Test if LPC command args are supported.
-	 *
-	 * The cheapest way to do this is by looking for the memory-mapped
-	 * flag.  This is faster than sending a new-style 'hello' command and
-	 * seeing whether the EC sets the EC_HOST_ARGS_FLAG_FROM_HOST flag
-	 * in args when it responds.
-	 */
-	if (inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID) == 'E' &&
-	    inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID + 1) == 'C' &&
-	    (inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS) &
-	     EC_HOST_CMD_FLAG_LPC_ARGS_SUPPORTED)) {
-		msg_pdbg("%s(): new EC API is detected.\n", __func__);
-		lpc_cmd_args_supported = 1;
-		return 0;
-	} else {
-		msg_pdbg("%s(): use legacy EC API.\n", __func__);
-	}
 
 	/*
 	 * Test if the I/O port has been configured for Chromium EC LPC
@@ -325,6 +408,51 @@ static int detect_ec(void) {
 		return 1;
 	}
 
+	/*
+	 * Test if LPC command args are supported.
+	 *
+	 * The cheapest way to do this is by looking for the memory-mapped
+	 * flag.  This is faster than sending a new-style 'hello' command and
+	 * seeing whether the EC sets the EC_HOST_ARGS_FLAG_FROM_HOST flag
+	 * in args when it responds.
+	 */
+	if (inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID) != 'E' ||
+	    inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID + 1) != 'C') {
+		msg_perr("Missing Chromium EC memory map.\n");
+		return -1;
+	}
+
+	i = inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS);
+
+	if (i & EC_HOST_CMD_FLAG_VERSION_3) {
+		/* Protocol version 3 */
+		priv->ec_command = cros_ec_command_lpc_v3;
+#if 0
+		/* FIXME(dhendrix): Overflow errors occurred when using
+		   EC_LPC_HOST_PACKET_SIZE */
+		cros_ec.max_data_write =
+			EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_request);
+		cros_ec.max_data_read =
+			EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_response);
+#endif
+		cros_ec.max_data_write = 128 - sizeof(struct ec_host_request);
+		cros_ec.max_data_read = 128 - sizeof(struct ec_host_response);
+	} else if (i & EC_HOST_CMD_FLAG_LPC_ARGS_SUPPORTED) {
+		/* Protocol version 2 */
+		priv->ec_command = cros_ec_command_lpc;
+#if 0
+		/*
+		 * FIXME(dhendrix): We should be able to use
+		 * EC_PROTO2_MAX_PARAM_SIZE, but that has not been thoroughly
+		 * tested so for now leave the sizes at default.
+		 */
+		cros_ec.max_data_read = EC_PROTO2_MAX_PARAM_SIZE;
+		cros_ec.max_data_write = EC_PROTO2_MAX_PARAM_SIZE;
+#endif
+	} else {
+		priv->ec_command = cros_ec_command_lpc_old;
+	}
+
 	/* Try hello command -- for EC only supports API v0
 	 * TODO: (crosbug.com/p/33102) Remove after MP.
 	 */
@@ -336,16 +464,6 @@ static int detect_ec(void) {
 
 	return 0;
 }
-
-static struct opaque_programmer opaque_programmer_cros_ec = {
-	.max_data_read	= EC_HOST_CMD_REGION_SIZE,
-	.max_data_write	= 64,
-	.probe		= cros_ec_probe_size,
-	.read		= cros_ec_read,
-	.write		= cros_ec_write,
-	.erase		= cros_ec_block_erase,
-	.data		= &cros_ec_lpc_priv,
-};
 
 static int cros_ec_lpc_shutdown(void *data)
 {
@@ -364,7 +482,8 @@ int cros_ec_probe_lpc(const char *name) {
 	if (cros_ec_parse_param(&cros_ec_lpc_priv))
 		return 1;
 
-	if (detect_ec()) return 1;
+	if (detect_ec(&cros_ec_lpc_priv))
+		return 1;
 
 	msg_pdbg("CROS_EC detected on LPC bus\n");
 	cros_ec_lpc_priv.detected = 1;
@@ -374,7 +493,7 @@ int cros_ec_probe_lpc(const char *name) {
 			__func__, __LINE__);
 		buses_supported &= ~BUS_SPI;
 	}
-	register_opaque_programmer(&opaque_programmer_cros_ec);
+	register_opaque_programmer(&cros_ec);
 	buses_supported |= BUS_LPC;
 
 	if (register_shutdown(cros_ec_lpc_shutdown, NULL)) {
