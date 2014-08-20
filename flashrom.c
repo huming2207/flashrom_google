@@ -646,22 +646,20 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 	if (!message)
 		message = "VERIFY";
 
-	chunksize = min(flash->page_size, len);
-	for (i = 0; i < len; i += chunksize) {
+	for (i = 0, chunksize = 0; i < len; i += chunksize) {
 		int tmp, j;
 
+		chunksize = min(flash->page_size, len - i);
 		tmp = flash->read(flash, readbuf + i, start + i, chunksize);
 
 		/* Since this function explicitly compares the bytes, we need
 		   to handle errors manually */
 		if (tmp) {
 			ret = tmp;
-			if (ignore_error(tmp)) {
-				chunksize = min(flash->page_size, len - i);
+			if (ignore_error(tmp))
 				continue;
-			} else {
+			else
 				goto out_free;
-			}
 		}
 
 		for (j = 0; j < chunksize; j++) {
@@ -674,7 +672,6 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 						 readbuf[j]);
 			}
 		}
-		chunksize = min(flash->page_size, len - i);
 	}
 
 	if (failcount) {
