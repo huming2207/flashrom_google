@@ -197,33 +197,39 @@ static int ec_cmd_version_supported(int cmd, int ver)
 
 static int cros_ec_set_max_write_size(void)
 {
-	int rc;
-	struct ec_response_flash_info info;
+	int rc, cmd_version;
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
-	unsigned int pdata_max_size;
 
-	/*
-	 * Determine whether we can use version 1 of the command with more
-	 * data, or only version 0.
-	 */
-	rc = ec_cmd_version_supported(EC_CMD_FLASH_WRITE, EC_VER_FLASH_WRITE);
-	if (rc < 0)
-		return rc;
-	else if (rc == 0)
-		pdata_max_size = EC_FLASH_WRITE_VER0_SIZE;
-	else
-		pdata_max_size = EC_PROTO2_MAX_PARAM_SIZE - 8;
+	cmd_version = ec_cmd_version_supported(EC_CMD_FLASH_WRITE,
+						EC_VER_FLASH_WRITE);
+	if (cmd_version < 0) {
+		msg_perr("Cannot determine write command version\n");
+		return cmd_version;
+	} else if (cmd_version == 0) {
+		struct ec_response_flash_info info;
 
-	rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
-				0, NULL, 0, &info, sizeof(info));
-	if (rc < 0) {
-		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
-		return rc;
+		rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+				cmd_version, NULL, 0, &info, sizeof(info));
+		if (rc < 0) {
+			msg_perr("%s(): Cannot get flash info.\n", __func__);
+			return rc;
+		}
+
+		opaque_programmer->max_data_write = EC_FLASH_WRITE_VER0_SIZE;
+	} else {
+		struct ec_response_flash_info_1 info;
+
+		rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+				cmd_version, NULL, 0, &info, sizeof(info));
+		if (rc < 0) {
+			msg_perr("%s(): Cannot get flash info.\n", __func__);
+			return rc;
+		}
+
+		opaque_programmer->max_data_write = info.write_ideal_size;
 	}
 
-	opaque_programmer->max_data_write =
-		(pdata_max_size/info.write_block_size) * info.write_block_size;
-	return rc;
+	return 0;
 }
 
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
