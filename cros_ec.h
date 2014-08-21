@@ -40,6 +40,12 @@ struct cros_ec_priv {
 	 * Bits 14 and 15 in the command word indicate the device index.
 	 */
 	unsigned int dev_index;
+
+	/*
+	 * Some CrOS ECs support page write mode for their flash memory. This
+	 * represents the ideal size of a data payload to write to flash.
+	 */
+	unsigned int ideal_write_size;
 };
 
 int cros_ec_test(struct cros_ec_priv *priv);

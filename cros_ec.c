@@ -195,10 +195,10 @@ static int ec_cmd_version_supported(int cmd, int ver)
 	return (mask & EC_VER_MASK(ver)) ? 1 : 0;
 }
 
-static int cros_ec_set_max_write_size(void)
+/* returns 0 if successful or <0 to indicate error */
+static int set_ideal_write_size(struct cros_ec_priv *priv)
 {
-	int rc, cmd_version;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	int cmd_version, ret;
 
 	cmd_version = ec_cmd_version_supported(EC_CMD_FLASH_WRITE,
 						EC_VER_FLASH_WRITE);
@@ -208,25 +208,25 @@ static int cros_ec_set_max_write_size(void)
 	} else if (cmd_version == 0) {
 		struct ec_response_flash_info info;
 
-		rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+		ret = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
 				cmd_version, NULL, 0, &info, sizeof(info));
-		if (rc < 0) {
+		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
-			return rc;
+			return ret;
 		}
 
-		opaque_programmer->max_data_write = EC_FLASH_WRITE_VER0_SIZE;
+		priv->ideal_write_size = EC_FLASH_WRITE_VER0_SIZE;
 	} else {
 		struct ec_response_flash_info_1 info;
 
-		rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+		ret = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
 				cmd_version, NULL, 0, &info, sizeof(info));
-		if (rc < 0) {
+		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
-			return rc;
+			return ret;
 		}
 
-		opaque_programmer->max_data_write = info.write_ideal_size;
+		priv->ideal_write_size = info.write_ideal_size;
 	}
 
 	return 0;
@@ -308,7 +308,7 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 
 	/* update max data write size in case we're jumping to an EC
 	 * firmware with different protocol */
-	cros_ec_set_max_write_size();
+	set_ideal_write_size(priv);
 
 	return rc;
 }
@@ -490,15 +490,14 @@ int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	unsigned int written = 0;
 	struct ec_params_flash_write p;
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
-	int maxlen = opaque_programmer->max_data_write;
 	uint8_t *packet;
 
-	packet = malloc(sizeof(p) + maxlen);
+	packet = malloc(sizeof(p) + priv->ideal_write_size);
 	if (!packet)
 		return -1;
 
 	for (i = 0; i < nbytes; i += written) {
-		written = min(nbytes - i, maxlen);
+		written = min(nbytes - i, priv->ideal_write_size);
 		p.offset = addr + i;
 		p.size = written;
 
@@ -937,7 +936,11 @@ int cros_ec_probe_size(struct flashchip *flash) {
 	if (!strncmp(chip_info.name, "stm32l", 6))
 		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
-	cros_ec_set_max_write_size();
+	rc = set_ideal_write_size(priv);
+	if (rc < 0) {
+		msg_perr("%s(): Unable to set write size\n", __func__);
+		return 0;
+	}
 
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
 	 * so we need to be careful about using these enums as array indices */
