@@ -331,6 +331,8 @@ int cros_ec_probe_i2c(const char *name)
 	if (register_shutdown(cros_ec_i2c_shutdown, NULL))
 		goto cros_ec_probe_i2c_done;
 
+	cros_ec_set_max_size(&cros_ec_i2c_priv, &opaque_programmer_cros_ec_i2c);
+
 	msg_pdbg("CROS_EC detected on I2C bus\n");
 	register_opaque_programmer(&opaque_programmer_cros_ec_i2c);
 	cros_ec_i2c_priv.detected = 1;

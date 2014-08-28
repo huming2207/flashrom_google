@@ -462,6 +462,8 @@ static int detect_ec(struct cros_ec_priv *priv) {
 		return 1;
 	ec_timeout_usec = old_timeout;
 
+	cros_ec_set_max_size(&cros_ec_lpc_priv, &cros_ec);
+
 	return 0;
 }
 

@@ -839,6 +839,27 @@ int cros_ec_test(struct cros_ec_priv *priv)
 	return 0;
 }
 
+void cros_ec_set_max_size(struct cros_ec_priv *priv,
+			  struct opaque_programmer *op) {
+	struct ec_response_get_protocol_info info;
+	int rc = 0;
+	msg_pdbg("%s: sending protoinfo command\n", __func__);
+	rc = priv->ec_command(EC_CMD_GET_PROTOCOL_INFO | DEV(priv), 0, NULL, 0,
+			      &info, sizeof(info));
+	msg_pdbg("%s: rc:%d\n", __func__, rc);
+
+	if (rc == sizeof(info)) {
+		op->max_data_write = min(op->max_data_write,
+					 info.max_request_packet_size -
+					 sizeof(struct ec_host_request));
+		op->max_data_read = min(op->max_data_read,
+					info.max_response_packet_size -
+					sizeof(struct ec_host_response));
+		msg_pdbg("%s: max_write:%d max_read:%d\n", __func__,
+			 op->max_data_write, op->max_data_read);
+	}
+}
+
 
 /*
  * Returns 0 to indicate success, non-zero othersize

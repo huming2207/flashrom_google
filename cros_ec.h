@@ -24,6 +24,7 @@
 /* FIXME: We should be able to forward declare enum ec_current_image here
  * instead of including cros_ec_ec_commands.h */
 #include "cros_ec_commands.h"
+#include "programmer.h"
 
 struct cros_ec_priv {
 	int detected;
@@ -49,6 +50,8 @@ struct cros_ec_priv {
 };
 
 int cros_ec_test(struct cros_ec_priv *priv);
+void cros_ec_set_max_size(struct cros_ec_priv *priv,
+			  struct opaque_programmer *op);
 int cros_ec_parse_param(struct cros_ec_priv *priv);
 int cros_ec_probe_size(struct flashchip *flash);
 int cros_ec_block_erase(struct flashchip *flash,
