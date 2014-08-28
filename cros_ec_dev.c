@@ -195,6 +195,8 @@ int cros_ec_probe_dev(void)
 	if (cros_ec_test(&cros_ec_dev_priv))
 		return 1;
 
+	cros_ec_set_max_size(&cros_ec_dev_priv, &opaque_programmer_cros_ec_dev);
+
 	msg_pdbg("CROS_EC detected at %s\n", CROS_EC_DEV_NAME);
 	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
 	register_shutdown(cros_ec_dev_shutdown, NULL);
