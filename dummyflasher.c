@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 #include "flash.h"
@@ -69,6 +70,10 @@ static unsigned int emu_jedec_ce_c7_size = 0;
 #endif
 
 static unsigned int spi_write_256_chunksize = 256;
+
+/* If "freq" parameter is passed in from command line, commands will delay
+ * for this period before returning. */
+static unsigned long int delay_us = 0;
 
 static int dummy_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
@@ -172,6 +177,49 @@ int dummy_init(void)
 		}
 	}
 
+	/* frequency to emulate in Hz (default), KHz, or MHz */
+	tmp = extract_programmer_param("freq");
+	if (tmp) {
+		unsigned long int freq;
+		char *units = tmp;
+		char *end = tmp + strlen(tmp);
+
+		errno = 0;
+		freq = strtoul(tmp, &units, 0);
+		if (errno) {
+			msg_perr("Invalid frequency \"%s\", %s\n",
+					tmp, strerror(errno));
+			goto dummy_init_out;
+		}
+
+		if ((units > tmp) && (units < end)) {
+			int units_valid = 0;
+
+			if (units < end - 3) {
+				;
+			} else if (units == end - 2) {
+				if (!strcasecmp(units, "hz"))
+					units_valid = 1;
+			} else if (units == end - 3) {
+				if (!strcasecmp(units, "khz")) {
+					freq *= 1000;
+					units_valid = 1;
+				} else if (!strcasecmp(units, "mhz")) {
+					freq *= 1000000;
+					units_valid = 1;
+				}
+			}
+
+			if (!units_valid) {
+				msg_perr("Invalid units: %s\n", units);
+				return 1;
+			}
+		}
+
+		/* Assume we only work with bytes and transfer at 1 bit/Hz */
+		delay_us = (1000000 * 8) / freq;
+	}
+
 #if EMULATE_CHIP
 #if EMULATE_SPI_CHIP
 	tmp = extract_programmer_param("size");
@@ -204,6 +252,7 @@ int dummy_init(void)
 		/* Nothing else to do. */
 		goto dummy_init_out;
 	}
+
 #if EMULATE_SPI_CHIP
 	if (!strcmp(tmp, "M25P10.RES")) {
 		emu_chip = EMULATE_ST_M25P10_RES;
@@ -635,6 +684,8 @@ static int dummy_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 	for (i = 0; i < readcnt; i++)
 		msg_pspew(" 0x%02x", readarr[i]);
 	msg_pspew("\n");
+
+	programmer_delay((writecnt + readcnt) * delay_us);
 	return 0;
 }
 
