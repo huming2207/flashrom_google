@@ -19,62 +19,60 @@
  * power.c: power management routines
  */
 
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "flash.h"	/* for msg_* */
 #include "power.h"
 
-enum pm_state {
-	PM_OFF,
-	PM_ON,
-};
+/*
+ * Path to a file containing flashrom's PID. While present, powerd avoids
+ * suspending or shutting down the system.
+ */
+static const char lock_file_path[] = "/var/lock/flashrom_powerd.lock";
 
-/* power management daemon used in Chromium OS */
-enum pm_state powerd_state_at_start;
-
-static int pm_disabled;
-
-/* disable power management and set pm_state_at_start as an output */
 int disable_power_management()
 {
-	if (pm_disabled) {
-		msg_pdbg("%s: Nothing to do.\n", __func__);
-		return 0;
-	}
-
-	msg_pdbg("%s: Disabling power management service.\n", __func__);
-
-	/* if the service terminates successfully, then it was running when
-	 * flashrom was invoked */
-	if (system("stop powerd >/dev/null 2>&1") == 0)
-		powerd_state_at_start = PM_ON;
-	else
-		powerd_state_at_start = PM_OFF;
-
-	pm_disabled = 1;
-	return 0;
-}
-
-/* (re-)enable power management */
-int restore_power_management()
-{
+	FILE *lock_file = NULL;
 	int rc = 0;
 
-	if (!pm_disabled) {
-		msg_pdbg("%s(): Power management enabled\n", __func__);
-		return 0;
+	msg_pdbg("%s: Disabling power management.\n", __func__);
+
+	if (!(lock_file = fopen(lock_file_path, "w"))) {
+		msg_perr("%s: Failed to open %s for writing: %s\n",
+			__func__, lock_file_path, strerror(errno));
+		return 1;
 	}
 
-	msg_pdbg("%s: (Re-)Enabling power management service\n", __func__);
-
-	if (powerd_state_at_start == PM_ON) {
-		if (system("start powerd >/dev/null 2>&1") != 0) {
-			msg_perr("Cannot restart powerd service\n");
-			rc |= 1;
-		}
+	if (fprintf(lock_file, "%ld", (long)getpid()) < 0) {
+		msg_perr("%s: Failed to write PID to %s: %s\n",
+			__func__, lock_file_path, strerror(errno));
+		rc = 1;
 	}
 
-	pm_disabled = 0;
+	if (fclose(lock_file) != 0) {
+		msg_perr("%s: Failed to close %s: %s\n",
+			__func__, lock_file_path, strerror(errno));
+	}
 	return rc;
+
+}
+
+int restore_power_management()
+{
+	int result = 0;
+
+	msg_pdbg("%s: Re-enabling power management.\n", __func__);
+
+	result = unlink(lock_file_path);
+	if (result != 0 && errno != ENOENT)  {
+		msg_perr("%s: Failed to unlink %s: %s\n",
+			__func__, lock_file_path, strerror(errno));
+		return 1;
+	}
+	return 0;
 }
