@@ -623,11 +623,26 @@ int main(int argc, char *argv[])
 #endif
 
 	/*
-	 * Disable power management before timer calibration for potentially-
-	 * destructive operations only. Leave power management enabled for
-	 * reads to avoid UI jank (see issue chromium-os:19321).
+	 * Let powerd know that we're updating firmware so machine stays awake.
+	 *
+	 * A bit of history behind this small block of code:
+	 * chromium-os:15025 - If broken_timer == 1, use busy loop instead of
+	 * OS timers to avoid excessive usleep overhead during "long" operations
+	 * involving reads, erases, and writes. This was mostly a problem on
+	 * old machines with poor DVFS implementations.
+	 *
+	 * chromium-os:18895 - Disabled power management to prevent system from
+	 * going to sleep while doing a destructive operation.
+	 *
+	 * chromium-os:19321 - Use OS timers for non-destructive operations to
+	 * avoid UI jank.
+	 *
+	 * chromium:400641 - Powerd is smarter now, so instead of stopping it
+	 * manually we'll use a file lock so it knows not to put the machine
+	 * to sleep or do other things that can interfere.
+	 *
 	 */
-	if ((write_it || erase_it) && broken_timer)
+	if (write_it || erase_it)
 		disable_power_management();
 
 	/* FIXME: Delay calibration should happen in programmer code. */
