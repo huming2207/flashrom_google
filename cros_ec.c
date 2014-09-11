@@ -862,7 +862,7 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
 
 
 /*
- * Returns 0 to indicate success, non-zero othersize
+ * Returns 0 to indicate success, non-zero otherwise
  *
  * This function parses programmer parameters from the command line. Since
  * CrOS EC hangs off the "internal programmer" (AP, PCH, etc) this gets
