@@ -47,6 +47,11 @@ struct cros_ec_priv {
 	 * represents the ideal size of a data payload to write to flash.
 	 */
 	unsigned int ideal_write_size;
+
+	/*
+	 * Allow block size to be overwritten in case the EC is incorrect.
+	 */
+	unsigned int erase_block_size;
 };
 
 int cros_ec_test(struct cros_ec_priv *priv);

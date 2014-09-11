@@ -892,6 +892,27 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 		priv->dev_index = index;
 	}
 
+	p = extract_programmer_param("block");
+	if (p) {
+		unsigned int block;
+		char *endptr = NULL;
+
+		errno = 0;
+		block = strtoul(p, &endptr, 0);
+		if (errno || (strlen(p) > 10) || (endptr != (p + strlen(p)))) {
+			msg_perr("Invalid argument: \"%s\"\n", p);
+			return 1;
+		}
+
+		if (block <= 0) {
+			msg_perr("%s: Invalid block size\n", __func__);
+			return 1;
+		}
+
+		msg_pdbg("Override block size to 0x%x\n", block);
+		priv->erase_block_size = block;
+	}
+
 	return 0;
 }
 
@@ -936,7 +957,13 @@ int cros_ec_probe_size(struct flashchip *flash) {
 	flash->page_size = opaque_programmer->max_data_read;
 	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
-	eraser->eraseblocks[0].size = info.erase_block_size;
+
+	/* Allow overriding the erase block size in case EC is incorrect */
+	if (priv->erase_block_size > 0)
+		eraser->eraseblocks[0].size = priv->erase_block_size;
+	else
+		eraser->eraseblocks[0].size = info.erase_block_size;
+
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
 	flash->wp = &wp;
