@@ -58,6 +58,7 @@ static enum emu_chip emu_chip = EMULATE_NONE;
 static char *emu_persistent_image = NULL;
 static unsigned int emu_chip_size = 0;
 static int emu_modified;	/* is the image modified since reading it? */
+static int erase_to_zero;
 #if EMULATE_SPI_CHIP
 static unsigned int emu_max_byteprogram_size = 0;
 static unsigned int emu_max_aai_size = 0;
@@ -331,6 +332,21 @@ int dummy_init(void)
 		free(tmp);
 		return 1;
 	}
+
+	/* Should emulated flash erase to zero (yes/no)? */
+	tmp = extract_programmer_param("erase_to_zero");
+	if (tmp) {
+		if (!strcmp(tmp, "yes")) {
+			msg_pdbg("Emulated chip will erase to 0x00\n");
+			erase_to_zero = 1;
+		} else if (!strcmp(tmp, "no")) {
+			msg_pdbg("Emulated chip will erase to 0xff\n");
+		} else {
+			msg_perr("erase_to_zero can be \"yes\" or \"no\"\n");
+			return 1;
+		}
+	}
+
 	free(tmp);
 	flashchip_contents = malloc(emu_chip_size);
 	if (!flashchip_contents) {
@@ -338,8 +354,9 @@ int dummy_init(void)
 		return 1;
 	}
 
-	msg_pdbg("Filling fake flash chip with 0xff, size %i\n", emu_chip_size);
-	memset(flashchip_contents, 0xff, emu_chip_size);
+	msg_pdbg("Filling fake flash chip with 0x%02x, size %i\n",
+			erase_to_zero ? 0x00 : 0xff, emu_chip_size);
+	memset(flashchip_contents, erase_to_zero ? 0x00 : 0xff, emu_chip_size);
 
 	if (!emu_persistent_image) {
 		/* Nothing else to do. */
@@ -722,6 +739,9 @@ int probe_variable_size(struct flashchip *flash)
 	flash->total_size = emu_chip_size / 1024;
 	msg_cdbg("%s: set flash->total_size to %dK bytes.\n", __func__,
 	         flash->total_size);
+
+	if (erase_to_zero)
+		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	/* Update eraser count */
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
