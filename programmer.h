@@ -63,6 +63,9 @@ enum programmer {
 #if CONFIG_BUSPIRATE_SPI == 1
 	PROGRAMMER_BUSPIRATE_SPI,
 #endif
+#if CONFIG_RAIDEN_DEBUG_SPI == 1
+	PROGRAMMER_RAIDEN_DEBUG_SPI,
+#endif
 #if CONFIG_DEDIPROG == 1
 	PROGRAMMER_DEDIPROG,
 #endif
@@ -508,6 +511,11 @@ int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 int buspirate_spi_init(void);
 #endif
 
+/* raiden_debug_spi.c */
+#if CONFIG_RAIDEN_DEBUG_SPI == 1
+int raiden_debug_spi_init(void);
+#endif
+
 /* linux_i2c.c */
 #if CONFIG_LINUX_I2C == 1
 int linux_i2c_shutdown(void *data);
@@ -574,6 +582,9 @@ enum spi_controller {
 #endif
 #if CONFIG_BUSPIRATE_SPI == 1
 	SPI_CONTROLLER_BUSPIRATE,
+#endif
+#if CONFIG_RAIDEN_DEBUG_SPI == 1
+	SPI_CONTROLLER_RAIDEN_DEBUG,
 #endif
 #if CONFIG_DEDIPROG == 1
 	SPI_CONTROLLER_DEDIPROG,

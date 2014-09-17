@@ -334,6 +334,9 @@ CONFIG_OGP_SPI ?= no
 # Always enable Bus Pirate SPI for now.
 CONFIG_BUSPIRATE_SPI ?= no
 
+# Raiden Debug SPI-over-USB support.
+CONFIG_RAIDEN_DEBUG_SPI ?= no
+
 # Enable Linux I2C for ChromeOS EC
 CONFIG_LINUX_I2C ?= no
 
@@ -440,6 +443,7 @@ FTDICFLAGS := $(shell $(PKG_CONFIG) --cflags libftdi1 2>/dev/null ||	\
 FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDICFLAGS) -D'CONFIG_FT2232_SPI=1'")
 FEATURE_LIBS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDILIBS)")
 PROGRAMMER_OBJS += ft2232_spi.o
+NEED_USB := yes
 endif
 
 ifeq ($(CONFIG_DUMMY), yes)
@@ -487,6 +491,12 @@ ifeq ($(CONFIG_BUSPIRATE_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_BUSPIRATE_SPI=1'
 PROGRAMMER_OBJS += buspirate_spi.o
 NEED_SERIAL := yes
+endif
+
+ifeq ($(CONFIG_RAIDEN_DEBUG_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_RAIDEN_DEBUG_SPI=1'
+PROGRAMMER_OBJS += raiden_debug_spi.o
+NEED_USB := yes
 endif
 
 ifeq ($(CONFIG_LINUX_I2C), yes)
@@ -547,6 +557,11 @@ LIBS += -l$(shell uname -m)
 endif
 endif
 endif
+endif
+
+ifeq ($(NEED_USB),yes)
+FEATURE_CFLAGS += $(shell $(PKG_CONFIG) --cflags libusb-1.0)
+FEATURE_LIBS   += $(shell $(PKG_CONFIG) --libs libusb-1.0)
 endif
 
 ifeq ($(CONFIG_PRINT_WIKI), yes)

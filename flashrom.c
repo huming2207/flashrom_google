@@ -204,6 +204,16 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
+#if CONFIG_RAIDEN_DEBUG_SPI == 1
+	{
+		.name			= "raiden_debug_spi",
+		.init			= raiden_debug_spi_init,
+		.map_flash_region	= fallback_map,
+		.unmap_flash_region	= fallback_unmap,
+		.delay			= internal_delay,
+	},
+#endif
+
 #if CONFIG_DEDIPROG == 1
 	{
 		.name			= "dediprog",

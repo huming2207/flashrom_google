@@ -488,6 +488,12 @@ void print_supported(void)
 	/* FIXME */
 	msg_ginfo("Dangerous Prototypes Bus Pirate\n");
 #endif
+#if CONFIG_RAIDEN_DEBUG_SPI == 1
+	msg_ginfo("\nSupported devices for the %s programmer:\n",
+	       programmer_table[PROGRAMMER_RAIDEN_DEBUG_SPI].name);
+	/* FIXME */
+	msg_ginfo("Raiden USB debug devices\n");
+#endif
 #if CONFIG_DEDIPROG == 1
 	msg_ginfo("\nSupported devices for the %s programmer:\n",
 	       programmer_table[PROGRAMMER_DEDIPROG].name);
