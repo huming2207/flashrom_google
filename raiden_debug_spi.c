@@ -60,8 +60,8 @@
 #define GOOGLE_RAIDEN_PID	0x500f
 #define GOOGLE_RAIDEN_ENDPOINT	2
 
-#define PACKET_HEADER_SIZE 2
-#define MAX_PACKET_SIZE    64
+#define PACKET_HEADER_SIZE	2
+#define MAX_PACKET_SIZE		64
 
 /*
  * This timeout is so large because the Raiden SPI timeout is 800ms.
@@ -84,6 +84,7 @@
 
 static libusb_context       *context = NULL;
 static libusb_device_handle *device  = NULL;
+static uint8_t              endpoint = GOOGLE_RAIDEN_ENDPOINT;
 
 static int send_command(unsigned int write_count,
 			unsigned int read_count,
@@ -179,18 +180,31 @@ static const struct spi_programmer spi_programmer_raiden_debug = {
 	.write_256	= default_spi_write_256,
 };
 
+static long int get_parameter(char const * name, long int default_value)
+{
+	char *   string = extract_programmer_param(name);
+	long int value  = default_value;
+
+	if (string)
+		value = strtol(string, NULL, 0);
+
+	free(string);
+
+	return value;
+}
+
 int raiden_debug_spi_init(void)
 {
+	uint16_t vid = get_parameter("vid", GOOGLE_VID);
+	uint16_t pid = get_parameter("pid", GOOGLE_RAIDEN_PID);
+
 	CHECK(libusb_init(&context), "Raiden: libusb_init failed\n");
 
-	device = libusb_open_device_with_vid_pid(context,
-						 GOOGLE_VID,
-						 GOOGLE_RAIDEN_PID);
+	endpoint = get_parameter("endpoint", GOOGLE_RAIDEN_ENDPOINT);
+	device   = libusb_open_device_with_vid_pid(context, vid, pid);
 
 	if (device == NULL) {
-		msg_perr("Unable to find device 0x%04x:0x%04x\n",
-			 GOOGLE_VID,
-			 GOOGLE_RAIDEN_PID);
+		msg_perr("Unable to find device 0x%04x:0x%04x\n", vid, pid);
 		return 1;
 	}
 
