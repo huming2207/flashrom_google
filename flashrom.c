@@ -34,6 +34,7 @@
 #if HAVE_UTSNAME == 1
 #include <sys/utsname.h>
 #endif
+#include <unistd.h>
 #include "flash.h"
 #include "flashchips.h"
 #include "layout.h"
@@ -1137,7 +1138,11 @@ int read_buf_from_file(unsigned char *buf, unsigned long size,
 	FILE *image;
 	struct stat image_stat;
 
-	if ((image = fopen(filename, "rb")) == NULL) {
+	if (!strncmp(filename, "-", sizeof("-")))
+		image = fdopen(STDIN_FILENO, "rb");
+	else
+		image = fopen(filename, "rb");
+	if (image == NULL) {
 		perror(filename);
 		return 1;
 	}
@@ -1146,7 +1151,8 @@ int read_buf_from_file(unsigned char *buf, unsigned long size,
 		fclose(image);
 		return 1;
 	}
-	if (image_stat.st_size != size) {
+	if ((image_stat.st_size != size) &&
+	    (strncmp(filename, "-", sizeof("-")))) {
 		msg_gerr("Error: Image size doesn't match\n");
 		fclose(image);
 		return 1;
@@ -1174,7 +1180,11 @@ int write_buf_to_file(unsigned char *buf, unsigned long size,
 		msg_gerr("No filename specified.\n");
 		return 1;
 	}
-	if ((image = fopen(filename, "wb")) == NULL) {
+	if (!strncmp(filename, "-", sizeof("-")))
+		image = fdopen(STDOUT_FILENO, "wb");
+	else
+		image = fopen(filename, "wb");
+	if (image == NULL) {
 		perror(filename);
 		return 1;
 	}
