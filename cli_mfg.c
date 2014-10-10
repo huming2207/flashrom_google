@@ -36,7 +36,7 @@
 #include "programmer.h"
 #include "writeprotect.h"
 
-#define LOCK_TIMEOUT_SECS	30
+#define LOCK_TIMEOUT_SECS	180
 
 /* This variable is shared with doit() in flashrom.c */
 int set_ignore_fmap = 0;
