@@ -58,7 +58,7 @@
 
 #define GOOGLE_VID		0x18D1
 #define GOOGLE_RAIDEN_PID	0x500f
-#define GOOGLE_RAIDEN_ENDPOINT	2
+#define GOOGLE_RAIDEN_ENDPOINT	3
 
 #define PACKET_HEADER_SIZE	2
 #define MAX_PACKET_SIZE		64
@@ -110,8 +110,7 @@ static int send_command(unsigned int write_count,
 	memcpy(buffer + PACKET_HEADER_SIZE, write_buffer, write_count);
 
 	CHECK(libusb_bulk_transfer(device,
-				   LIBUSB_ENDPOINT_OUT |
-				   GOOGLE_RAIDEN_ENDPOINT,
+				   LIBUSB_ENDPOINT_OUT | endpoint,
 				   buffer,
 				   write_count + PACKET_HEADER_SIZE,
 				   &transferred,
@@ -129,8 +128,7 @@ static int send_command(unsigned int write_count,
 	}
 
 	CHECK(libusb_bulk_transfer(device,
-				   LIBUSB_ENDPOINT_IN |
-				   GOOGLE_RAIDEN_ENDPOINT,
+				   LIBUSB_ENDPOINT_IN | endpoint,
 				   buffer,
 				   read_count + PACKET_HEADER_SIZE,
 				   &transferred,
