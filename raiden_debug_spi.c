@@ -58,7 +58,9 @@
 
 #define GOOGLE_VID		0x18D1
 #define GOOGLE_RAIDEN_PID	0x500f
+#define GOOGLE_RAIDEN_INTERFACE	2
 #define GOOGLE_RAIDEN_ENDPOINT	3
+#define GOOGLE_RAIDEN_CONFIG	1
 
 #define PACKET_HEADER_SIZE	2
 #define MAX_PACKET_SIZE		64
@@ -193,8 +195,11 @@ static long int get_parameter(char const * name, long int default_value)
 
 int raiden_debug_spi_init(void)
 {
-	uint16_t vid = get_parameter("vid", GOOGLE_VID);
-	uint16_t pid = get_parameter("pid", GOOGLE_RAIDEN_PID);
+	uint16_t vid       = get_parameter("vid",       GOOGLE_VID);
+	uint16_t pid       = get_parameter("pid",       GOOGLE_RAIDEN_PID);
+	int      interface = get_parameter("interface", GOOGLE_RAIDEN_INTERFACE);
+	int      config    = get_parameter("config",    GOOGLE_RAIDEN_CONFIG);
+	int      current_config;
 
 	CHECK(libusb_init(&context), "Raiden: libusb_init failed\n");
 
@@ -206,8 +211,21 @@ int raiden_debug_spi_init(void)
 		return 1;
 	}
 
-	CHECK(libusb_set_auto_detach_kernel_driver(device, 1), "");
-	CHECK(libusb_claim_interface(device, 1), "");
+	CHECK(libusb_get_configuration(device, &current_config),
+	      "Raiden: Failed to get current device configuration\n");
+
+	if (current_config != config)
+		CHECK(libusb_set_configuration(device, config),
+		      "Raiden: Failed to set new configuration from %d to %d\n",
+		      current_config,
+		      config);
+
+	CHECK(libusb_set_auto_detach_kernel_driver(device, 1),
+	      "Raiden: Failed to enable auto kernel driver detach\n");
+
+	CHECK(libusb_claim_interface(device, interface),
+	      "Raiden: Could not claim device interface %d\n",
+	      interface);
 
 	register_spi_programmer(&spi_programmer_raiden_debug);
 
