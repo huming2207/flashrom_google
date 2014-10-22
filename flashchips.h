@@ -487,7 +487,14 @@
 #define SPANSION_S25FL016A	0x0214
 #define SPANSION_S25FL032A	0x0215
 #define SPANSION_S25FL064A	0x0216
-#define SPANSION_S25FS128S	0x2018
+#define SPANSION_S25FS128S_L	0x20180081  /* Large sectors. */
+#define SPANSION_S25FS128S_S	0x20180181  /* Small sectors. */
+#define SPANSION_S25FS256S_L	0x02190081  /* Large sectors. */
+#define SPANSION_S25FS256S_S	0x02190181  /* Small sectors. */
+#define SPANSION_S25FL128S_U	0x20180080  /* Uniform sectors */
+#define SPANSION_S25FL128S_N	0x20180180  /* Non-uniform sectors */
+#define SPANSION_S25FL256S_U	0x02190080  /* Uniform sectors */
+#define SPANSION_S25FL256S_N	0x02190180  /* Non-uniform sectors */
 
 /*
  * SST25 chips are SPI, first byte of device ID is memory type, second

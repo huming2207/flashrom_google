@@ -6465,15 +6465,15 @@ const struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Spansion",
-		.name		= "S25FS128S",
+		.name		= "S25FS128S Large Sectors",
 		.bustype	= BUS_SPI,
 		.manufacture_id	= SPANSION_ID,
-		.model_id	= SPANSION_S25FS128S,
+		.model_id	= SPANSION_S25FS128S_L,
 		.total_size	= 16384,
 		.page_size	= 256,
 		.feature_bits   = FEATURE_WRSR_WREN,
-		.tested		= TEST_OK_PREW,
-		.probe		= probe_spi_rdid,
+		.tested		= TEST_UNTESTED,
+		.probe		= probe_spi_big_spansion,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
 		{
@@ -6486,6 +6486,93 @@ const struct flashchip flashchips[] = {
 			}, {
 				.eraseblocks = { {16 * 1024 * 1024, 1} },
 				.block_erase = spi_block_erase_c7,
+			},
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {1700, 2000},
+	},
+
+	{
+		.vendor		= "Spansion",
+		.name		= "S25FS128S Small Sectors",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FS128S_S,
+		.total_size	= 16384,
+		.page_size	= 256,
+		.feature_bits   = FEATURE_WRSR_WREN,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_big_spansion,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 256} },
+				.block_erase = s25fs_block_erase_d8,
+			}, {
+				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_60,
+			}, {
+				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			},
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {1700, 2000},
+	},
+
+	{
+		.vendor		= "Spansion",
+		.name		= "S25FL256S Large Sectors",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL256S_U,
+		.total_size	= 16384,  /* This is just half the size.... */
+		.page_size	= 256,
+		.feature_bits   = FEATURE_WRSR_WREN,
+		.tested		= TEST_UNTESTED,
+		.probe		= probe_spi_big_spansion,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {256 * 1024, 64} },
+				.block_erase = s25fl_block_erase,
+			}, {
+				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_60,
+			},
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {1700, 2000},
+	},
+
+	{
+		.vendor		= "Spansion",
+		.name		= "S25FL256S Small Sectors",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL256S_N,
+		.total_size	= 16384,   /* This is just half the size.... */
+		.page_size	= 256,
+		.feature_bits   = FEATURE_WRSR_WREN,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_big_spansion,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {64 * 1024, 256} },
+				.block_erase = s25fl_block_erase,
+			}, {
+				.eraseblocks = { {16 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_60,
 			},
 		},
 		.unlock		= spi_disable_blockprotect,

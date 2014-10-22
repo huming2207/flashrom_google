@@ -138,6 +138,10 @@ int unlock_49lfxxxc(struct flashchip *flash);
 int printlock_sst_fwhub(struct flashchip *flash);
 int unlock_sst_fwhub(struct flashchip *flash);
 
+/* s25fl.c */
+int probe_spi_big_spansion(struct flashchip *flash);
+int s25fl_block_erase(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
+
 /* s25fs.c */
 int s25fs_block_erase_d8(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
 
