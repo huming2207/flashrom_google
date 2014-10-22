@@ -31,12 +31,13 @@
  * LIABILITY, ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE,
  * EVEN IF GOOGLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  *
- * s25fs.c - Helper functions for Spansion S25FS SPI flash chips. This
- * currently assumes that we are operating the chip in legacy 24-bit addressing
- * mode and are working with uniform sectors.
- * TODO: Implement fancy 32-bit addressing and hybrid sector architecture
- * helpers.
+ * s25fs.c - Helper functions for Spansion S25FL and S25FS SPI flash chips.
+ * Uses 24 bit addressing for the FS chips and 32 bit addressing for the FL
+ * chips (which is required by the overlayed sector size devices).
+ * TODO: Implement fancy hybrid sector architecture helpers.
  */
+
+#include <string.h>
 
 #include "chipdrivers.h"
 #include "spi.h"
@@ -230,5 +231,107 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
 		programmer_delay(10 * 1000);
 	/* FIXME: Check the status register for errors. */
+	return 0;
+}
+
+int s25fl_block_erase(struct flashchip *flash,
+		      unsigned int addr, unsigned int blocklen)
+{
+	unsigned char status;
+	int result;
+	static int cr3nv_checked = 0;
+
+	struct spi_command erase_cmds[] = {
+		{
+			.writecnt	= JEDEC_WREN_OUTSIZE,
+			.writearr	= (const unsigned char[]){
+				JEDEC_WREN
+			},
+			.readcnt	= 0,
+			.readarr	= NULL,
+		}, {
+			.writecnt	= JEDEC_BE_DC_OUTSIZE,
+			.writearr	= (const unsigned char[]){
+				JEDEC_BE_DC,
+				(addr >> 24) & 0xff,
+				(addr >> 16) & 0xff,
+				(addr >> 8) & 0xff,
+				(addr & 0xff)
+			},
+			.readcnt	= 0,
+			.readarr	= NULL,
+		}, {
+			.writecnt	= 0,
+			.readcnt	= 0,
+		}
+	};
+
+	result = spi_send_multicommand(erase_cmds);
+	if (result) {
+		msg_cerr("%s failed during command execution at address 0x%x\n",
+			__func__, addr);
+		return result;
+	}
+
+	/* Wait until the Write-In-Progress bit is cleared. */
+	status = spi_read_status_register();
+	while (status & JEDEC_RDSR_BIT_WIP) {
+		programmer_delay(1000);
+		status = spi_read_status_register();
+	}
+	return (status & JEDEC_RDSR_BIT_ERASE_ERR) != 0;
+}
+
+
+int probe_spi_big_spansion(struct flashchip *flash)
+{
+	static const unsigned char cmd = JEDEC_RDID;
+	int ret;
+	unsigned char dev_id[6]; /* We care only about 6 first bytes */
+
+	ret = spi_send_command(sizeof(cmd), sizeof(dev_id), &cmd, dev_id);
+
+	if (!ret) {
+		int i;
+
+		for (i = 0; i < sizeof(dev_id); i++)
+			msg_gdbg(" 0x%02x", dev_id[i]);
+		msg_gdbg(".\n");
+
+		if (dev_id[0] == flash->manufacture_id) {
+			union {
+				uint8_t array[4];
+				uint32_t whole;
+			} model_id;
+
+	/*
+	 * The structure of the RDID output is as follows:
+	 *
+	 *     offset   value              meaning
+	 *       00h     01h      Manufacturer ID for Spansion
+	 *       01h     20h           128 Mb capacity
+	 *       01h     02h           256 Mb capacity
+	 *       02h     18h           128 Mb capacity
+	 *       02h     19h           256 Mb capacity
+	 *       03h     4Dh       Full size of the RDID output (ignored)
+	 *       04h     00h       FS: 256-kB physical sectors
+	 *       04h     01h       FS: 64-kB physical sectors
+	 *       04h     00h       FL: 256-kB physical sectors
+	 *       04h     01h       FL: Mix of 64-kB and 4KB overlayed sectors
+	 *       05h     80h       FL family
+	 *       05h     81h       FS family
+	 *
+	 * Need to use bytes 1, 2, 4, and 5 to properly identify one of eight
+	 * possible chips:
+	 *
+	 * 2 types * 2 possible sizes * 2 possible sector layouts
+	 *
+	 */
+			memcpy(model_id.array, dev_id + 1, 2);
+			memcpy(model_id.array + 2, dev_id + 4, 2);
+			if (be_to_cpu32(model_id.whole) == flash->model_id)
+				return 1;
+		}
+	}
 	return 0;
 }
