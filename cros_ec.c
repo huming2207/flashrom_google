@@ -487,17 +487,23 @@ int cros_ec_block_erase(struct flashchip *flash,
 int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
-	unsigned int written = 0;
+	unsigned int written = 0, real_write_size;
 	struct ec_params_flash_write p;
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	uint8_t *packet;
 
-	packet = malloc(sizeof(p) + priv->ideal_write_size);
+	/*
+	 * For chrome-os-partner:33035, to workaround the undersized
+	 * outdata buffer issue in kernel.
+	 */
+	real_write_size = min(opaque_programmer->max_data_write,
+		priv->ideal_write_size);
+	packet = malloc(sizeof(p) + real_write_size);
 	if (!packet)
 		return -1;
 
 	for (i = 0; i < nbytes; i += written) {
-		written = min(nbytes - i, priv->ideal_write_size);
+		written = min(nbytes - i, real_write_size);
 		p.offset = addr + i;
 		p.size = written;
 
