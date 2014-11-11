@@ -86,7 +86,6 @@ static int wait_for_ec(int status_addr, int timeout_usec)
 	return -1;  /* Timeout */
 }
 
-
 /*
  **************************** EC API v0 ****************************
  */
@@ -151,11 +150,13 @@ static int cros_ec_command_lpc_old(int command, int version,
 }
 
 /*
- **************************** EC API v1 ****************************
+ **************************** EC API v2 ****************************
  */
 static int cros_ec_command_lpc(int command, int version,
-	                   const void *outdata, int outsize,
-	                   void *indata, int insize) {
+		const void *outdata, int outsize,
+		void *indata, int insize,
+		int (*read_memmap)(uint16_t, uint8_t *),
+		int (*write_memmap)(uint8_t, uint16_t)) {
 
 	struct ec_lpc_host_args args;
 	const uint8_t *dout;
@@ -187,12 +188,14 @@ static int cros_ec_command_lpc(int command, int version,
 	for (i = 0, dout = (const uint8_t *)&args;
 	     i < sizeof(args);
 	     i++, dout++)
-		outb(*dout, EC_LPC_ADDR_HOST_ARGS + i);
+		if (write_memmap(*dout, EC_LPC_ADDR_HOST_ARGS + i))
+			return -EC_RES_ERROR;
 
 	/* Write data, if any */
 	/* TODO: optimized copy using outl() */
 	for (i = 0, dout = (uint8_t *)outdata; i < outsize; i++, dout++)
-		outb(*dout, EC_LPC_ADDR_HOST_PARAM + i);
+		if (write_memmap(*dout, EC_LPC_ADDR_HOST_PARAM + i))
+			return -EC_RES_ERROR;
 
 	outb(command, EC_LPC_ADDR_HOST_CMD);
 
@@ -210,7 +213,8 @@ static int cros_ec_command_lpc(int command, int version,
 
 	/* Read back args */
 	for (i = 0, din = (uint8_t *)&args; i < sizeof(args); i++, din++)
-		*din = inb(EC_LPC_ADDR_HOST_ARGS + i);
+		if (read_memmap(EC_LPC_ADDR_HOST_ARGS + i, din))
+			return -EC_RES_ERROR;
 
 	/*
 	 * If EC didn't modify args flags, then somehow we sent a new-style
@@ -230,7 +234,8 @@ static int cros_ec_command_lpc(int command, int version,
 	/* Read data, if any */
 	/* TODO: optimized copy using outl() */
 	for (i = 0, din = (uint8_t *)indata; i < args.data_size; i++, din++)
-		*din = inb(EC_LPC_ADDR_HOST_PARAM + i);
+		if (read_memmap(EC_LPC_ADDR_HOST_PARAM + i, din))
+			return -EC_RES_ERROR;
 
 	/* Verify checksum */
 	csum = command + args.flags + args.command_version + args.data_size;
@@ -250,8 +255,10 @@ static int cros_ec_command_lpc(int command, int version,
  **************************** EC API v3 ****************************
  */
 static int cros_ec_command_lpc_v3(int command, int version,
-	                   const void *outdata, int outsize,
-	                   void *indata, int insize) {
+		const void *outdata, int outsize,
+		void *indata, int insize,
+		int (*read_memmap)(uint16_t, uint8_t *),
+		int (*write_memmap)(uint8_t, uint16_t)) {
 
 	struct ec_host_request rq;
 	struct ec_host_response rs;
@@ -275,7 +282,8 @@ static int cros_ec_command_lpc_v3(int command, int version,
 
 	/* Copy data and start checksum */
 	for (i = 0, d = (const uint8_t *)outdata; i < outsize; i++, d++) {
-		outb(*d, EC_LPC_ADDR_HOST_PACKET + sizeof(rq) + i);
+		if (write_memmap(*d, EC_LPC_ADDR_HOST_PACKET + sizeof(rq) + i))
+			return -EC_RES_ERROR;
 		csum += *d;
 	}
 
@@ -288,7 +296,8 @@ static int cros_ec_command_lpc_v3(int command, int version,
 
 	/* Copy header */
 	for (i = 0, d = (const uint8_t *)&rq; i < sizeof(rq); i++, d++)
-		outb(*d, EC_LPC_ADDR_HOST_PACKET + i);
+		if (write_memmap(*d, EC_LPC_ADDR_HOST_PACKET + i))
+			return -EC_RES_ERROR;
 
 	/* Start the command */
 	outb(EC_COMMAND_PROTOCOL_3, EC_LPC_ADDR_HOST_CMD);
@@ -308,7 +317,8 @@ static int cros_ec_command_lpc_v3(int command, int version,
 	/* Read back response header and start checksum */
 	csum = 0;
 	for (i = 0, dout = (uint8_t *)&rs; i < sizeof(rs); i++, dout++) {
-		*dout = inb(EC_LPC_ADDR_HOST_PACKET + i);
+		if (read_memmap(EC_LPC_ADDR_HOST_PACKET + i, dout))
+			return -EC_RES_ERROR;
 		csum += *dout;
 	}
 
@@ -329,7 +339,8 @@ static int cros_ec_command_lpc_v3(int command, int version,
 
 	/* Read back data and update checksum */
 	for (i = 0, dout = (uint8_t *)indata; i < rs.data_len; i++, dout++) {
-		*dout = inb(EC_LPC_ADDR_HOST_PACKET + sizeof(rs) + i);
+		if (read_memmap(EC_LPC_ADDR_HOST_PACKET + sizeof(rs) + i, dout))
+			return -EC_RES_ERROR;
 		csum += *dout;
 	}
 
@@ -343,9 +354,41 @@ static int cros_ec_command_lpc_v3(int command, int version,
 	return rs.data_len;
 }
 
+static int read_memmap_lm4(uint16_t port, uint8_t * value)
+{
+	*value = inb(port);
+	return 0;
+}
+
+static int write_memmap_lm4(uint8_t value, uint16_t port)
+{
+	outb(value, port);
+	return 0;
+}
+
+/*
+ **************************** EC API v2 ****************************
+ */
+static int cros_ec_command_lpc_lm4(int command, int version,
+		const void *outdata, int outsize,
+		void *indata, int insize) {
+	return cros_ec_command_lpc(command, version, outdata, outsize,
+		indata, insize, read_memmap_lm4, write_memmap_lm4);
+}
+
+/*
+ **************************** EC API v3 ****************************
+ */
+static int cros_ec_command_lpc_v3_lm4(int command, int version,
+		const void *outdata, int outsize,
+		void *indata, int insize) {
+	return cros_ec_command_lpc_v3(command, version, outdata, outsize,
+		indata, insize, read_memmap_lm4, write_memmap_lm4);
+}
+
 static struct cros_ec_priv cros_ec_lpc_priv = {
 	.detected	= 0,
-	.ec_command	= cros_ec_command_lpc,
+	.ec_command	= cros_ec_command_lpc_lm4,
 };
 
 static struct opaque_programmer cros_ec = {
@@ -424,33 +467,33 @@ static int detect_ec(struct cros_ec_priv *priv) {
 
 	i = inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS);
 
-	if (i & EC_HOST_CMD_FLAG_VERSION_3) {
-		/* Protocol version 3 */
-		priv->ec_command = cros_ec_command_lpc_v3;
+		if (i & EC_HOST_CMD_FLAG_VERSION_3) {
+			/* Protocol version 3 */
+			priv->ec_command = cros_ec_command_lpc_v3_lm4;
 #if 0
-		/* FIXME(dhendrix): Overflow errors occurred when using
-		   EC_LPC_HOST_PACKET_SIZE */
-		cros_ec.max_data_write =
-			EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_request);
-		cros_ec.max_data_read =
-			EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_response);
+			/* FIXME(dhendrix): Overflow errors occurred when using
+			   EC_LPC_HOST_PACKET_SIZE */
+			cros_ec.max_data_write =
+				EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_request);
+			cros_ec.max_data_read =
+				EC_LPC_HOST_PACKET_SIZE - sizeof(struct ec_host_response);
 #endif
-		cros_ec.max_data_write = 128 - sizeof(struct ec_host_request);
-		cros_ec.max_data_read = 128 - sizeof(struct ec_host_response);
-	} else if (i & EC_HOST_CMD_FLAG_LPC_ARGS_SUPPORTED) {
-		/* Protocol version 2 */
-		priv->ec_command = cros_ec_command_lpc;
+			cros_ec.max_data_write = 128 - sizeof(struct ec_host_request);
+			cros_ec.max_data_read = 128 - sizeof(struct ec_host_response);
+		} else if (i & EC_HOST_CMD_FLAG_LPC_ARGS_SUPPORTED) {
+			/* Protocol version 2 */
+			priv->ec_command = cros_ec_command_lpc_lm4;
 #if 0
-		/*
-		 * FIXME(dhendrix): We should be able to use
-		 * EC_PROTO2_MAX_PARAM_SIZE, but that has not been thoroughly
-		 * tested so for now leave the sizes at default.
-		 */
-		cros_ec.max_data_read = EC_PROTO2_MAX_PARAM_SIZE;
-		cros_ec.max_data_write = EC_PROTO2_MAX_PARAM_SIZE;
+			/*
+			 * FIXME(dhendrix): We should be able to use
+			 * EC_PROTO2_MAX_PARAM_SIZE, but that has not been thoroughly
+			 * tested so for now leave the sizes at default.
+			 */
+			cros_ec.max_data_read = EC_PROTO2_MAX_PARAM_SIZE;
+			cros_ec.max_data_write = EC_PROTO2_MAX_PARAM_SIZE;
 #endif
-	} else {
-		priv->ec_command = cros_ec_command_lpc_old;
+		} else {
+			priv->ec_command = cros_ec_command_lpc_old;
 	}
 
 	/* Try hello command -- for EC only supports API v0

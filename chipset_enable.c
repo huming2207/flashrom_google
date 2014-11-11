@@ -1670,6 +1670,7 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x9cc9, OK, "Intel", "Broadwell Y Base", enable_flash_wildcatpoint},
 	{0x8086, 0x9ccb, OK, "Intel", "Broadwell H", enable_flash_wildcatpoint},
 	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
+	{0x8086, 0x229c, OK, "Intel", "Braswell", enable_flash_baytrail},
 #endif
 	{},
 };
