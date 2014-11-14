@@ -1286,6 +1286,21 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 	return ret;
 }
 
+/* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
+uint8_t mx25l_read_config_register(void)
+{
+	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x15 };
+	unsigned char readarr[2];	/* leave room for dummy byte */
+	int ret;
+
+	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
+	if (ret) {
+		msg_cerr("RDCR failed!\n");
+		readarr[0] = 0x00;
+	}
+
+	return readarr[0];
+}
 /* W25P, W25X, and many flash chips from various vendors */
 struct wp wp_w25 = {
 	.list_ranges	= w25_list_ranges,
@@ -1448,6 +1463,49 @@ static struct generic_wp mx25l6406e_wp = {
 	.ranges = &mx25l6406e_ranges[0],
 };
 
+struct generic_range mx25l6495f_tb0_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0x7f0000, 64 * 1 * 1024} },	/* block 127 */
+	{ 0x2, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
+	{ 0x3, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
+
+	{ 0x4, {0x780000, 64 * 8 * 1024} },	/* blocks 120-127 */
+	{ 0x5, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
+	{ 0x6, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
+	{ 0x7, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
+	{ 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
+};
+
+struct generic_range mx25l6495f_tb1_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0x000000, 64 * 1 * 1024} },	/* block 0 */
+	{ 0x2, {0x000000, 64 * 2 * 1024} },	/* blocks 0-1 */
+	{ 0x3, {0x000000, 64 * 4 * 1024} },	/* blocks 0-3 */
+	{ 0x4, {0x000000, 64 * 8 * 1024} },	/* blocks 0-7 */
+	{ 0x5, {0x000000, 64 * 16 * 1024} },	/* blocks 0-15 */
+	{ 0x6, {0x000000, 64 * 32 * 1024} },	/* blocks 0-31 */
+	{ 0x7, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
+	{ 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
+};
+
+static struct generic_wp mx25l6495f_wp = {
+	.sr1 = { .bp0_pos = 2, .bp_bits = 4, .srp_pos = 7 },
+};
+
 /* Given a flash chip, this function returns its writeprotect info. */
 static int generic_range_table(const struct flashchip *flash,
                            struct generic_wp **wp,
@@ -1489,6 +1547,19 @@ static int generic_range_table(const struct flashchip *flash,
 			*wp = &mx25l6406e_wp;
 			*num_entries = ARRAY_SIZE(mx25l6406e_ranges);
 			break;
+		case MACRONIX_MX25L6495F: {
+			uint8_t cr = mx25l_read_config_register();
+
+			*wp = &mx25l6495f_wp;
+			if (!(cr & (1 << 3))) {	/* T/B == 0 */
+				(*wp)->ranges = &mx25l6495f_tb0_ranges[0];
+				*num_entries = ARRAY_SIZE(mx25l6495f_tb0_ranges);
+			} else {		/* T/B == 1 */
+				(*wp)->ranges = &mx25l6495f_tb1_ranges[0];
+				*num_entries = ARRAY_SIZE(mx25l6495f_tb1_ranges);
+			}
+			break;
+		 }
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
