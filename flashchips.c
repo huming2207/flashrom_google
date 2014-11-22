@@ -6503,6 +6503,37 @@ const struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Spansion",
+		.name		= "S25FL116K",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= SPANSION_ID,
+		.model_id	= SPANSION_S25FL116K,
+		.total_size	= 2048,
+		.page_size	= 256,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {4 * 1024, 512} },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {64 * 1024, 32} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {2 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {2700, 3600},
+		/* TODO: write-protection */
+	},
+
+	{
+		.vendor		= "Spansion",
 		.name		= "S25FS128S Large Sectors",
 		.bustype	= BUS_SPI,
 		.manufacture_id	= SPANSION_ID,
