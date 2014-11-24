@@ -434,6 +434,11 @@ int internal_init(void)
 	/* probe for programmers that bridge LPC <--> SPI */
 	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
 	    (alias && alias->type == ALIAS_EC)) {
+		/* Try to probe via kernel device first */
+		if (!cros_ec_probe_dev()) {
+			buses_supported &= ~(BUS_LPC|BUS_SPI);
+			return 0;
+		}
 		if (cros_ec_probe_lpc(NULL) &&
 			wpce775x_probe_spi_flash(NULL) &&
 			mec1308_probe_spi_flash(NULL) &&
