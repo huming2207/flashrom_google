@@ -34,13 +34,14 @@ struct cros_ec_priv {
 			  void *outdata, int outsize);
 
 	/*
-	 * Starting in version 3.0, the EC can act as a bridge to pass along
-	 * messages from the host to up to 3 attached devices (device 0 is the
-	 * EC itself) which also use the CrOS EC protocol. The devices can be
-	 * attached to any bus on the EC and the EC will abstract bus details.
-	 * Bits 14 and 15 in the command word indicate the device index.
+	 * Latest kernel supports handling of several ECs in the system.
+	 * To use that feature, the proper device file should be used:
+	 * The format is /dev/cros_XX, where XX is the type of device:
+	 * - ec: the main EC
+	 * - pd: the Power Delivery EC
+	 * - sh: the Sensor Hub EC.
 	 */
-	unsigned int dev_index;
+	const char* dev;
 
 	/*
 	 * Some CrOS ECs support page write mode for their flash memory. This

@@ -62,8 +62,6 @@ struct wp_data {
  */
 #define SOFTWARE_SYNC_ENABLED
 
-#define DEV(priv)	(priv->dev_index << 14)
-
 /* 1 if we want the flashrom to call erase_and_write_flash() again. */
 static int need_2nd_pass = 0;
 
@@ -77,10 +75,21 @@ static int try_latest_firmware = 0;
 static struct fmap_area fwcopy[4];  // [0] is not used.
 
 /* The names of enum lpc_current_image to match in FMAP area names. */
-static const char *sections[3] = {
+static const char *sections[] = {
 	"UNKNOWN SECTION",  // EC_IMAGE_UNKNOWN -- never matches
 	"EC_RO",
 	"EC_RW",
+};
+
+/*
+ * The names of the different device that can be found in a machine.
+ * Order is important: for backward compatibilty issue,
+ * 'ec' must be 0, 'pd' must be 1.
+ */
+static const char *ec_type[] = {
+	[0] = "ec",
+	[1] = "pd",
+	[2] = "sh",
 };
 
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
@@ -111,7 +120,7 @@ static int cros_ec_get_current_image(struct cros_ec_priv *priv)
 	struct ec_response_get_version resp;
 	int rc;
 
-	rc = priv->ec_command(EC_CMD_GET_VERSION | DEV(priv),
+	rc = priv->ec_command(EC_CMD_GET_VERSION,
 				0, NULL, 0, &resp, sizeof(resp));
 	if (rc < 0) {
 		msg_perr("CROS_EC cannot get the running copy: rc=%d\n", rc);
@@ -135,7 +144,7 @@ static int cros_ec_get_region_info(struct cros_ec_priv *priv,
 	int rc;
 
 	req.region = region;
-	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
 			      EC_VER_FLASH_REGION_INFO, &req, sizeof(req),
 			      &resp, sizeof(resp));
 	if (rc < 0) {
@@ -166,7 +175,7 @@ static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
 	*pmask = 0;
 
 	pver.cmd = cmd;
-	rc = priv->ec_command(EC_CMD_GET_CMD_VERSIONS | DEV(priv), 0,
+	rc = priv->ec_command(EC_CMD_GET_CMD_VERSIONS, 0,
 			&pver, sizeof(pver), &rver, sizeof(rver));
 
 	if (rc < 0)
@@ -208,7 +217,7 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
 	} else if (cmd_version == 0) {
 		struct ec_response_flash_info info;
 
-		ret = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+		ret = priv->ec_command(EC_CMD_FLASH_INFO,
 				cmd_version, NULL, 0, &info, sizeof(info));
 		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
@@ -219,7 +228,7 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
 	} else {
 		struct ec_response_flash_info_1 info;
 
-		ret = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+		ret = priv->ec_command(EC_CMD_FLASH_INFO,
 				cmd_version, NULL, 0, &info, sizeof(info));
 		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
@@ -292,7 +301,7 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 		return 0;
 	}
 
-	rc = priv->ec_command(EC_CMD_REBOOT_EC | DEV(priv),
+	rc = priv->ec_command(EC_CMD_REBOOT_EC,
 				0, &p, sizeof(p), NULL, 0);
 	if (rc < 0) {
 		msg_perr("CROS_EC cannot jump to [%s]:%d\n",
@@ -404,7 +413,7 @@ int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
 		count = min(maxlen, readcnt - offset);
 		p.offset = blockaddr + offset;
 		p.size = count;
-		rc = priv->ec_command(EC_CMD_FLASH_READ | DEV(priv),
+		rc = priv->ec_command(EC_CMD_FLASH_READ,
 					0, &p, sizeof(p), buf, count);
 		if (rc < 0) {
 			msg_perr("CROS_EC: Flash read error at offset 0x%x\n",
@@ -461,7 +470,7 @@ int cros_ec_block_erase(struct flashchip *flash,
 
 	erase.offset = blockaddr;
 	erase.size = len;
-	rc = priv->ec_command(EC_CMD_FLASH_ERASE | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_ERASE,
 				0, &erase, sizeof(erase), NULL, 0);
 	if (rc == -EC_RES_ACCESS_DENIED) {
 		// this is active image.
@@ -515,7 +524,7 @@ int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 		memcpy(packet, &p, sizeof(p));
 		memcpy(packet + sizeof(p), &buf[i], written);
-		rc = priv->ec_command(EC_CMD_FLASH_WRITE | DEV(priv),
+		rc = priv->ec_command(EC_CMD_FLASH_WRITE,
 				0, packet, sizeof(p) + p.size, NULL, 0);
 
 		if (rc == -EC_RES_ACCESS_DENIED) {
@@ -590,7 +599,7 @@ static int set_wp(int enable) {
 	memset(&p, 0, sizeof(p));
 	p.mask = (ro_at_boot_flag | ro_now_flag);
 	p.flags = enable ? (ro_at_boot_flag | ro_now_flag) : 0;
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot set the RO_AT_BOOT and RO_NOW: %d\n",
@@ -600,7 +609,7 @@ static int set_wp(int enable) {
 
 	/* Read back */
 	memset(&p, 0, sizeof(p));
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get RO_AT_BOOT and RO_NOW: %d\n",
@@ -643,7 +652,7 @@ static int set_wp(int enable) {
 		memset(&p, 0, sizeof(p));
 		p.mask = EC_FLASH_PROTECT_ALL_NOW;
 		p.flags = EC_FLASH_PROTECT_ALL_NOW;
-		rc = priv->ec_command(EC_CMD_FLASH_PROTECT | DEV(priv),
+		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
 				      EC_VER_FLASH_PROTECT,
 				      &p, sizeof(p), &r, sizeof(r));
 		if (rc < 0) {
@@ -653,7 +662,7 @@ static int set_wp(int enable) {
 
 		/* Read back */
 		memset(&p, 0, sizeof(p));
-		rc = priv->ec_command(EC_CMD_FLASH_PROTECT | DEV(priv),
+		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
 				      EC_VER_FLASH_PROTECT,
 				      &p, sizeof(p), &r, sizeof(r));
 		if (rc < 0) {
@@ -679,7 +688,7 @@ static int set_wp(int enable) {
 		memset(&reboot, 0, sizeof(reboot));
 		reboot.cmd = EC_REBOOT_COLD;
 		reboot.flags = EC_REBOOT_FLAG_ON_AP_SHUTDOWN;
-		rc = priv->ec_command(EC_CMD_REBOOT_EC | DEV(priv),
+		rc = priv->ec_command(EC_CMD_REBOOT_EC,
 				0, &reboot, sizeof(reboot), NULL, 0);
 		if (rc < 0) {
 			msg_perr("WARN: Cannot arrange a cold reset at next "
@@ -769,7 +778,7 @@ static int cros_ec_wp_status(const struct flashchip *flash) {
 	int rc;
 
 	memset(&p, 0, sizeof(p));
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get the write protection status: %d\n",
@@ -831,7 +840,7 @@ int cros_ec_test(struct cros_ec_priv *priv)
 	request.in_data = 0xf0e0d0c0;  /* Expect EC will add on 0x01020304. */
 	msg_pdbg("%s: sending HELLO request with 0x%08x\n",
 	         __func__, request.in_data);
-	rc = priv->ec_command(EC_CMD_HELLO | DEV(priv), 0, &request,
+	rc = priv->ec_command(EC_CMD_HELLO, 0, &request,
 			     sizeof(request), &response, sizeof(response));
 	msg_pdbg("%s: response: 0x%08x\n", __func__, response.out_data);
 
@@ -850,7 +859,7 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
 	struct ec_response_get_protocol_info info;
 	int rc = 0;
 	msg_pdbg("%s: sending protoinfo command\n", __func__);
-	rc = priv->ec_command(EC_CMD_GET_PROTOCOL_INFO | DEV(priv), 0, NULL, 0,
+	rc = priv->ec_command(EC_CMD_GET_PROTOCOL_INFO, 0, NULL, 0,
 			      &info, sizeof(info));
 	msg_pdbg("%s: rc:%d\n", __func__, rc);
 
@@ -884,18 +893,37 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 		char *endptr = NULL;
 
 		errno = 0;
+		/*
+		 * For backward compatibility, check if the index is
+		 * a number: 0: main EC, 1: PD
+		 * works only on Samus.
+		 */
 		index = strtoul(p, &endptr, 10);
 		if (errno || (endptr != (p + 1)) || (strlen(p) > 1)) {
 			msg_perr("Invalid argument: \"%s\"\n", p);
 			return 1;
 		}
 
-		if (index > 3) {
+		if (index > 1) {
 			msg_perr("%s: Invalid device index\n", __func__);
 			return 1;
 		}
+		priv->dev = ec_type[index];
+		msg_pdbg("Target %s used\n", priv->dev);
+	}
 
-		priv->dev_index = index;
+	p = extract_programmer_param("type");
+	if (p) {
+		unsigned int index;
+		for (index = 0; index < ARRAY_SIZE(ec_type); index++)
+			if (!strcmp(p, ec_type[index]))
+				break;
+		if (index == ARRAY_SIZE(ec_type)) {
+			msg_perr("Invalid argument: \"%s\"\n", p);
+			return 1;
+		}
+		priv->dev = ec_type[index];
+		msg_pdbg("Target %s used\n", priv->dev);
 	}
 
 	p = extract_programmer_param("block");
@@ -936,15 +964,7 @@ int cros_ec_probe_size(struct flashchip *flash) {
 		.wp_status      = cros_ec_wp_status,
 	};
 
-	if (priv->dev_index > 0) {
-		if (cros_ec_test(priv)) {
-			msg_perr("%s: Failed to say \"hello\" to device %d\n",
-					__func__, priv->dev_index);
-			return 1;
-		}
-	}
-
-	rc = priv->ec_command(EC_CMD_FLASH_INFO | DEV(priv),
+	rc = priv->ec_command(EC_CMD_FLASH_INFO,
 				0, NULL, 0, &info, sizeof(info));
 	if (rc < 0) {
 		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
@@ -981,7 +1001,7 @@ int cros_ec_probe_size(struct flashchip *flash) {
 	 * FIXME: This info will eventually be exposed via some EC command.
 	 * See chrome-os-partner:20973.
 	 */
-	rc = priv->ec_command(EC_CMD_GET_CHIP_INFO | DEV(priv),
+	rc = priv->ec_command(EC_CMD_GET_CHIP_INFO,
 			0, NULL, 0, &chip_info, sizeof(chip_info));
 	if (rc < 0) {
 		msg_perr("%s(): CHIP_INFO returned %d.\n", __func__, rc);

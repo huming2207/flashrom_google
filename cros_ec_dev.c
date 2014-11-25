@@ -51,8 +51,8 @@
 #include "cros_ec.h"
 #include "programmer.h"
 
-#define CROS_EC_DEV_NAME		"/dev/cros_ec"
-#define CROS_PD_DEV_NAME		"/dev/cros_pd"
+#define CROS_EC_DEV_SUFFIX "/dev/cros_"
+#define CROS_EC_DEV_NAME CROS_EC_DEV_SUFFIX "XX"
 #define CROS_EC_COMMAND_RETRIES	50
 
 int cros_ec_fd;		/* File descriptor for kernel device */
@@ -162,6 +162,7 @@ static int cros_ec_command_dev(int command, int version,
 static struct cros_ec_priv cros_ec_dev_priv = {
 	.detected	= 0,
 	.ec_command	= cros_ec_command_dev,
+	.dev = "ec",
 };
 
 static struct opaque_programmer opaque_programmer_cros_ec_dev = {
@@ -182,7 +183,7 @@ static int cros_ec_dev_shutdown(void *data)
 
 int cros_ec_probe_dev(void)
 {
-	const char *dev_name = CROS_EC_DEV_NAME;
+	char dev_name[strlen(CROS_EC_DEV_NAME)];
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
@@ -190,10 +191,8 @@ int cros_ec_probe_dev(void)
 	if (cros_ec_parse_param(&cros_ec_dev_priv))
 		return 1;
 
-	if (cros_ec_dev_priv.dev_index == 1) {
-		dev_name = CROS_PD_DEV_NAME;
-		cros_ec_dev_priv.dev_index = 0;
-	}
+	strcpy(dev_name, CROS_EC_DEV_SUFFIX);
+	strcat(dev_name, cros_ec_dev_priv.dev);
 
 	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, dev_name);
 	cros_ec_fd = open(dev_name, O_RDWR);

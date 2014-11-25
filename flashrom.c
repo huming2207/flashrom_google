@@ -1163,7 +1163,8 @@ int read_buf_from_file(unsigned char *buf, unsigned long size,
 	}
 	if ((image_stat.st_size != size) &&
 	    (strncmp(filename, "-", sizeof("-")))) {
-		msg_gerr("Error: Image size doesn't match\n");
+		msg_gerr("Error: Image size doesn't match: stat %ld bytes, "
+			 "wanted %ld!\n", image_stat.st_size, size);
 		fclose(image);
 		return 1;
 	}

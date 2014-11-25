@@ -208,7 +208,6 @@ void physunmap(void *virt_addr, size_t len)
 		msg_pspew("Not unmapping zero size at %p\n", virt_addr);
 		return;
 	}
-		
 	munmap(virt_addr, len);
 }
 #endif
