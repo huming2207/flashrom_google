@@ -1463,6 +1463,32 @@ static struct generic_wp mx25l6495f_wp = {
 	.sr1 = { .bp0_pos = 2, .bp_bits = 4, .srp_pos = 7 },
 };
 
+struct generic_range s25fs128s_tbprot_o_0_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0xfc0000, 256 * 1024} },	/* upper 64th */
+	{ 0x2, {0xf80000, 512 * 1024} },	/* upper 32nd */
+	{ 0x3, {0xf00000, 1024 * 1024} },	/* upper 16th */
+	{ 0x4, {0xe00000, 2048 * 1024} },	/* upper 8th */
+	{ 0x5, {0xc00000, 4096 * 1024} },	/* upper 4th */
+	{ 0x6, {0x800000, 8192 * 1024} },	/* upper half */
+	{ 0x7, {0x000000, 16384 * 1024} },	/* all */
+};
+
+struct generic_range s25fs128s_tbprot_o_1_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0x000000, 256 * 1024} },	/* lower 64th */
+	{ 0x2, {0x000000, 512 * 1024} },	/* lower 32nd */
+	{ 0x3, {0x000000, 1024 * 1024} },	/* lower 16th */
+	{ 0x4, {0x000000, 2048 * 1024} },	/* lower 8th */
+	{ 0x5, {0x000000, 4096 * 1024} },	/* lower 4th */
+	{ 0x6, {0x000000, 8192 * 1024} },	/* lower half */
+	{ 0x7, {0x000000, 16384 * 1024} },	/* all */
+};
+
+static struct generic_wp s25fs128s_wp = {
+	.sr1 = { .bp0_pos = 2, .bp_bits = 3, .srp_pos = 7 },
+};
+
 /* Given a flash chip, this function returns its writeprotect info. */
 static int generic_range_table(const struct flashchip *flash,
                            struct generic_wp **wp,
@@ -1521,6 +1547,35 @@ static int generic_range_table(const struct flashchip *flash,
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
 			         flash->model_id);
+			return -1;
+		}
+		break;
+	case SPANSION_ID:
+		switch (flash->model_id) {
+		case SPANSION_S25FS128S_L:
+		case SPANSION_S25FS128S_S: {
+			int tbprot_o = s25fs_tbprot_o(flash);
+
+			if (tbprot_o < 0) {
+				msg_cerr("%s(): Cannot determine top/bottom "
+					"protection status.\n", __func__);
+				return -1;
+			}
+
+			*wp = &s25fs128s_wp;
+			if (!tbprot_o) {
+				(*wp)->ranges = s25fs128s_tbprot_o_0_ranges;
+				*num_entries = ARRAY_SIZE(s25fs128s_tbprot_o_0_ranges);
+			} else {
+				(*wp)->ranges = s25fs128s_tbprot_o_1_ranges;
+				*num_entries = ARRAY_SIZE(s25fs128s_tbprot_o_1_ranges);
+			}
+
+			break;
+		}
+		default:
+			msg_cerr("%s():%d Spansion flash chip mismatch (0x%04x)"
+				", aborting\n", __func__, __LINE__, flash->model_id);
 			return -1;
 		}
 		break;

@@ -51,10 +51,12 @@
 #define CMD_RSTEN	0x66
 #define CMD_RST		0x99
 
+#define CR1NV_ADDR	0x000002
+#define CR1NV_TBPROT_O	(1 << 5)
 #define CR3NV_ADDR	0x000004
 #define CR3NV_20H_NV	(1 << 3)
 
-static int sf25s_read_cr(struct flashchip *flash, uint32_t addr)
+static int sf25s_read_cr(const struct flashchip *flash, uint32_t addr)
 {
 	int result;
 	uint8_t cfg;
@@ -163,6 +165,21 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 	ret |= sf25s_write_cr(flash, CR3NV_ADDR, cfg);
 	ret |= s25fs_software_reset(flash);
 	return ret;
+}
+
+/* returns state of top/bottom block protection, or <0 to indicate error */
+int s25fs_tbprot_o(const struct flashchip *flash)
+{
+	int cr1nv = sf25s_read_cr(flash, CR1NV_ADDR);
+
+	if (cr1nv < 0)
+		return -1;
+
+	/*
+	 * 1 = BP starts at bottom (low address)
+	 * 0 = BP start at top (high address)
+	 */
+	return cr1nv & CR1NV_TBPROT_O ? 1 : 0;
 }
 
 int s25fs_block_erase_d8(struct flashchip *flash,
