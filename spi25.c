@@ -728,7 +728,7 @@ int spi_write_status_enable(void)
  * This is according the SST25VF016 datasheet, who knows it is more
  * generic that this...
  */
-static int spi_write_status_register_ewsr(struct flashchip *flash, int status)
+static int spi_write_status_register_ewsr(const struct flashchip *flash, int status)
 {
 	int result;
 	int i = 0;
@@ -776,7 +776,7 @@ static int spi_write_status_register_ewsr(struct flashchip *flash, int status)
 	return 0;
 }
 
-static int spi_write_status_register_wren(struct flashchip *flash, int status)
+int spi_write_status_register_wren(const struct flashchip *flash, int status)
 {
 	int result;
 	int i = 0;
@@ -824,15 +824,10 @@ static int spi_write_status_register_wren(struct flashchip *flash, int status)
 	return 0;
 }
 
-int spi_write_status_register(struct flashchip *flash, int status)
+int spi_write_status_register(const struct flashchip *flash, int status)
 {
 	int ret = 1;
 
-	if (!(flash->feature_bits & (FEATURE_WRSR_WREN | FEATURE_WRSR_EWSR))) {
-		msg_cdbg("Missing status register write definition, assuming "
-			 "EWSR is needed\n");
-		flash->feature_bits |= FEATURE_WRSR_EWSR;
-	}
 	if (flash->feature_bits & FEATURE_WRSR_WREN)
 		ret = spi_write_status_register_wren(flash, status);
 	if (ret && (flash->feature_bits & FEATURE_WRSR_EWSR))

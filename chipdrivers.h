@@ -45,7 +45,7 @@ int spi_chip_write_1(struct flashchip *flash, uint8_t *buf, unsigned int start, 
 int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, int unsigned len);
 uint8_t spi_read_status_register(void);
-int spi_write_status_register(struct flashchip *flash, int status);
+int spi_write_status_register(const struct flashchip *flash, int status);
 void spi_prettyprint_status_register_bit(uint8_t status, int bit);
 void spi_prettyprint_status_register_bp3210(uint8_t status, int bp);
 void spi_prettyprint_status_register_welwip(uint8_t status);
