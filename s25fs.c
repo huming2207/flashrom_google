@@ -56,7 +56,7 @@
 #define CR3NV_ADDR	0x000004
 #define CR3NV_20H_NV	(1 << 3)
 
-static int sf25s_read_cr(const struct flashchip *flash, uint32_t addr)
+static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 {
 	int result;
 	uint8_t cfg;
@@ -81,7 +81,7 @@ static int sf25s_read_cr(const struct flashchip *flash, uint32_t addr)
 	return cfg;
 }
 
-static int sf25s_write_cr(struct flashchip *flash, uint32_t addr, uint8_t data)
+static int s25fs_write_cr(struct flashchip *flash, uint32_t addr, uint8_t data)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -162,7 +162,7 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 	int ret = 0;
 
 	msg_cdbg("Restoring CR3NV value to 0x%02x\n", cfg);
-	ret |= sf25s_write_cr(flash, CR3NV_ADDR, cfg);
+	ret |= s25fs_write_cr(flash, CR3NV_ADDR, cfg);
 	ret |= s25fs_software_reset(flash);
 	return ret;
 }
@@ -170,7 +170,7 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 /* returns state of top/bottom block protection, or <0 to indicate error */
 int s25fs_tbprot_o(const struct flashchip *flash)
 {
-	int cr1nv = sf25s_read_cr(flash, CR1NV_ADDR);
+	int cr1nv = s25fs_read_cr(flash, CR1NV_ADDR);
 
 	if (cr1nv < 0)
 		return -1;
@@ -215,12 +215,12 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 	/* Check if hybrid sector architecture is in use and, if so,
 	 * switch to uniform sectors. */
 	if (!cr3nv_checked) {
-		cfg = sf25s_read_cr(flash, CR3NV_ADDR);
+		cfg = s25fs_read_cr(flash, CR3NV_ADDR);
 		if (!(cfg & CR3NV_20H_NV)) {
-			sf25s_write_cr(flash, CR3NV_ADDR, cfg | CR3NV_20H_NV);
+			s25fs_write_cr(flash, CR3NV_ADDR, cfg | CR3NV_20H_NV);
 			s25fs_software_reset(flash);
 
-			cfg = sf25s_read_cr(flash, CR3NV_ADDR);
+			cfg = s25fs_read_cr(flash, CR3NV_ADDR);
 			if (!(cfg & CR3NV_20H_NV)) {
 				msg_cerr("%s: Unable to enable uniform "
 					"block sizes.\n", __func__);
@@ -229,7 +229,7 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 
 			msg_cdbg("\n%s: CR3NV updated (0x%02x -> 0x%02x)\n",
 					__func__, cfg,
-					sf25s_read_cr(flash, CR3NV_ADDR));
+					s25fs_read_cr(flash, CR3NV_ADDR));
 			/* Restore CR3V when flashrom exits */
 			register_chip_restore(s25fs_restore_cr3nv, flash, cfg);
 		}
