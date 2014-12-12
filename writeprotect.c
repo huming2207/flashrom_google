@@ -27,13 +27,6 @@
 #include "spi.h"
 #include "writeprotect.h"
 
-/* When update flash's status register, it takes few time to erase register.
- * After surveying some flash vendor specs, such as Winbond, MXIC, EON,
- * all of their update time are less than 20ms. After refering the spi25.c,
- * use 100ms delay.
- */
-#define WRITE_STATUS_REGISTER_DELAY 100 * 1000  /* unit: us */
-
 /*
  * The following procedures rely on look-up tables to match the user-specified
  * range with the chip's supported ranges. This turned out to be the most
@@ -862,42 +855,6 @@ int w25_status_to_range(const struct flashchip *flash,
 	return 0;
 }
 
-/* Since most chips we use must be WREN-ed before WRSR,
- * we copy a write status function here before we have a good solution. */
-static int spi_write_status_register_WREN(int status)
-{
-	int result;
-	struct spi_command cmds[] = {
-	{
-	/* FIXME: WRSR requires either EWSR or WREN depending on chip type. */
-		.writecnt       = JEDEC_WREN_OUTSIZE,
-		.writearr       = (const unsigned char[]){ JEDEC_WREN },
-		.readcnt        = 0,
-		.readarr        = NULL,
-	}, {
-		.writecnt       = JEDEC_WRSR_OUTSIZE,
-		.writearr       = (const unsigned char[]){ JEDEC_WRSR, (unsigned char) status },
-		.readcnt        = 0,
-		.readarr        = NULL,
-	}, {
-		.writecnt       = 0,
-		.writearr       = NULL,
-		.readcnt        = 0,
-		.readarr        = NULL,
-	}};
-
-	result = spi_send_multicommand(cmds);
-	if (result) {
-	        msg_cerr("%s failed during command execution\n",
-	                __func__);
-	}
-
-	/* WRSR performs a self-timed erase before the changes take effect. */
-	programmer_delay(WRITE_STATUS_REGISTER_DELAY);
-
-	return result;
-}
-
 /* Given a [start, len], this function calls w25_range_to_status() to convert
  * it to flash-chip-specific range bits, then sets into status register.
  */
@@ -925,7 +882,7 @@ static int w25_set_range(const struct flashchip *flash,
 	msg_cdbg("status.srp0: %x\n", status.srp0);
 
 	memcpy(&expected, &status, sizeof(status));
-	spi_write_status_register_WREN(expected);
+	spi_write_status_register(flash, expected);
 
 	tmp = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
@@ -980,7 +937,7 @@ static int w25_set_srp0(const struct flashchip *flash, int enable)
 
 	status.srp0 = enable ? 1 : 0;
 	memcpy(&expected, &status, sizeof(status));
-	spi_write_status_register_WREN(expected);
+	spi_write_status_register(flash, expected);
 
 	tmp = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
@@ -1124,7 +1081,7 @@ static int w25q_write_status_register_WREN(uint8_t s1, uint8_t s2)
 	}
 
 	/* WRSR performs a self-timed erase before the changes take effect. */
-	programmer_delay(WRITE_STATUS_REGISTER_DELAY);
+	programmer_delay(100 * 1000);
 
 	return result;
 }
@@ -1657,7 +1614,7 @@ static int generic_set_range(const struct flashchip *flash,
 	if (generic_range_to_status(flash, start, len, &expected))
 		return -1;
 
-	spi_write_status_register_WREN(expected);
+	spi_write_status_register(flash, expected);
 
 	status = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, status);
@@ -1688,7 +1645,7 @@ static int generic_set_srp0(const struct flashchip *flash, int enable)
 	else
 		expected &= ~(1 << wp->sr1.srp_pos);
 
-	spi_write_status_register_WREN(expected);
+	spi_write_status_register(flash, expected);
 
 	status = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, status);
