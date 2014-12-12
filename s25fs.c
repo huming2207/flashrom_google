@@ -75,7 +75,7 @@ static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
-		return result;
+		return -1;
 	}
 
 	return cfg;
@@ -112,7 +112,7 @@ static int s25fs_write_cr(struct flashchip *flash, uint32_t addr, uint8_t data)
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
-		return result;
+		return -1;
 	}
 
 	/* Poll WIP bit while command is in progress. The datasheet specifies
