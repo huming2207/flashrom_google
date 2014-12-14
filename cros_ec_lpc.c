@@ -367,6 +367,24 @@ static int write_memmap_lm4(uint8_t value, uint16_t port)
 }
 
 /*
+ ******************** MEC1322 Support Function *********************
+ */
+extern int mec1322_read_memmap(uint16_t addr, uint8_t *b);
+extern int mec1322_write_memmap(uint8_t b, uint16_t addr);
+
+const struct {
+        uint8_t (*inb)(uint16_t);
+        uint32_t (*inl)(uint16_t);
+        void (*outl)(uint32_t, uint16_t);
+        int (*usleep)(unsigned int);
+} mec1322_host_func = {
+        .inb = inb,
+        .inl = inl,
+        .outl = outl,
+        .usleep = usleep,
+};
+
+/*
  **************************** EC API v2 ****************************
  */
 static int cros_ec_command_lpc_lm4(int command, int version,
@@ -374,6 +392,13 @@ static int cros_ec_command_lpc_lm4(int command, int version,
 		void *indata, int insize) {
 	return cros_ec_command_lpc(command, version, outdata, outsize,
 		indata, insize, read_memmap_lm4, write_memmap_lm4);
+}
+
+static int cros_ec_command_lpc_mec1322(int command, int version,
+		const void *outdata, int outsize,
+		void *indata, int insize) {
+	return cros_ec_command_lpc(command, version, outdata, outsize,
+		indata, insize, mec1322_read_memmap, mec1322_write_memmap);
 }
 
 /*
@@ -384,6 +409,13 @@ static int cros_ec_command_lpc_v3_lm4(int command, int version,
 		void *indata, int insize) {
 	return cros_ec_command_lpc_v3(command, version, outdata, outsize,
 		indata, insize, read_memmap_lm4, write_memmap_lm4);
+}
+
+static int cros_ec_command_lpc_v3_mec1322(int command, int version,
+		const void *outdata, int outsize,
+		void *indata, int insize) {
+	return cros_ec_command_lpc_v3(command, version, outdata, outsize,
+		indata, insize, mec1322_read_memmap, mec1322_write_memmap);
 }
 
 static struct cros_ec_priv cros_ec_lpc_priv = {
@@ -418,6 +450,7 @@ static int detect_ec(struct cros_ec_priv *priv) {
 	struct ec_response_hello response;
 	int rc = 0;
 	int old_timeout = ec_timeout_usec;
+	uint8_t x, y;
 
 #if USE_CROS_EC_LOCK == 1
 	msg_gdbg("Acquiring CROS_EC lock (timeout=%d sec)...\n",
@@ -461,11 +494,31 @@ static int detect_ec(struct cros_ec_priv *priv) {
 	 */
 	if (inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID) != 'E' ||
 	    inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID + 1) != 'C') {
-		msg_perr("Missing Chromium EC memory map.\n");
-		return -1;
-	}
-
-	i = inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS);
+		/* Probe MEC1322 */
+		mec1322_read_memmap(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID, &x);
+		mec1322_read_memmap(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_ID + 1, &y);
+		if ((x != 'E') || (y != 'C')) {
+			msg_perr("Missing Chromium EC memory map.\n");
+			return -1;
+		} else {
+			mec1322_read_memmap(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS, &x);
+			if (x & EC_HOST_CMD_FLAG_VERSION_3) {
+				/* Protocol version 3 */
+				priv->ec_command = cros_ec_command_lpc_v3_mec1322;
+				cros_ec.max_data_write = 248 - sizeof(struct ec_host_request);
+				cros_ec.max_data_read = 248 - sizeof(struct ec_host_response);
+				msg_pdbg("MEC1322 protocol V3 detected.\n");
+			} else if (x & EC_HOST_CMD_FLAG_LPC_ARGS_SUPPORTED) {
+				/* Protocol version 2 */
+				priv->ec_command = cros_ec_command_lpc_mec1322;
+				msg_pdbg("MEC1322 protocol V2 detected.\n");
+			} else {
+				msg_perr("Bad protocol version on MEC1322.\n");
+				return -1;
+			}
+		}
+	} else {
+		i = inb(EC_LPC_ADDR_MEMMAP + EC_MEMMAP_HOST_CMD_FLAGS);
 
 		if (i & EC_HOST_CMD_FLAG_VERSION_3) {
 			/* Protocol version 3 */
@@ -494,6 +547,7 @@ static int detect_ec(struct cros_ec_priv *priv) {
 #endif
 		} else {
 			priv->ec_command = cros_ec_command_lpc_old;
+		}
 	}
 
 	/* Try hello command -- for EC only supports API v0
