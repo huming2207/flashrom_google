@@ -116,7 +116,6 @@ static const char *const speeds[SPEED_COUNT] = {
 	".375",
 };
 
-#if 0
 /* Might be useful for other pieces of code as well. */
 static void print_hex(void *buf, size_t len)
 {
@@ -125,7 +124,26 @@ static void print_hex(void *buf, size_t len)
 	for (i = 0; i < len; i++)
 		msg_pdbg(" %02x", ((uint8_t *)buf)[i]);
 }
-#endif
+
+/* Helper function to read data from dediprog */
+static int dediprog_read(enum cmd_t cmd, int value, int index, char *bytes,
+			 int size)
+{
+	return usb_control_msg(dediprog_handle,
+			       USB_ENDPOINT_IN | USB_TYPE_VENDOR |
+			       USB_RECIP_ENDPOINT, cmd, value, index,
+			       bytes, size, DEFAULT_TIMEOUT);
+}
+
+/* Helper function to write data from dediprog */
+static int dediprog_write(enum cmd_t cmd, int value, int index, char *bytes,
+			  int size)
+{
+	return usb_control_msg(dediprog_handle,
+			       USB_ENDPOINT_OUT | USB_TYPE_VENDOR |
+			       USB_RECIP_ENDPOINT, cmd, value, index,
+			       bytes, size, DEFAULT_TIMEOUT);
+}
 
 /* Might be useful for other USB devices as well. static for now. */
 static struct usb_device *get_device_by_vid_pid(uint16_t vid, uint16_t pid)
@@ -158,16 +176,20 @@ static int dediprog_set_leds(int leds)
 	 *   bit 2 == 0: green light is on.
 	 *   bit 0 == 0: red light is on. 
 	 */
-	if (dediprog_firmwareversion < FIRMWARE_VERSION(5,0,0)) {
-		target_leds = ((leds & LED_ERROR) >> 2) |
-			((leds & LED_PASS) << 2);
+	if (dediprog_firmwareversion >= FIRMWARE_VERSION(6, 0, 0)) {
+		target_leds = (leds ^ 7) << 8;
+		ret = dediprog_write(CMD_SET_IO_LED, target_leds, 0, NULL, 0);
 	} else {
-		target_leds = leds;
-	}
+		if (dediprog_firmwareversion < FIRMWARE_VERSION(5, 0, 0)) {
+			target_leds = ((leds & LED_ERROR) >> 2) |
+				((leds & LED_PASS) << 2);
+		} else {
+			target_leds = leds;
+		}
+		target_leds ^= 7;
 
-	target_leds ^= 7;
-	ret = usb_control_msg(dediprog_handle, 0x42, 0x07, 0x09, target_leds,
-			      NULL, 0x0, DEFAULT_TIMEOUT);
+		ret = dediprog_write(CMD_SET_IO_LED, 9, target_leds, NULL, 0);
+	}
 	if (ret != 0x0) {
 		msg_perr("Command Set LED 0x%x failed (%s)!\n",
 			 leds, usb_strerror());
@@ -205,9 +227,8 @@ static int dediprog_set_spi_voltage(int millivolt)
 	msg_pdbg("Setting SPI voltage to %u.%03u V\n", millivolt / 1000,
 		 millivolt % 1000);
 
-	ret = usb_control_msg(dediprog_handle, 0x42, CMD_SET_TARGET_FLASH_VCC,
-			      voltage_selector, 0xff, NULL, 0x0,
-			      DEFAULT_TIMEOUT);
+	ret = dediprog_write(CMD_SET_TARGET_FLASH_VCC, voltage_selector, 0xff,
+			     NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Voltage 0x%x failed!\n",
 			 voltage_selector);
@@ -223,8 +244,7 @@ static int dediprog_set_spi_speed(uint16_t speed)
 	msg_pdbg("Setting SPI speed to %u kHz\n",
                  (int)(atof(speeds[speed]) * 1000));
 
-	ret = usb_control_msg(dediprog_handle, 0x42, CMD_SET_SPI_CLK, speed,
-			      0x0, NULL, 0x0, DEFAULT_TIMEOUT);
+	ret = dediprog_write(CMD_SET_SPI_CLK, speed, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Speed 0x%x failed!\n", speed);
 		return 1;
@@ -245,10 +265,7 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 	/* chunksize must be 512, other sizes will NOT work at all. */
 	const unsigned int chunksize = 0x200;
 	const unsigned int count = len / chunksize;
-	const char count_and_chunk[] = {count & 0xff,
-					(count >> 8) & 0xff,
-					chunksize & 0xff,
-					(chunksize >> 8) & 0xff};
+	unsigned int cmd_len;
 
 	if ((start % chunksize) || (len % chunksize)) {
 		msg_perr("%s: Unaligned start=%i, len=%i! Please report a bug "
@@ -262,10 +279,34 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 	/* Command Read SPI Bulk. No idea which read command is used on the
 	 * SPI side.
 	 */
-	ret = usb_control_msg(dediprog_handle, 0x42, 0x20, start % 0x10000,
-			      start / 0x10000, (char *)count_and_chunk,
-			      sizeof(count_and_chunk), DEFAULT_TIMEOUT);
-	if (ret != sizeof(count_and_chunk)) {
+	if (dediprog_firmwareversion >= FIRMWARE_VERSION(6, 0, 0)) {
+		const char read_cmd_v6[] = {
+			count & 0xff,
+			(count >> 8) & 0xff,
+			0,
+			READ_FAST,
+			0,
+			0,
+			start & 0xff,
+			(start >> 8) & 0xff,
+			(start >> 16) & 0xff,
+			(start >> 24) & 0xff,
+			};
+
+		cmd_len = sizeof(read_cmd_v6);
+		ret = dediprog_write(CMD_READ, 0, 0, (char *)read_cmd_v6,
+				     cmd_len);
+	} else {
+		const char read_cmd[] = {count & 0xff,
+					(count >> 8) & 0xff,
+					chunksize & 0xff,
+					(chunksize >> 8) & 0xff};
+
+		cmd_len = sizeof(read_cmd);
+		ret = dediprog_write(CMD_READ, start % 0x10000, start / 0x10000,
+				     (char *)read_cmd, cmd_len);
+	}
+	if (ret != cmd_len) {
 		msg_perr("Command Read SPI Bulk failed, %i %s!\n", ret,
 			 usb_strerror());
 		return 1;
@@ -352,9 +393,13 @@ static int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt
 	int ret;
 
 	msg_pspew("%s, writecnt=%i, readcnt=%i\n", __func__, writecnt, readcnt);
-	ret = usb_control_msg(dediprog_handle, 0x42, CMD_TRANSCEIVE, 0,
-			      readcnt ? 0x1 : 0x0, (char *)writearr, writecnt,
-			      DEFAULT_TIMEOUT);
+	if (dediprog_firmwareversion >= FIRMWARE_VERSION(6, 0, 0)) {
+		ret = dediprog_write(CMD_TRANSCEIVE, readcnt ? 1 : 0, 0,
+				     (char *)writearr, writecnt);
+	} else {
+		ret = dediprog_write(CMD_TRANSCEIVE, 0, readcnt ? 0x1 : 0x0,
+				     (char *)writearr, writecnt);
+	}
 	if (ret != writecnt) {
 		msg_perr("Send SPI failed, expected %i, got %i %s!\n",
 			 writecnt, ret, usb_strerror());
@@ -363,8 +408,7 @@ static int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt
 	if (!readcnt)
 		return 0;
 	memset(readarr, 0, readcnt);
-	ret = usb_control_msg(dediprog_handle, 0xc2, CMD_TRANSCEIVE, 0, 0,
-			     (char *)readarr, readcnt, DEFAULT_TIMEOUT);
+	ret = dediprog_read(CMD_TRANSCEIVE, 0, 0, (char *)readarr, readcnt);
 	if (ret != readcnt) {
 		msg_perr("Receive SPI failed, expected %i, got %i %s!\n",
 			 readcnt, ret, usb_strerror());
@@ -381,8 +425,7 @@ static int dediprog_check_devicestring(void)
 
 	/* Command Receive Device String. */
 	memset(buf, 0, sizeof(buf));
-	ret = usb_control_msg(dediprog_handle, 0xc2, CMD_READ_PROGRAMMER_INFO,
-			      0, 0, buf, 0x10, DEFAULT_TIMEOUT);
+	ret = dediprog_read(CMD_READ_PROGRAMMER_INFO, 0, 0, buf, 0x10);
 	if (ret != 0x10) {
 		msg_perr("Incomplete/failed Command Receive Device String!\n");
 		return 1;
@@ -394,11 +437,11 @@ static int dediprog_check_devicestring(void)
 		return 1;
 	}
 	if (sscanf(buf, "SF100 V:%d.%d.%d ", &fw[0], &fw[1], &fw[2]) != 3) {
-		msg_perr("Unexpected firmware version string!\n");
+		msg_perr("Unexpected firmware version string '%s'\n", buf);
 		return 1;
 	}
 	/* Only these versions were tested. */
-	if (fw[0] < 2 || fw[0] > 5) {
+	if (fw[0] < 2 || fw[0] > 6) {
 		msg_perr("Unexpected firmware version %d.%d.%d!\n", fw[0],
 			 fw[1], fw[2]);
 		return 1;
@@ -430,8 +473,7 @@ static int set_target_flash(enum flash_type type)
 {
 	int ret;
 
-	ret = usb_control_msg(dediprog_handle, 0x42, CMD_SET_FLASH_TYPE, type,
-			      0x0, NULL, 0, DEFAULT_TIMEOUT);
+	ret = dediprog_write(CMD_SET_FLASH_TYPE, type, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("set_target_flash failed (%s)!\n", usb_strerror());
 		return 1;
@@ -537,6 +579,20 @@ static int dediprog_shutdown(void *data)
 	return 0;
 }
 
+/* Return the 8-byte UID for the flash */
+static int get_uid(char buf[])
+{
+	int ret;
+
+	ret = dediprog_read(CMD_GET_UID, 0, 0, buf, 8);
+	if (ret != 8) {
+		msg_perr("get_uid failed (%s)!\n", usb_strerror());
+		return 1;
+	}
+
+	return 0;
+}
+
 /* URB numbers refer to the first log ever captured. */
 int dediprog_init(void)
 {
@@ -546,6 +602,7 @@ int dediprog_init(void)
 	int ret;
 	char *speed_str;
 	int speed = SPEED_12M;
+	char uid[8];
 
 	msg_pspew("%s\n", __func__);
 
@@ -619,6 +676,11 @@ int dediprog_init(void)
 	if (dediprog_set_spi_speed(speed)) {
 		dediprog_set_leds(LED_ERROR);
 		return 1;
+	}
+	if (!get_uid(uid)) {
+		msg_pdbg("UID: ");
+		print_hex(uid, sizeof(uid));
+		msg_pdbg("\n");
 	}
 
 	register_spi_programmer(&spi_programmer_dediprog);
