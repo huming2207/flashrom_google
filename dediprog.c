@@ -31,6 +31,16 @@ static usb_dev_handle *dediprog_handle;
 static int dediprog_firmwareversion;
 static int dediprog_endpoint;
 
+/* Set/clear LEDs on dediprog */
+enum {
+	LED_PASS		= 1 << 0,
+	LED_BUSY		= 1 << 1,
+	LED_ERROR		= 1 << 2,
+	LED_ALL			= 7,
+};
+
+static int current_led_status = -1;
+
 #if 0
 /* Might be useful for other pieces of code as well. */
 static void print_hex(void *buf, size_t len)
@@ -59,22 +69,12 @@ static struct usb_device *get_device_by_vid_pid(uint16_t vid, uint16_t pid)
 
 //int usb_control_msg(usb_dev_handle *dev, int requesttype, int request, int value, int index, char *bytes, int size, int timeout);
 
-/* Set/clear LEDs on dediprog */
-#define PASS_ON		(0 << 0)
-#define PASS_OFF	(1 << 0)
-#define BUSY_ON		(0 << 1)
-#define BUSY_OFF	(1 << 1)
-#define ERROR_ON	(0 << 2)
-#define ERROR_OFF	(1 << 2)
-static int current_led_status = -1;
-
 static int dediprog_set_leds(int leds)
 {
 	int ret, target_leds;
 
-	if (leds < 0 || leds > 7)
-		leds = 0; // Bogus value, enable all LEDs
-
+	if (leds < 0 || leds > LED_ALL)
+		leds = LED_ALL;
 	if (leds == current_led_status)
 		return 0;
 
@@ -86,12 +86,13 @@ static int dediprog_set_leds(int leds)
 	 *   bit 0 == 0: red light is on. 
 	 */
 	if (dediprog_firmwareversion < FIRMWARE_VERSION(5,0,0)) {
-		target_leds = ((leds & ERROR_OFF) >> 2) | 
-			((leds & PASS_OFF) << 2);
+		target_leds = ((leds & LED_ERROR) >> 2) |
+			((leds & LED_PASS) << 2);
 	} else {
 		target_leds = leds;
 	}
 
+	target_leds ^= 7;
 	ret = usb_control_msg(dediprog_handle, 0x42, 0x07, 0x09, target_leds,
 			      NULL, 0x0, DEFAULT_TIMEOUT);
 	if (ret != 0x0) {
@@ -262,26 +263,22 @@ static int dediprog_spi_read(struct flashchip *flash, uint8_t *buf,
 	unsigned int residue = start % chunksize ? chunksize - start % chunksize : 0;
 	unsigned int bulklen;
 
-	dediprog_set_leds(PASS_OFF|BUSY_ON|ERROR_OFF);
+	dediprog_set_leds(LED_BUSY);
 
 	if (residue) {
 		msg_pdbg("Slow read for partial block from 0x%x, length 0x%x\n",
 			 start, residue);
 		ret = spi_read_chunked(flash, buf, start, residue, 16);
-		if (ret) {
-			dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
-			return ret;
-		}
+		if (ret)
+			goto err;
 	}
 
 	/* Round down. */
 	bulklen = (len - residue) / chunksize * chunksize;
 	ret = dediprog_spi_bulk_read(flash, buf + residue, start + residue,
 				     bulklen);
-	if (ret) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
-		return ret;
-	}
+	if (ret)
+		goto err;
 
 	len -= residue + bulklen;
 	if (len) {
@@ -289,14 +286,15 @@ static int dediprog_spi_read(struct flashchip *flash, uint8_t *buf,
 			 start, len);
 		ret = spi_read_chunked(flash, buf + residue + bulklen,
 				       start + residue + bulklen, len, 16);
-		if (ret) {
-			dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
-			return ret;
-		}
+		if (ret)
+			goto err;
 	}
 
-	dediprog_set_leds(PASS_ON|BUSY_OFF|ERROR_OFF);
+	dediprog_set_leds(LED_PASS);
 	return 0;
+err:
+	dediprog_set_leds(LED_ERROR);
+	return ret;
 }
 
 static int dediprog_spi_write_256(struct flashchip *flash, uint8_t *buf,
@@ -304,15 +302,15 @@ static int dediprog_spi_write_256(struct flashchip *flash, uint8_t *buf,
 {
 	int ret;
 
-	dediprog_set_leds(PASS_OFF|BUSY_ON|ERROR_OFF);
+	dediprog_set_leds(LED_BUSY);
 
 	/* No idea about the real limit. Maybe 12, maybe more, maybe less. */
 	ret = spi_write_chunked(flash, buf, start, len, 12);
 
 	if (ret)
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 	else
-		dediprog_set_leds(PASS_ON|BUSY_OFF|ERROR_OFF);
+		dediprog_set_leds(LED_PASS);
 
 	return ret;
 }
@@ -622,32 +620,32 @@ int dediprog_init(void)
 	if (register_shutdown(dediprog_shutdown, NULL))
 		return 1;
 
-	dediprog_set_leds(PASS_ON|BUSY_ON|ERROR_ON);
+	dediprog_set_leds(LED_ALL);
 
 	/* URB 6. Command A. */
 	if (dediprog_command_a()) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 	/* URB 7. Command A. */
 	if (dediprog_command_a()) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 	/* URB 8. Command Prepare Receive Device String. */
 	/* URB 9. Command Receive Device String. */
 	if (dediprog_check_devicestring()) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 	/* URB 10. Command C. */
 	if (dediprog_command_c()) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 	/* URB 11. Command Set SPI Voltage. */
 	if (dediprog_set_spi_voltage(millivolt)) {
-		dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_ON);
+		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 
@@ -659,7 +657,7 @@ int dediprog_init(void)
 	dediprog_do_stuff();
 #endif
 
-	dediprog_set_leds(PASS_OFF|BUSY_OFF|ERROR_OFF);
+	dediprog_set_leds(0);
 
 	return 0;
 }
