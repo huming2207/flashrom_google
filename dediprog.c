@@ -91,6 +91,31 @@ enum {
 
 static int current_led_status = -1;
 
+enum {
+	SPEED_24M,
+	SPEED_8M,
+	SPEED_12M,
+	SPEED_3M,
+	SPEED_2_18M,
+	SPEED_1_5M,
+	SPEED_750K,
+	SPEED_375K,
+
+	SPEED_COUNT,
+	SPEED_UNKNOWN,
+};
+
+static const char *const speeds[SPEED_COUNT] = {
+	"24",
+	"8",
+	"12",
+	"3",
+	"2.18",
+	"1.5",
+	".750",
+	".375",
+};
+
 #if 0
 /* Might be useful for other pieces of code as well. */
 static void print_hex(void *buf, size_t len)
@@ -193,7 +218,6 @@ static int dediprog_set_spi_voltage(int millivolt)
 	return 0;
 }
 
-#if 0
 /* After dediprog_set_spi_speed, the original app always calls
  * dediprog_set_spi_voltage(0) and then
  * dediprog_check_devicestring() four times in a row.
@@ -204,53 +228,18 @@ static int dediprog_set_spi_voltage(int millivolt)
 static int dediprog_set_spi_speed(uint16_t speed)
 {
 	int ret;
-	unsigned int khz;
 
-	/* Case 1 and 2 are in weird order. Probably an organically "grown"
-	 * interface.
-	 * Base frequency is 24000 kHz, divisors are (in order)
-	 * 1, 3, 2, 8, 11, 16, 32, 64.
-	 */
-	switch (speed) {
-	case 0x0:
-		khz = 24000;
-		break;
-	case 0x1:
-		khz = 8000;
-		break;
-	case 0x2:
-		khz = 12000;
-		break;
-	case 0x3:
-		khz = 3000;
-		break;
-	case 0x4:
-		khz = 2180;
-		break;
-	case 0x5:
-		khz = 1500;
-		break;
-	case 0x6:
-		khz = 750;
-		break;
-	case 0x7:
-		khz = 375;
-		break;
-	default:
-		msg_perr("Unknown frequency selector 0x%x! Aborting.\n", speed);
-		return 1;
-	}
-	msg_pdbg("Setting SPI speed to %u kHz\n", khz);
+	msg_pdbg("Setting SPI speed to %u kHz\n",
+                 (int)(atof(speeds[speed]) * 1000));
 
-	ret = usb_control_msg(dediprog_handle, 0x42, 0x61, speed, 0xff, NULL,
-			      0x0, DEFAULT_TIMEOUT);
+	ret = usb_control_msg(dediprog_handle, 0x42, CMD_SET_SPI_CLK, speed,
+			      0x0, NULL, 0x0, DEFAULT_TIMEOUT);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Speed 0x%x failed!\n", speed);
 		return 1;
 	}
 	return 0;
 }
-#endif
 
 /* Bulk read interface, will read multiple 512 byte chunks aligned to 512 bytes.
  * @start	start address
@@ -533,6 +522,27 @@ static int dediprog_command_f(int timeout)
 }
 #endif
 
+static int parse_speed(char *speed_str)
+{
+	int i;
+
+	for (i = 0; i < SPEED_COUNT; i++) {
+		if (!strcmp(speed_str, speeds[i]))
+			return i;
+	}
+
+	return SPEED_UNKNOWN;
+}
+
+static void list_speeds(void)
+{
+	int i;
+
+	for (i = 0; i < SPEED_COUNT; i++)
+		msg_perr("%s%s", speeds[i], i == SPEED_COUNT - 1 ? "" : ", ");
+	msg_perr("\n");
+}
+
 static int parse_voltage(char *voltage)
 {
 	char *tmp = NULL;
@@ -617,6 +627,8 @@ int dediprog_init(void)
 	char *voltage;
 	int millivolt = 3500;
 	int ret;
+	char *speed_str;
+	int speed = SPEED_12M;
 
 	msg_pspew("%s\n", __func__);
 
@@ -627,6 +639,18 @@ int dediprog_init(void)
 		if (millivolt < 0)
 			return 1;
 		msg_pinfo("Setting voltage to %i mV\n", millivolt);
+	}
+	speed_str = extract_programmer_param("speed");
+	if (speed_str) {
+		speed = parse_speed(speed_str);
+		if (speed == SPEED_UNKNOWN) {
+			msg_perr("Invalid speed '%s', valid speeds in MHz are: ",
+				 speed_str);
+			list_speeds();
+			free(speed_str);
+			return 1;
+		}
+		free(speed_str);
 	}
 
 	/* Here comes the USB stuff. */
@@ -672,6 +696,10 @@ int dediprog_init(void)
 	}
 	/* URB 11. Command Set SPI Voltage. */
 	if (dediprog_set_spi_voltage(millivolt)) {
+		dediprog_set_leds(LED_ERROR);
+		return 1;
+	}
+	if (dediprog_set_spi_speed(speed)) {
 		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
