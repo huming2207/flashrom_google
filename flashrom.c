@@ -642,6 +642,26 @@ int check_erased_range(struct flashchip *flash, unsigned int start, unsigned int
 	return ret;
 }
 
+static int compare_chunk(uint8_t *readbuf, uint8_t *cmpbuf, unsigned int start,
+					unsigned int len, const char *message)
+{
+	int failcount = 0, i;
+
+	for (i = 0; i < len; i++) {
+		if (cmpbuf[i] != readbuf[i]) {
+			if (!failcount) {
+				msg_cerr("%s FAILED at 0x%08x! "
+					"Expected=0x%02x, Read=0x%02x,",
+					message, start + i,
+					cmpbuf[i], readbuf[i]);
+			}
+			failcount++;
+		}
+	}
+
+	return failcount;
+}
+
 /*
  * @cmpbuf	buffer to compare against, cmpbuf[0] is expected to match the
  *		flash content at location start
@@ -653,10 +673,8 @@ int check_erased_range(struct flashchip *flash, unsigned int start, unsigned int
 int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len,
 		 const char *message)
 {
-	unsigned int i;
 	uint8_t *readbuf = malloc(len);
 	int ret = 0, failcount = 0;
-	unsigned int chunksize;
 
 	if (!len)
 		goto out_free;
@@ -680,32 +698,39 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 	if (!message)
 		message = "VERIFY";
 
-	for (i = 0, chunksize = 0; i < len; i += chunksize) {
-		int tmp, j;
+	if (programmer_table[programmer].paranoid) {
+		unsigned int i, chunksize;
 
-		chunksize = min(flash->page_size, len - i);
-		tmp = flash->read(flash, readbuf + i, start + i, chunksize);
+		/* limit chunksize in order to catch errors early */
+		for (i = 0, chunksize = 0; i < len; i += chunksize) {
+			int tmp;
 
-		/* Since this function explicitly compares the bytes, we need
-		   to handle errors manually */
-		if (tmp) {
-			ret = tmp;
-			if (ignore_error(tmp))
-				continue;
-			else
-				goto out_free;
-		}
-
-		for (j = 0; j < chunksize; j++) {
-			if (cmpbuf[i + j] != readbuf[i + j]) {
-				/* Only print the first failure. */
-				if (!failcount++)
-					msg_cerr("%s FAILED at 0x%08x! "
-						 "Expected=0x%02x, Read=0x%02x,",
-						 message, start + i + j, cmpbuf[i + j],
-						 readbuf[i + j]);
+			chunksize = min(flash->page_size, len - i);
+			tmp = flash->read(flash, readbuf + i, start + i, chunksize);
+			if (tmp) {
+				ret = tmp;
+				if (ignore_error(tmp))
+					continue;
+				else
+					goto out_free;
 			}
+
+			failcount = compare_chunk(readbuf + i, cmpbuf + i, start + i,
+					chunksize, message);
+			if (failcount)
+				break;
 		}
+	} else {
+		int tmp;
+
+		/* read as much as we can to reduce transaction overhead */
+		tmp = flash->read(flash, readbuf, start, len);
+		if (tmp && !ignore_error(tmp)) {
+			ret = tmp;
+			goto out_free;
+		}
+
+		failcount = compare_chunk(readbuf, cmpbuf, start, len, message);
 	}
 
 	if (failcount) {
