@@ -142,8 +142,6 @@ static struct usb_device *get_device_by_vid_pid(uint16_t vid, uint16_t pid)
 	return NULL;
 }
 
-//int usb_control_msg(usb_dev_handle *dev, int requesttype, int request, int value, int index, char *bytes, int size, int timeout);
-
 static int dediprog_set_leds(int leds)
 {
 	int ret, target_leds;
@@ -218,13 +216,6 @@ static int dediprog_set_spi_voltage(int millivolt)
 	return 0;
 }
 
-/* After dediprog_set_spi_speed, the original app always calls
- * dediprog_set_spi_voltage(0) and then
- * dediprog_check_devicestring() four times in a row.
- * After that, dediprog_command_a() is called.
- * This looks suspiciously like the microprocessor in the SF100 has to be
- * restarted/reinitialized in case the speed changes.
- */
 static int dediprog_set_spi_speed(uint16_t speed)
 {
 	int ret;
@@ -361,17 +352,6 @@ static int dediprog_spi_send_command(unsigned int writecnt, unsigned int readcnt
 	int ret;
 
 	msg_pspew("%s, writecnt=%i, readcnt=%i\n", __func__, writecnt, readcnt);
-	/* Paranoid, but I don't want to be blamed if anything explodes. */
-	if (writecnt > 16) {
-		msg_perr("Untested writecnt=%i, aborting.\n", writecnt);
-		return 1;
-	}
-	/* 16 byte reads should work. */
-	if (readcnt > 16) {
-		msg_perr("Untested readcnt=%i, aborting.\n", readcnt);
-		return 1;
-	}
-	
 	ret = usb_control_msg(dediprog_handle, 0x42, CMD_TRANSCEIVE, 0,
 			      readcnt ? 0x1 : 0x0, (char *)writearr, writecnt,
 			      DEFAULT_TIMEOUT);
@@ -399,16 +379,6 @@ static int dediprog_check_devicestring(void)
 	int fw[3];
 	char buf[0x11];
 
-	/* Command Prepare Receive Device String. */
-	memset(buf, 0, sizeof(buf));
-	ret = usb_control_msg(dediprog_handle, 0xc3, 0x7, 0x0, 0xef03, buf,
-			      0x1, DEFAULT_TIMEOUT);
-	/* The char casting is needed to stop gcc complaining about an always true comparison. */
-	if ((ret != 0x1) || (buf[0] != (char)0xff)) {
-		msg_perr("Unexpected response to Command Prepare Receive Device"
-			 " String!\n");
-		return 1;
-	}
 	/* Command Receive Device String. */
 	memset(buf, 0, sizeof(buf));
 	ret = usb_control_msg(dediprog_handle, 0xc2, CMD_READ_PROGRAMMER_INFO,
@@ -456,33 +426,6 @@ static int dediprog_device_init(void)
 	return 0;
 }
 
-#if 0
-/* Something.
- * Present in eng_detect_blink.log with firmware 3.1.8
- * Always preceded by Command Receive Device String
- */
-static int dediprog_command_b(void)
-{
-	int ret;
-	char buf[0x3];
-
-	memset(buf, 0, sizeof(buf));
-	ret = usb_control_msg(dediprog_handle, 0xc3, 0x7, 0x0, 0xef00, buf,
-			      0x3, DEFAULT_TIMEOUT);
-	if (ret < 0) {
-		msg_perr("Command B failed (%s)!\n", usb_strerror());
-		return 1;
-	}
-	if ((ret != 0x3) || (buf[0] != 0xff) || (buf[1] != 0xff) ||
-	    (buf[2] != 0xff)) {
-		msg_perr("Unexpected response to Command B!\n");
-		return 1;
-	}
-
-	return 0;
-}
-#endif
-
 static int set_target_flash(enum flash_type type)
 {
 	int ret;
@@ -495,32 +438,6 @@ static int set_target_flash(enum flash_type type)
 	}
 	return 0;
 }
-
-#if 0
-/* Very strange. Seems to be a programmer keepalive or somesuch.
- * Wait unsuccessfully for timeout ms to read one byte.
- * Is usually called after setting voltage to 0.
- * Present in all logs with Firmware 2.1.1 and 3.1.8
- */
-static int dediprog_command_f(int timeout)
-{
-	int ret;
-	char buf[0x1];
-
-	memset(buf, 0, sizeof(buf));
-	ret = usb_control_msg(dediprog_handle, 0xc2, 0x11, 0xff, 0xff, buf,
-			      0x1, timeout);
-	/* This check is most probably wrong. Command F always causes a timeout
-	 * in the logs, so we should check for timeout instead of checking for
-	 * success.
-	 */
-	if (ret != 0x1) {
-		msg_perr("Command F failed (%s)!\n", usb_strerror());
-		return 1;
-	}
-	return 0;
-}
-#endif
 
 static int parse_speed(char *speed_str)
 {
@@ -706,67 +623,7 @@ int dediprog_init(void)
 
 	register_spi_programmer(&spi_programmer_dediprog);
 
-	/* RE leftover, leave in until the driver is complete. */
-#if 0
-	/* Execute RDID by hand if you want to test it. */
-	dediprog_do_stuff();
-#endif
-
 	dediprog_set_leds(0);
 
 	return 0;
 }
-
-#if 0
-/* Leftovers from reverse engineering. Keep for documentation purposes until
- * completely understood.
- */
-static int dediprog_do_stuff(void)
-{
-	char buf[0x4];
-	/* SPI command processing starts here. */
-
-	/* URB 12. Command Send SPI. */
-	/* URB 13. Command Receive SPI. */
-	memset(buf, 0, sizeof(buf));
-	/* JEDEC RDID */
-	msg_pdbg("Sending RDID\n");
-	buf[0] = JEDEC_RDID;
-	if (dediprog_spi_send_command(JEDEC_RDID_OUTSIZE, JEDEC_RDID_INSIZE,
-				(unsigned char *)buf, (unsigned char *)buf))
-		return 1;
-	msg_pdbg("Receiving response: ");
-	print_hex(buf, JEDEC_RDID_INSIZE);
-	/* URB 14-27 are more SPI commands. */
-	/* URB 28. Command Set SPI Voltage. */
-	if (dediprog_set_spi_voltage(0x0))
-		return 1;
-	/* URB 29-38. Command F, unsuccessful wait. */
-	if (dediprog_command_f(544))
-		return 1;
-	/* URB 39. Command Set SPI Voltage. */
-	if (dediprog_set_spi_voltage(0x10))
-		return 1;
-	/* URB 40. Command Set SPI Speed. */
-	if (dediprog_set_spi_speed(0x2))
-		return 1;
-	/* URB 41 is just URB 28. */
-	/* URB 42,44,46,48,51,53 is just URB 8. */
-	/* URB 43,45,47,49,52,54 is just URB 9. */
-	/* URB 50 is just URB 6/7. */
-	/* URB 55-131 is just URB 29-38. (wait unsuccessfully for 4695 (maybe 4751) ms)*/
-	/* URB 132,134 is just URB 6/7. */
-	/* URB 133 is just URB 29-38. */
-	/* URB 135 is just URB 8. */
-	/* URB 136 is just URB 9. */
-	/* URB 137 is just URB 11. */
-
-	/* Command Start Bulk Read. Data is u16 blockcount, u16 blocksize. */
-	/* Command Start Bulk Write. Data is u16 blockcount, u16 blocksize. */
-	/* Bulk transfer sizes for Command Start Bulk Read/Write are always
-	 * 512 bytes, rest is filled with 0xff.
-	 */
-
-	return 0;
-}
-#endif	
