@@ -682,10 +682,33 @@ int handle_partial_read(
     int (*read) (struct flashchip *flash, uint8_t *buf,
                  unsigned int start, unsigned int len),
     int write_to_file) {
+	int i, count = 0, erase_size_found = 0;
 
-	unsigned int start = 0;
-	unsigned int size = flash->total_size * 1024;
-	int i, count = 0;
+	/*
+	 * Find eraseable block size for read alignment.
+	 * FIXME: This assumes the smallest block erase size is useable
+	 * by erase_and_write_flash().
+	 */
+	required_erase_size = ~0;
+	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
+		struct block_eraser eraser = flash->block_erasers[i];
+		int j;
+
+		for (j = 0; j < NUM_ERASEREGIONS; j++) {
+			unsigned int size = eraser.eraseblocks[j].size;
+
+			if (size && (size < required_erase_size)) {
+				required_erase_size = size;
+				erase_size_found = 1;
+			}
+		}
+	}
+
+	/* likely an error in flashchips[] */
+	if (!erase_size_found) {
+		msg_cerr("%s: No usable erase size found.\n", __func__);
+		return -1;
+	}
 
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to read the complete image.
@@ -694,15 +717,32 @@ int handle_partial_read(
 		return 0;
 
 	for (i = 0; i < romimages; i++) {
-		int len;
+		unsigned int start, len, start_align, len_align;
 
 		if (!rom_entries[i].included)
 			continue;
 
-		/* read content from flash. */
-		len = rom_entries[i].end - rom_entries[i].start + 1;
-		if (read(flash, buf + rom_entries[i].start,
-		         rom_entries[i].start, len)) {
+		/* round down to nearest eraseable block boundary */
+		start_align = rom_entries[i].start % required_erase_size;
+		start = rom_entries[i].start - start_align;
+
+		/* round up to nearest eraseable block boundary */
+		len = rom_entries[i].end - start + 1;
+		len_align = len % required_erase_size;
+		if (len_align)
+			len = len + required_erase_size - len_align;
+
+		if (start_align || len_align) {
+			msg_gdbg("\n%s: Re-aligned partial read due to "
+				"easeable block size requirement:\n"
+				"\trom_entries[%d].start: 0x%06x, len: 0x%06x, "
+				"aligned start: 0x%06x, len: 0x%06x\n",
+				__func__, i, rom_entries[i].start,
+				rom_entries[i].end - rom_entries[i].start + 1,
+				start, len);
+		}
+
+		if (read(flash, buf + start, start, len)) {
 			msg_perr("flash partial read failed.");
 			return -1;
 		}

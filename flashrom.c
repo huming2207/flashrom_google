@@ -44,6 +44,8 @@ const char flashrom_version[] = FLASHROM_VERSION;
 char *chip_to_probe = NULL;
 int verbose = 0;
 
+unsigned int required_erase_size = 0;	/* see comment in flash.h */
+
 /* error handling stuff */
 enum error_action access_denied_action = error_ignore;
 
@@ -1470,6 +1472,13 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 	unsigned int start = 0;
 	unsigned int len;
 	struct block_eraser eraser = flash->block_erasers[erasefunction];
+
+	if (required_erase_size &&
+		(eraser.eraseblocks[i].size != required_erase_size)) {
+		msg_cdbg("%u does not meet erase alignment requirement\n",
+				eraser.eraseblocks[i].size);
+		return -1;
+	}
 
 	for (i = 0; i < NUM_ERASEREGIONS; i++) {
 		/* count==0 for all automatically initialized array

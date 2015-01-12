@@ -49,6 +49,20 @@ enum {
 	VERIFY_PARTIAL,
 };
 
+/*
+ * This is shared between handle_partial_read() and erase_and_write_flash().
+ * If a partial write is to be performed, the read function needs to guess what
+ * the eraseable block size is in case the region specified is not aligned. Then
+ * it can ensure any data within the same block but outside the specified region
+ * is read and later restored. The erase/write function will need to find a
+ * usable erase function with the same size.
+ *
+ * Some chips support multiple opcodes to erase a particular block size, so
+ * we'll leave that guesswork to erase_and_write_flash(). Any opcode is allowed
+ * so long as the alignment used during partial read and erase are the same.
+ */
+extern unsigned int required_erase_size;
+
 typedef unsigned long chipaddr;
 
 int register_shutdown(int (*function) (void *data), void *data);
