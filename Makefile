@@ -373,6 +373,13 @@ CONFIG_PRINT_WIKI ?= no
 # Support for reading a flashmap from a device tree in the image
 CONFIG_FDTMAP ?= no
 
+# Enable all features if CONFIG_EVERYTHING=yes is given
+ifeq ($(CONFIG_EVERYTHING), yes)
+$(foreach var, $(filter CONFIG_%, $(.VARIABLES)),\
+	$(if $(filter no, $($(var))),\
+		$(eval $(var)=yes)))
+endif
+
 # Bitbanging SPI infrastructure, default off unless needed.
 ifeq ($(CONFIG_RAYER_SPI), yes)
 override CONFIG_BITBANG_SPI = yes
