@@ -1746,7 +1746,7 @@ int selfcheck(void)
 	 * For 'flashchips' we check the first element to be non-null. In the
 	 * other cases there exist use cases where the first element can be
 	 * null. */
-	if (!flashchips || flashchips[0].vendor == NULL) {
+	if (flashchips[0].vendor == NULL) {
 		msg_gerr("Flashchips table miscompilation!\n");
 		ret = 1;
 	}
@@ -1754,24 +1754,6 @@ int selfcheck(void)
 		if (selfcheck_eraseblocks(flash))
 			ret = 1;
 
-#if CONFIG_INTERNAL == 1
-	if (!chipset_enables) {
-		msg_gerr("Chipset enables table does not exist!\n");
-		ret = 1;
-	}
-	if (!board_matches) {
-		msg_gerr("Board enables table does not exist!\n");
-		ret = 1;
-	}
-	if (!boards_known) {
-		msg_gerr("Known boards table does not exist!\n");
-		ret = 1;
-	}
-	if (!laptops_known) {
-		msg_gerr("Known laptops table does not exist!\n");
-		ret = 1;
-	}
-#endif
 	return ret;
 }
 
