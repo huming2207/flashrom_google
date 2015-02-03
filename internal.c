@@ -321,7 +321,7 @@ int internal_init(void)
 	}
 #endif
 
-#if defined(__arm__) && CONFIG_LINUX_SPI == 1
+#if defined(__arm__) || defined(__mips__) && CONFIG_LINUX_SPI == 1
 	/* On the ARM platform, we prefer /dev/spidev if it is supported.
 	 * That means, if user specifies
 	 *
