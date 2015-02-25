@@ -1489,6 +1489,32 @@ static struct generic_wp s25fs128s_wp = {
 	.sr1 = { .bp0_pos = 2, .bp_bits = 3, .srp_pos = 7 },
 };
 
+struct generic_range s25fl256s_tbprot_o_0_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0x1f80000, 512 * 1024} },	/* upper 64th */
+	{ 0x2, {0x1f00000, 1024 * 1024} },	/* upper 32nd */
+	{ 0x3, {0x1e00000, 2048 * 1024} },	/* upper 16th */
+	{ 0x4, {0x1c00000, 4096 * 1024} },	/* upper 8th */
+	{ 0x5, {0x1800000, 8192 * 1024} },	/* upper 4th */
+	{ 0x6, {0x1000000, 16384 * 1024} },	/* upper half */
+	{ 0x7, {0x000000, 32768 * 1024} },	/* all */
+};
+
+struct generic_range s25fl256s_tbprot_o_1_ranges[] = {
+	{ 0, {0, 0} },	/* none */
+	{ 0x1, {0x000000, 512 * 1024} },	/* lower 64th */
+	{ 0x2, {0x000000, 1024 * 1024} },	/* lower 32nd */
+	{ 0x3, {0x000000, 2048 * 1024} },	/* lower 16th */
+	{ 0x4, {0x000000, 4096 * 1024} },	/* lower 8th */
+	{ 0x5, {0x000000, 8192 * 1024} },	/* lower 4th */
+	{ 0x6, {0x000000, 16384 * 1024} },	/* lower half */
+	{ 0x7, {0x000000, 32768 * 1024} },	/* all */
+};
+
+static struct generic_wp s25fl256s_wp = {
+	.sr1 = { .bp0_pos = 2, .bp_bits = 3, .srp_pos = 7 },
+};
+
 /* Given a flash chip, this function returns its writeprotect info. */
 static int generic_range_table(const struct flashchip *flash,
                            struct generic_wp **wp,
@@ -1569,6 +1595,27 @@ static int generic_range_table(const struct flashchip *flash,
 			} else {
 				(*wp)->ranges = s25fs128s_tbprot_o_1_ranges;
 				*num_entries = ARRAY_SIZE(s25fs128s_tbprot_o_1_ranges);
+			}
+
+			break;
+		}
+		case SPANSION_S25FL256S_UL:
+		case SPANSION_S25FL256S_US: {
+			int tbprot_o = s25fs_tbprot_o(flash);
+
+			if (tbprot_o < 0) {
+				msg_cerr("%s(): Cannot determine top/bottom "
+					"protection status.\n", __func__);
+				return -1;
+			}
+
+			*wp = &s25fl256s_wp;
+			if (!tbprot_o) {
+				(*wp)->ranges = s25fl256s_tbprot_o_0_ranges;
+				*num_entries = ARRAY_SIZE(s25fl256s_tbprot_o_0_ranges);
+			} else {
+				(*wp)->ranges = s25fl256s_tbprot_o_1_ranges;
+				*num_entries = ARRAY_SIZE(s25fl256s_tbprot_o_1_ranges);
 			}
 
 			break;
