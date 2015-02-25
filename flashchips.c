@@ -6622,6 +6622,7 @@ const struct flashchip flashchips[] = {
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
 		.voltage	= {1700, 2000},
+		.wp		= &wp_generic,
 	},
 
 	{
@@ -6650,6 +6651,7 @@ const struct flashchip flashchips[] = {
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
 		.voltage	= {1700, 2000},
+		.wp		= &wp_generic,
 	},
 
 	{
