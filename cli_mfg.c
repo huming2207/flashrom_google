@@ -762,6 +762,11 @@ int main(int argc, char *argv[])
 			op = 'w';
 		else if (verify_it)
 			op = 'v';
+		else {
+			msg_gerr("Error: Unknown file operation\n");
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
 
 		if (!filename) {
 			if (!get_num_include_args()) {

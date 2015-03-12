@@ -256,7 +256,6 @@ int s25fl_block_erase(struct flashchip *flash,
 {
 	unsigned char status;
 	int result;
-	static int cr3nv_checked = 0;
 
 	struct spi_command erase_cmds[] = {
 		{

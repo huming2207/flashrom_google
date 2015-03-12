@@ -438,7 +438,6 @@ int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
 static int in_current_image(struct cros_ec_priv *priv,
 		unsigned int addr, unsigned int len)
 {
-	int ret;
 	enum ec_current_image image;
 	uint32_t region_offset;
 	uint32_t region_size;
@@ -833,7 +832,6 @@ int cros_ec_test(struct cros_ec_priv *priv)
 {
 	struct ec_params_hello request;
 	struct ec_response_hello response;
-	struct ec_response_proto_version proto;
 	int rc = 0;
 
 	/* Say hello to EC. */

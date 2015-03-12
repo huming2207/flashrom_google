@@ -51,7 +51,6 @@
 #define INITIAL_UDELAY 10     /* 10 us */
 #define MAXIMUM_UDELAY 10000  /* 10 ms */
 static int ec_timeout_usec = 1000000;
-static int lpc_cmd_args_supported;
 
 #define CROS_EC_LOCK_TIMEOUT_SECS 30  /* 30 secs */
 
@@ -446,9 +445,6 @@ static struct opaque_programmer cros_ec = {
 static int detect_ec(struct cros_ec_priv *priv) {
 	int i;
 	int byte = 0xff;
-	struct ec_params_hello request;
-	struct ec_response_hello response;
-	int rc = 0;
 	int old_timeout = ec_timeout_usec;
 	uint8_t x, y;
 

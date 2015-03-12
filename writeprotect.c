@@ -1676,7 +1676,7 @@ static int generic_status_to_range(const struct flashchip *flash,
 {
 	struct generic_wp *wp;
 	struct generic_range *r;
-	int num_entries, wp_en, i, status_found = 0;
+	int num_entries, i, status_found = 0;
 	uint8_t sr1_bp;
 
 	if (generic_range_table(flash, &wp, &num_entries))
@@ -1811,7 +1811,6 @@ static int generic_wp_status(const struct flashchip *flash)
 	unsigned int start, len;
 	int ret = 0;
 	struct generic_wp *wp;
-	struct generic_range *g;
 	int num_entries, wp_en;
 
 	if (generic_range_table(flash, &wp, &num_entries))
