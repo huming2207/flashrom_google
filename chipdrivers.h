@@ -25,7 +25,8 @@
 #ifndef __CHIPDRIVERS_H__
 #define __CHIPDRIVERS_H__ 1
 
-#include "flash.h"	/* for chipaddr and flashchip */
+#include "flash.h"		/* for chipaddr and flashchip */
+#include "writeprotect.h"	/* for generic_modifier_bits */
 
 /* spi.c, should probably be in spi_chip.c */
 int probe_spi_rdid(struct flashchip *flash);
@@ -142,8 +143,9 @@ int unlock_sst_fwhub(struct flashchip *flash);
 int probe_spi_big_spansion(struct flashchip *flash);
 int s25fl_block_erase(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
 
-/* s25fs.c */
-int s25fs_tbprot_o(const struct flashchip *flash);
+/* s25f.c */
+int s25f_get_modifier_bits(const struct flashchip *flash, struct generic_modifier_bits *m);
+int s25f_set_modifier_bits(const struct flashchip *flash, struct generic_modifier_bits *m);
 int s25fs_block_erase_d8(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
 
 /* w39.c */
