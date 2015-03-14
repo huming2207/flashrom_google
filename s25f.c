@@ -31,7 +31,7 @@
  * LIABILITY, ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE,
  * EVEN IF GOOGLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  *
- * s25fs.c - Helper functions for Spansion S25FL and S25FS SPI flash chips.
+ * s25f.c - Helper functions for Spansion S25FL and S25FS SPI flash chips.
  * Uses 24 bit addressing for the FS chips and 32 bit addressing for the FL
  * chips (which is required by the overlayed sector size devices).
  * TODO: Implement fancy hybrid sector architecture helpers.
@@ -41,10 +41,29 @@
 
 #include "chipdrivers.h"
 #include "spi.h"
+#include "writeprotect.h"
 
+/*
+ * RDAR and WRAR are supported on chips which have more than one set of status
+ * and control registers and take an address of the register to read/write.
+ * WRR, RDSR2, and RDCR are used on chips with a more limited set of control/
+ * status registers.
+ *
+ * WRR is somewhat peculiar. It shares the same opcode as JEDEC_WRSR, and if
+ * given one data byte (following the opcode) it acts the same way. If it's
+ * given two data bytes, the first data byte overwrites status register 1
+ * and the second data byte overwrites config register 1.
+ */
+#define CMD_WRR		0x01
+#define CMD_WRDI	0x04
+#define CMD_RDSR2	0x07	/* note: read SR1 with JEDEC RDSR opcode */
+#define CMD_RDCR	0x35
 #define CMD_RDAR	0x65
 #define CMD_WRAR	0x71
-/* FIXME: These lengths assume we're operating in legacy mode */
+
+/* TODO: For now, commands which use an address assume 24-bit addressing */
+#define CMD_WRR_LEN	3
+#define CMD_WRDI_LEN	1
 #define CMD_RDAR_LEN	4
 #define CMD_WRAR_LEN	5
 
@@ -52,10 +71,117 @@
 #define CMD_RST		0x99
 
 #define CR1NV_ADDR	0x000002
-#define CR1NV_TBPROT_O	(1 << 5)
+#define CR1_BPNV_O	(1 << 3)
+#define CR1_TBPROT_O	(1 << 5)
 #define CR3NV_ADDR	0x000004
 #define CR3NV_20H_NV	(1 << 3)
 
+/* See "Embedded Algorithm Performance Tables for additional timing specs. */
+#define T_W		145 * 1000	/* NV register write time (145ms) */
+#define T_RPH		35		/* Reset pulse hold time (35us) */
+#define S25FS_T_SE	145 * 1000	/* Sector Erase Time (145ms) */
+#define S25FL_T_SE	130 * 1000	/* Sector Erase Time (130ms) */
+
+static int s25f_legacy_software_reset(const struct flashchip *flash)
+{
+	int result;
+	struct spi_command cmds[] = {
+	{
+		.writecnt	= 1,
+		.writearr	= (const unsigned char[]){ CMD_RSTEN },
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= 1,
+		.writearr	= (const unsigned char[]){ 0xf0 },
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= 0,
+		.writearr	= NULL,
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}};
+
+	result = spi_send_multicommand(cmds);
+	if (result) {
+		msg_cerr("%s failed during command execution\n", __func__);
+		return result;
+	}
+
+	/* Allow time for reset command to execute. The datasheet specifies
+	 * Trph = 35us, double that to be safe. */
+	programmer_delay(T_RPH * 2);
+
+	return 0;
+}
+
+/* "Legacy software reset" is disabled by default on S25FS, use this instead. */
+static int s25fs_software_reset(struct flashchip *flash)
+{
+	int result;
+	struct spi_command cmds[] = {
+	{
+		.writecnt	= 1,
+		.writearr	= (const unsigned char[]){ CMD_RSTEN },
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= 1,
+		.writearr	= (const unsigned char[]){ CMD_RST },
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}, {
+		.writecnt	= 0,
+		.writearr	= NULL,
+		.readcnt	= 0,
+		.readarr	= NULL,
+	}};
+
+	result = spi_send_multicommand(cmds);
+	if (result) {
+		msg_cerr("%s failed during command execution\n", __func__);
+		return result;
+	}
+
+	/* Allow time for reset command to execute. Double tRPH to be safe. */
+	programmer_delay(T_RPH * 2);
+
+	return 0;
+}
+
+static int s25f_poll_status(const struct flashchip *flash)
+{
+	uint8_t tmp = spi_read_status_register();
+
+	while (tmp & JEDEC_RDSR_BIT_WIP) {
+		/*
+		 * The WIP bit on S25F chips remains set to 1 if erase or
+		 * programming errors occur, so we must check for those
+		 * errors here. If an error is encountered, do a software
+		 * reset to clear WIP and other volatile bits, otherwise
+		 * the chip will be unresponsive to further commands.
+		 */
+		if (tmp & JEDEC_RDSR_BIT_ERASE_ERR) {
+			msg_cerr("Erase error occurred\n");
+			s25f_legacy_software_reset(flash);
+			return -1;
+		}
+
+		if (tmp & (1 << 6)) {
+			msg_cerr("Programming error occurred\n");
+			s25f_legacy_software_reset(flash);
+			return -1;
+		}
+
+		programmer_delay(1000 * 10);
+		tmp = spi_read_status_register();
+	}
+
+	return 0;
+}
+
+/* "Read Any Register" instruction only supported on S25FS */
 static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 {
 	int result;
@@ -81,7 +207,24 @@ static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 	return cfg;
 }
 
-static int s25fs_write_cr(struct flashchip *flash, uint32_t addr, uint8_t data)
+static int s25f_read_cr1(const struct flashchip *flash)
+{
+	int result;
+	uint8_t cfg;
+	unsigned char read_cr_cmd[] = { CMD_RDCR };
+
+	result = spi_send_command(sizeof(read_cr_cmd), 1, read_cr_cmd, &cfg);
+	if (result) {
+		msg_cerr("%s failed during command execution\n", __func__);
+		return -1;
+	}
+
+	return cfg;
+}
+
+/* "Write Any Register" instruction only supported on S25FS */
+static int s25fs_write_cr(const struct flashchip *flash,
+				uint32_t addr, uint8_t data)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -115,26 +258,26 @@ static int s25fs_write_cr(struct flashchip *flash, uint32_t addr, uint8_t data)
 		return -1;
 	}
 
-	/* Poll WIP bit while command is in progress. The datasheet specifies
-	   Tw is typically 145ms, but can be up to 750ms. */
-	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(1000 * 10);
-
-	return 0;
+	programmer_delay(T_W);
+	return s25f_poll_status(flash);
 }
 
-static int s25fs_software_reset(struct flashchip *flash)
+static int s25f_write_cr1(const struct flashchip *flash, uint8_t data)
 {
 	int result;
 	struct spi_command cmds[] = {
 	{
-		.writecnt	= 1,
-		.writearr	= (const unsigned char[]){ CMD_RSTEN },
+		.writecnt	= JEDEC_WREN_OUTSIZE,
+		.writearr	= (const unsigned char[]){ JEDEC_WREN },
 		.readcnt	= 0,
 		.readarr	= NULL,
 	}, {
-		.writecnt	= 1,
-		.writearr	= (const unsigned char[]){ CMD_RST },
+		.writecnt	= CMD_WRR_LEN,
+		.writearr	= (const unsigned char[]){
+					CMD_WRR,
+					spi_read_status_register(),
+					data,
+				},
 		.readcnt	= 0,
 		.readarr	= NULL,
 	}, {
@@ -147,14 +290,11 @@ static int s25fs_software_reset(struct flashchip *flash)
 	result = spi_send_multicommand(cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution\n", __func__);
-		return result;
+		return -1;
 	}
 
-	/* Allow time for reset command to execute. The datasheet specifies
-	 * Trph = 35us, double that to be safe. */
-	programmer_delay(35 * 2);
-
-	return 0;
+	programmer_delay(T_W);
+	return s25f_poll_status(flash);
 }
 
 static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
@@ -170,16 +310,16 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 /* returns state of top/bottom block protection, or <0 to indicate error */
 int s25fs_tbprot_o(const struct flashchip *flash)
 {
-	int cr1nv = s25fs_read_cr(flash, CR1NV_ADDR);
+	int cr1 = s25f_read_cr1(flash);
 
-	if (cr1nv < 0)
+	if (cr1 < 0)
 		return -1;
 
 	/*
 	 * 1 = BP starts at bottom (low address)
 	 * 0 = BP start at top (high address)
 	 */
-	return cr1nv & CR1NV_TBPROT_O ? 1 : 0;
+	return cr1 & CR1_TBPROT_O ? 1 : 0;
 }
 
 int s25fs_block_erase_d8(struct flashchip *flash,
@@ -244,11 +384,8 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 		return result;
 	}
 
-	/* Wait until the Write-In-Progress bit is cleared. */
-	while (spi_read_status_register() & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(10 * 1000);
-	/* FIXME: Check the status register for errors. */
-	return 0;
+	programmer_delay(S25FS_T_SE);
+	return s25f_poll_status(flash);
 }
 
 int s25fl_block_erase(struct flashchip *flash,
@@ -256,7 +393,6 @@ int s25fl_block_erase(struct flashchip *flash,
 {
 	unsigned char status;
 	int result;
-	static int cr3nv_checked = 0;
 
 	struct spi_command erase_cmds[] = {
 		{
@@ -290,13 +426,8 @@ int s25fl_block_erase(struct flashchip *flash,
 		return result;
 	}
 
-	/* Wait until the Write-In-Progress bit is cleared. */
-	status = spi_read_status_register();
-	while (status & JEDEC_RDSR_BIT_WIP) {
-		programmer_delay(1000);
-		status = spi_read_status_register();
-	}
-	return (status & JEDEC_RDSR_BIT_ERASE_ERR) != 0;
+	programmer_delay(S25FL_T_SE);
+	return s25f_poll_status(flash);
 }
 
 
