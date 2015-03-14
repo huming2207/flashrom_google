@@ -72,4 +72,14 @@ int w25_status_to_range(const struct flashchip *flash,
                         unsigned int *start, unsigned int *len);
 enum wp_mode get_wp_mode(const char *mode_str);
 
+/*
+ * Generic write-protect stuff
+ */
+
+/* For now, use one struct for all modifier bits on all devices. We can get
+ * more specific to certain chips if needed later on. */
+struct generic_modifier_bits {
+		int tb;			/* value of top/bottom bit */
+};
+
 #endif				/* !__WRITEPROTECT_H__ */

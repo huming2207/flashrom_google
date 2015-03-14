@@ -308,7 +308,7 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 }
 
 /* returns state of top/bottom block protection, or <0 to indicate error */
-int s25fs_tbprot_o(const struct flashchip *flash)
+static int s25f_get_tbprot_o(const struct flashchip *flash)
 {
 	int cr1 = s25f_read_cr1(flash);
 
@@ -320,6 +320,58 @@ int s25fs_tbprot_o(const struct flashchip *flash)
 	 * 0 = BP start at top (high address)
 	 */
 	return cr1 & CR1_TBPROT_O ? 1 : 0;
+}
+
+/* fills modifier_bits struct, returns 0 to indicate success */
+int s25f_get_modifier_bits(const struct flashchip *flash,
+					struct generic_modifier_bits *m)
+{
+	int tmp;
+
+	memset(m, 0, sizeof(*m));
+
+	tmp = s25f_get_tbprot_o(flash);
+	if (tmp < 0)
+		return -1;
+	m->tb = tmp;
+
+	return 0;
+}
+
+int s25f_set_modifier_bits(const struct flashchip *flash,
+					struct generic_modifier_bits *m)
+{
+	int cr1, cr1_orig;
+
+	cr1 = cr1_orig = s25f_read_cr1(flash);
+	if (cr1 < 0)
+		return -1;
+
+	/*
+	 * Clear BPNV so that setting BP2-0 in status register gets
+	 * written to non-volatile memory.
+	 *
+	 * For TBPROT:
+	 * 1 = BP starts at bottom (low address)
+	 * 0 = BP start at top (high address)
+	 */
+	cr1 &= ~(CR1_BPNV_O | CR1_TBPROT_O);
+	cr1 |= m->tb ? CR1_TBPROT_O : 0;
+
+	if (cr1 != cr1_orig) {
+		msg_cdbg("%s: setting cr1 bits to 0x%02x\n", __func__, cr1);
+		if (s25f_write_cr1(flash, cr1) < 0)
+			return -1;
+		if (s25f_read_cr1(flash) != cr1) {
+			msg_cerr("%s: failed to set CR1 value\n", __func__);
+			return -1;
+		}
+	} else {
+		msg_cdbg("%s: cr1 bits already match desired value: "
+				"0x%02x\n", __func__, cr1);
+	}
+
+	return 0;
 }
 
 int s25fs_block_erase_d8(struct flashchip *flash,

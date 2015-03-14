@@ -59,6 +59,7 @@ struct status_register_layout {
 };
 
 struct generic_range {
+	struct generic_modifier_bits m;
 	unsigned int bp;		/* block protect bitfield */
 	struct wp_range range;
 };
@@ -66,6 +67,17 @@ struct generic_range {
 struct generic_wp {
 	struct status_register_layout sr1;	/* status register 1 */
 	struct generic_range *ranges;
+
+	/*
+	 * Some chips store modifier bits in one or more special control
+	 * registers instead of the status register like many older SPI NOR
+	 * flash chips did. get_modifier_bits() and set_modifier_bits() will do
+	 * any chip-specific operations necessary to get/set these bit values.
+	 */
+	int (*get_modifier_bits)(const struct flashchip *flash,
+			struct generic_modifier_bits *m);
+	int (*set_modifier_bits)(const struct flashchip *flash,
+			struct generic_modifier_bits *m);
 };
 
 /*
@@ -1284,86 +1296,86 @@ struct wp wp_w25q = {
 
 struct generic_range gd25q32_cmp0_ranges[] = {
 	/* none, bp4 and bp3 => don't care */
-	{ 0x00, {0, 0} },
-	{ 0x08, {0, 0} },
-	{ 0x10, {0, 0} },
-	{ 0x18, {0, 0} },
+	{ { }, 0x00, {0, 0} },
+	{ { }, 0x08, {0, 0} },
+	{ { }, 0x10, {0, 0} },
+	{ { }, 0x18, {0, 0} },
 
-	{ 0x01, {0x3f0000, 64 * 1024} },
-	{ 0x02, {0x3e0000, 128 * 1024} },
-	{ 0x03, {0x3c0000, 256 * 1024} },
-	{ 0x04, {0x380000, 512 * 1024} },
-	{ 0x05, {0x300000, 1024 * 1024} },
-	{ 0x06, {0x200000, 2048 * 1024} },
+	{ { }, 0x01, {0x3f0000, 64 * 1024} },
+	{ { }, 0x02, {0x3e0000, 128 * 1024} },
+	{ { }, 0x03, {0x3c0000, 256 * 1024} },
+	{ { }, 0x04, {0x380000, 512 * 1024} },
+	{ { }, 0x05, {0x300000, 1024 * 1024} },
+	{ { }, 0x06, {0x200000, 2048 * 1024} },
 
-	{ 0x09, {0x000000, 64 * 1024} },
-	{ 0x0a, {0x000000, 128 * 1024} },
-	{ 0x0b, {0x000000, 256 * 1024} },
-	{ 0x0c, {0x000000, 512 * 1024} },
-	{ 0x0d, {0x000000, 1024 * 1024} },
-	{ 0x0e, {0x000000, 2048 * 1024} },
+	{ { }, 0x09, {0x000000, 64 * 1024} },
+	{ { }, 0x0a, {0x000000, 128 * 1024} },
+	{ { }, 0x0b, {0x000000, 256 * 1024} },
+	{ { }, 0x0c, {0x000000, 512 * 1024} },
+	{ { }, 0x0d, {0x000000, 1024 * 1024} },
+	{ { }, 0x0e, {0x000000, 2048 * 1024} },
 
 	/* all, bp4 and bp3 => don't care */
-	{ 0x07, {0x000000, 4096 * 1024} },
-	{ 0x0f, {0x000000, 4096 * 1024} },
-	{ 0x17, {0x000000, 4096 * 1024} },
-	{ 0x1f, {0x000000, 4096 * 1024} },
+	{ { }, 0x07, {0x000000, 4096 * 1024} },
+	{ { }, 0x0f, {0x000000, 4096 * 1024} },
+	{ { }, 0x17, {0x000000, 4096 * 1024} },
+	{ { }, 0x1f, {0x000000, 4096 * 1024} },
 
-	{ 0x11, {0x3ff000, 4 * 1024} },
-	{ 0x12, {0x3fe000, 8 * 1024} },
-	{ 0x13, {0x3fc000, 16 * 1024} },
-	{ 0x14, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
-	{ 0x15, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
-	{ 0x16, {0x3f8000, 32 * 1024} },
+	{ { }, 0x11, {0x3ff000, 4 * 1024} },
+	{ { }, 0x12, {0x3fe000, 8 * 1024} },
+	{ { }, 0x13, {0x3fc000, 16 * 1024} },
+	{ { }, 0x14, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x15, {0x3f8000, 32 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x16, {0x3f8000, 32 * 1024} },
 
-	{ 0x19, {0x000000, 4 * 1024} },
-	{ 0x1a, {0x000000, 8 * 1024} },
-	{ 0x1b, {0x000000, 16 * 1024} },
-	{ 0x1c, {0x000000, 32 * 1024} },	/* bp0 => don't care */
-	{ 0x1d, {0x000000, 32 * 1024} },	/* bp0 => don't care */
-	{ 0x1e, {0x000000, 32 * 1024} },
+	{ { }, 0x19, {0x000000, 4 * 1024} },
+	{ { }, 0x1a, {0x000000, 8 * 1024} },
+	{ { }, 0x1b, {0x000000, 16 * 1024} },
+	{ { }, 0x1c, {0x000000, 32 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x1d, {0x000000, 32 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x1e, {0x000000, 32 * 1024} },
 };
 
 struct generic_range gd25q32_cmp1_ranges[] = {
 	/* none, bp4 and bp3 => don't care */
-	{ 0x00, {0, 0} },
-	{ 0x08, {0, 0} },
-	{ 0x10, {0, 0} },
-	{ 0x18, {0, 0} },
+	{ { }, 0x00, {0, 0} },
+	{ { }, 0x08, {0, 0} },
+	{ { }, 0x10, {0, 0} },
+	{ { }, 0x18, {0, 0} },
 
-	{ 0x01, {0x000000, 4032 * 1024} },
-	{ 0x02, {0x000000, 3968 * 1024} },
-	{ 0x03, {0x000000, 3840 * 1024} },
-	{ 0x04, {0x000000, 3584 * 1024} },
-	{ 0x05, {0x000000, 3 * 1024 * 1024} },
-	{ 0x06, {0x000000, 2 * 1024 * 1024} },
+	{ { }, 0x01, {0x000000, 4032 * 1024} },
+	{ { }, 0x02, {0x000000, 3968 * 1024} },
+	{ { }, 0x03, {0x000000, 3840 * 1024} },
+	{ { }, 0x04, {0x000000, 3584 * 1024} },
+	{ { }, 0x05, {0x000000, 3 * 1024 * 1024} },
+	{ { }, 0x06, {0x000000, 2 * 1024 * 1024} },
 
-	{ 0x09, {0x010000, 4032 * 1024} },
-	{ 0x0a, {0x020000, 3968 * 1024} },
-	{ 0x0b, {0x040000, 3840 * 1024} },
-	{ 0x0c, {0x080000, 3584 * 1024} },
-	{ 0x0d, {0x100000, 3 * 1024 * 1024} },
-	{ 0x0e, {0x200000, 2 * 1024 * 1024} },
+	{ { }, 0x09, {0x010000, 4032 * 1024} },
+	{ { }, 0x0a, {0x020000, 3968 * 1024} },
+	{ { }, 0x0b, {0x040000, 3840 * 1024} },
+	{ { }, 0x0c, {0x080000, 3584 * 1024} },
+	{ { }, 0x0d, {0x100000, 3 * 1024 * 1024} },
+	{ { }, 0x0e, {0x200000, 2 * 1024 * 1024} },
 
 	/* all, bp4 and bp3 => don't care */
-	{ 0x07, {0x000000, 4096 * 1024} },
-	{ 0x0f, {0x000000, 4096 * 1024} },
-	{ 0x17, {0x000000, 4096 * 1024} },
-	{ 0x1f, {0x000000, 4096 * 1024} },
+	{ { }, 0x07, {0x000000, 4096 * 1024} },
+	{ { }, 0x0f, {0x000000, 4096 * 1024} },
+	{ { }, 0x17, {0x000000, 4096 * 1024} },
+	{ { }, 0x1f, {0x000000, 4096 * 1024} },
 
-	{ 0x11, {0x000000, 4092 * 1024} },
-	{ 0x12, {0x000000, 4088 * 1024} },
-	{ 0x13, {0x000000, 4080 * 1024} },
-	{ 0x14, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
-	{ 0x15, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
-	{ 0x16, {0x000000, 4064 * 1024} },
+	{ { }, 0x11, {0x000000, 4092 * 1024} },
+	{ { }, 0x12, {0x000000, 4088 * 1024} },
+	{ { }, 0x13, {0x000000, 4080 * 1024} },
+	{ { }, 0x14, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x15, {0x000000, 4064 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x16, {0x000000, 4064 * 1024} },
 
-	{ 0x19, {0x001000, 4092 * 1024} },
-	{ 0x1a, {0x002000, 4088 * 1024} },
-	{ 0x1b, {0x040000, 4080 * 1024} },
-	{ 0x1c, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
-	{ 0x1d, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
-	{ 0x1e, {0x080000, 4064 * 1024} },
+	{ { }, 0x19, {0x001000, 4092 * 1024} },
+	{ { }, 0x1a, {0x002000, 4088 * 1024} },
+	{ { }, 0x1b, {0x040000, 4080 * 1024} },
+	{ { }, 0x1c, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x1d, {0x080000, 4064 * 1024} },	/* bp0 => don't care */
+	{ { }, 0x1e, {0x080000, 4064 * 1024} },
 };
 
 static struct generic_wp gd25q32_wp = {
@@ -1396,23 +1408,23 @@ static struct w25q_range mx25l6405d_ranges[] = {
 
 /* FIXME: MX25L6406 has same ID as MX25L6405D */
 struct generic_range mx25l6406e_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
-	{ 0x2, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
-	{ 0x3, {0x7a0000, 64 * 8 * 1024} },	/* blocks 120-127 */
-	{ 0x4, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
-	{ 0x5, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
-	{ 0x6, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
+	{ { }, 0, {0, 0} },	/* none */
+	{ { }, 0x1, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
+	{ { }, 0x2, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
+	{ { }, 0x3, {0x7a0000, 64 * 8 * 1024} },	/* blocks 120-127 */
+	{ { }, 0x4, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
+	{ { }, 0x5, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
+	{ { }, 0x6, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
 
-	{ 0x7, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0x9, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
-	{ 0xa, {0x000000, 64 * 96 * 1024} },	/* blocks 0-95 */
-	{ 0xb, {0x000000, 64 * 112 * 1024} },	/* blocks 0-111 */
-	{ 0xc, {0x000000, 64 * 120 * 1024} },	/* blocks 0-119 */
-	{ 0xd, {0x000000, 64 * 124 * 1024} },	/* blocks 0-123 */
-	{ 0xe, {0x000000, 64 * 126 * 1024} },	/* blocks 0-125 */
-	{ 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x7, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x9, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
+	{ { }, 0xa, {0x000000, 64 * 96 * 1024} },	/* blocks 0-95 */
+	{ { }, 0xb, {0x000000, 64 * 112 * 1024} },	/* blocks 0-111 */
+	{ { }, 0xc, {0x000000, 64 * 120 * 1024} },	/* blocks 0-119 */
+	{ { }, 0xd, {0x000000, 64 * 124 * 1024} },	/* blocks 0-123 */
+	{ { }, 0xe, {0x000000, 64 * 126 * 1024} },	/* blocks 0-125 */
+	{ { }, 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
 };
 
 static struct generic_wp mx25l6406e_wp = {
@@ -1421,98 +1433,99 @@ static struct generic_wp mx25l6406e_wp = {
 };
 
 struct generic_range mx25l6495f_tb0_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x7f0000, 64 * 1 * 1024} },	/* block 127 */
-	{ 0x2, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
-	{ 0x3, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
+	{ { }, 0, {0, 0} },	/* none */
+	{ { }, 0x1, {0x7f0000, 64 * 1 * 1024} },	/* block 127 */
+	{ { }, 0x2, {0x7e0000, 64 * 2 * 1024} },	/* blocks 126-127 */
+	{ { }, 0x3, {0x7c0000, 64 * 4 * 1024} },	/* blocks 124-127 */
 
-	{ 0x4, {0x780000, 64 * 8 * 1024} },	/* blocks 120-127 */
-	{ 0x5, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
-	{ 0x6, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
-	{ 0x7, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
-	{ 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x4, {0x780000, 64 * 8 * 1024} },	/* blocks 120-127 */
+	{ { }, 0x5, {0x700000, 64 * 16 * 1024} },	/* blocks 112-127 */
+	{ { }, 0x6, {0x600000, 64 * 32 * 1024} },	/* blocks 96-127 */
+	{ { }, 0x7, {0x400000, 64 * 64 * 1024} },	/* blocks 64-127 */
+	{ { }, 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
 };
 
 struct generic_range mx25l6495f_tb1_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x000000, 64 * 1 * 1024} },	/* block 0 */
-	{ 0x2, {0x000000, 64 * 2 * 1024} },	/* blocks 0-1 */
-	{ 0x3, {0x000000, 64 * 4 * 1024} },	/* blocks 0-3 */
-	{ 0x4, {0x000000, 64 * 8 * 1024} },	/* blocks 0-7 */
-	{ 0x5, {0x000000, 64 * 16 * 1024} },	/* blocks 0-15 */
-	{ 0x6, {0x000000, 64 * 32 * 1024} },	/* blocks 0-31 */
-	{ 0x7, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
-	{ 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
-	{ 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0, {0, 0} },	/* none */
+	{ { }, 0x1, {0x000000, 64 * 1 * 1024} },	/* block 0 */
+	{ { }, 0x2, {0x000000, 64 * 2 * 1024} },	/* blocks 0-1 */
+	{ { }, 0x3, {0x000000, 64 * 4 * 1024} },	/* blocks 0-3 */
+	{ { }, 0x4, {0x000000, 64 * 8 * 1024} },	/* blocks 0-7 */
+	{ { }, 0x5, {0x000000, 64 * 16 * 1024} },	/* blocks 0-15 */
+	{ { }, 0x6, {0x000000, 64 * 32 * 1024} },	/* blocks 0-31 */
+	{ { }, 0x7, {0x000000, 64 * 64 * 1024} },	/* blocks 0-63 */
+	{ { }, 0x8, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0x9, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xa, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xb, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xc, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xd, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xe, {0x000000, 64 * 128 * 1024} },	/* all */
+	{ { }, 0xf, {0x000000, 64 * 128 * 1024} },	/* all */
 };
 
 static struct generic_wp mx25l6495f_wp = {
 	.sr1 = { .bp0_pos = 2, .bp_bits = 4, .srp_pos = 7 },
 };
 
-struct generic_range s25fs128s_tbprot_o_0_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0xfc0000, 256 * 1024} },	/* upper 64th */
-	{ 0x2, {0xf80000, 512 * 1024} },	/* upper 32nd */
-	{ 0x3, {0xf00000, 1024 * 1024} },	/* upper 16th */
-	{ 0x4, {0xe00000, 2048 * 1024} },	/* upper 8th */
-	{ 0x5, {0xc00000, 4096 * 1024} },	/* upper 4th */
-	{ 0x6, {0x800000, 8192 * 1024} },	/* upper half */
-	{ 0x7, {0x000000, 16384 * 1024} },	/* all */
-};
+struct generic_range s25fs128s_ranges[] = {
+	{ { .tb = 1 }, 0, {0, 0} },	/* none */
+	{ { .tb = 1 }, 0x1, {0x000000, 256 * 1024} },	/* lower 64th */
+	{ { .tb = 1 }, 0x2, {0x000000, 512 * 1024} },	/* lower 32nd */
+	{ { .tb = 1 }, 0x3, {0x000000, 1024 * 1024} },	/* lower 16th */
+	{ { .tb = 1 }, 0x4, {0x000000, 2048 * 1024} },	/* lower 8th */
+	{ { .tb = 1 }, 0x5, {0x000000, 4096 * 1024} },	/* lower 4th */
+	{ { .tb = 1 }, 0x6, {0x000000, 8192 * 1024} },	/* lower half */
+	{ { .tb = 1 }, 0x7, {0x000000, 16384 * 1024} },	/* all */
 
-struct generic_range s25fs128s_tbprot_o_1_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x000000, 256 * 1024} },	/* lower 64th */
-	{ 0x2, {0x000000, 512 * 1024} },	/* lower 32nd */
-	{ 0x3, {0x000000, 1024 * 1024} },	/* lower 16th */
-	{ 0x4, {0x000000, 2048 * 1024} },	/* lower 8th */
-	{ 0x5, {0x000000, 4096 * 1024} },	/* lower 4th */
-	{ 0x6, {0x000000, 8192 * 1024} },	/* lower half */
-	{ 0x7, {0x000000, 16384 * 1024} },	/* all */
+	{ { .tb = 0 }, 0, {0, 0} },	/* none */
+	{ { .tb = 0 }, 0x1, {0xfc0000, 256 * 1024} },	/* upper 64th */
+	{ { .tb = 0 }, 0x2, {0xf80000, 512 * 1024} },	/* upper 32nd */
+	{ { .tb = 0 }, 0x3, {0xf00000, 1024 * 1024} },	/* upper 16th */
+	{ { .tb = 0 }, 0x4, {0xe00000, 2048 * 1024} },	/* upper 8th */
+	{ { .tb = 0 }, 0x5, {0xc00000, 4096 * 1024} },	/* upper 4th */
+	{ { .tb = 0 }, 0x6, {0x800000, 8192 * 1024} },	/* upper half */
+	{ { .tb = 0 }, 0x7, {0x000000, 16384 * 1024} },	/* all */
 };
 
 static struct generic_wp s25fs128s_wp = {
 	.sr1 = { .bp0_pos = 2, .bp_bits = 3, .srp_pos = 7 },
+	.get_modifier_bits = s25f_get_modifier_bits,
+	.set_modifier_bits = s25f_set_modifier_bits,
 };
 
-struct generic_range s25fl256s_tbprot_o_0_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x1f80000, 512 * 1024} },	/* upper 64th */
-	{ 0x2, {0x1f00000, 1024 * 1024} },	/* upper 32nd */
-	{ 0x3, {0x1e00000, 2048 * 1024} },	/* upper 16th */
-	{ 0x4, {0x1c00000, 4096 * 1024} },	/* upper 8th */
-	{ 0x5, {0x1800000, 8192 * 1024} },	/* upper 4th */
-	{ 0x6, {0x1000000, 16384 * 1024} },	/* upper half */
-	{ 0x7, {0x000000, 32768 * 1024} },	/* all */
-};
 
-struct generic_range s25fl256s_tbprot_o_1_ranges[] = {
-	{ 0, {0, 0} },	/* none */
-	{ 0x1, {0x000000, 512 * 1024} },	/* lower 64th */
-	{ 0x2, {0x000000, 1024 * 1024} },	/* lower 32nd */
-	{ 0x3, {0x000000, 2048 * 1024} },	/* lower 16th */
-	{ 0x4, {0x000000, 4096 * 1024} },	/* lower 8th */
-	{ 0x5, {0x000000, 8192 * 1024} },	/* lower 4th */
-	{ 0x6, {0x000000, 16384 * 1024} },	/* lower half */
-	{ 0x7, {0x000000, 32768 * 1024} },	/* all */
+struct generic_range s25fl256s_ranges[] = {
+	{ { .tb = 1 }, 0, {0, 0} },	/* none */
+	{ { .tb = 1 }, 0x1, {0x000000, 512 * 1024} },		/* lower 64th */
+	{ { .tb = 1 }, 0x2, {0x000000, 1024 * 1024} },		/* lower 32nd */
+	{ { .tb = 1 }, 0x3, {0x000000, 2048 * 1024} },		/* lower 16th */
+	{ { .tb = 1 }, 0x4, {0x000000, 4096 * 1024} },		/* lower 8th */
+	{ { .tb = 1 }, 0x5, {0x000000, 8192 * 1024} },		/* lower 4th */
+	{ { .tb = 1 }, 0x6, {0x000000, 16384 * 1024} },		/* lower half */
+	{ { .tb = 1 }, 0x7, {0x000000, 32768 * 1024} },		/* all */
+
+	{ { .tb = 0 }, 0, {0, 0} },	/* none */
+	{ { .tb = 0 }, 0x1, {0x1f80000, 512 * 1024} },		/* upper 64th */
+	{ { .tb = 0 }, 0x2, {0x1f00000, 1024 * 1024} },		/* upper 32nd */
+	{ { .tb = 0 }, 0x3, {0x1e00000, 2048 * 1024} },		/* upper 16th */
+	{ { .tb = 0 }, 0x4, {0x1c00000, 4096 * 1024} },		/* upper 8th */
+	{ { .tb = 0 }, 0x5, {0x1800000, 8192 * 1024} },		/* upper 4th */
+	{ { .tb = 0 }, 0x6, {0x1000000, 16384 * 1024} },	/* upper half */
+	{ { .tb = 0 }, 0x7, {0x000000, 32768 * 1024} },		/* all */
 };
 
 static struct generic_wp s25fl256s_wp = {
 	.sr1 = { .bp0_pos = 2, .bp_bits = 3, .srp_pos = 7 },
+	.get_modifier_bits = s25f_get_modifier_bits,
+	.set_modifier_bits = s25f_set_modifier_bits,
 };
 
 /* Given a flash chip, this function returns its writeprotect info. */
@@ -1580,44 +1593,16 @@ static int generic_range_table(const struct flashchip *flash,
 		switch (flash->model_id) {
 		case SPANSION_S25FS128S_L:
 		case SPANSION_S25FS128S_S: {
-			int tbprot_o = s25fs_tbprot_o(flash);
-
-			if (tbprot_o < 0) {
-				msg_cerr("%s(): Cannot determine top/bottom "
-					"protection status.\n", __func__);
-				return -1;
-			}
-
 			*wp = &s25fs128s_wp;
-			if (!tbprot_o) {
-				(*wp)->ranges = s25fs128s_tbprot_o_0_ranges;
-				*num_entries = ARRAY_SIZE(s25fs128s_tbprot_o_0_ranges);
-			} else {
-				(*wp)->ranges = s25fs128s_tbprot_o_1_ranges;
-				*num_entries = ARRAY_SIZE(s25fs128s_tbprot_o_1_ranges);
-			}
-
+			(*wp)->ranges = s25fs128s_ranges;
+			*num_entries = ARRAY_SIZE(s25fs128s_ranges);
 			break;
 		}
 		case SPANSION_S25FL256S_UL:
 		case SPANSION_S25FL256S_US: {
-			int tbprot_o = s25fs_tbprot_o(flash);
-
-			if (tbprot_o < 0) {
-				msg_cerr("%s(): Cannot determine top/bottom "
-					"protection status.\n", __func__);
-				return -1;
-			}
-
 			*wp = &s25fl256s_wp;
-			if (!tbprot_o) {
-				(*wp)->ranges = s25fl256s_tbprot_o_0_ranges;
-				*num_entries = ARRAY_SIZE(s25fl256s_tbprot_o_0_ranges);
-			} else {
-				(*wp)->ranges = s25fl256s_tbprot_o_1_ranges;
-				*num_entries = ARRAY_SIZE(s25fl256s_tbprot_o_1_ranges);
-			}
-
+			(*wp)->ranges = s25fl256s_ranges;
+			*num_entries = ARRAY_SIZE(s25fl256s_ranges);
 			break;
 		}
 		default:
@@ -1659,6 +1644,15 @@ static int generic_range_to_status(const struct flashchip *flash,
 		if ((start == r->range.start) && (len == r->range.len)) {
 			*status &= ~(bp_mask);
 			*status |= r->bp << (wp->sr1.bp0_pos);
+
+			if (wp->set_modifier_bits) {
+				if (wp->set_modifier_bits(flash, &r->m) < 0) {
+					msg_cerr("error setting modifier "
+						"bits for range.\n");
+					return -1;
+				}
+			}
+
 			range_found = 1;
 			break;
 		}
@@ -1678,13 +1672,24 @@ static int generic_status_to_range(const struct flashchip *flash,
 	struct generic_range *r;
 	int num_entries, i, status_found = 0;
 	uint8_t sr1_bp;
+	struct generic_modifier_bits m;
 
 	if (generic_range_table(flash, &wp, &num_entries))
 		return -1;
 
+	/* modifier bits may be compared more than once, so get them here */
+	if (wp->get_modifier_bits) {
+		if (wp->get_modifier_bits(flash, &m) < 0)
+			return -1;
+	}
+
 	sr1_bp = (sr1 >> wp->sr1.bp0_pos) & ((1 << wp->sr1.bp_bits) - 1);
 
 	for (i = 0, r = &wp->ranges[0]; i < num_entries; i++, r++) {
+		if (wp->get_modifier_bits) {
+			if (memcmp(&m, &r->m, sizeof(m)))
+				continue;
+		}
 		msg_cspew("comparing  0x%02x 0x%02x\n", sr1_bp, r->bp);
 		if (sr1_bp == r->bp) {
 			*start = r->range.start;
