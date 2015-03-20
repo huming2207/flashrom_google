@@ -5844,6 +5844,58 @@ const struct flashchip flashchips[] = {
 	},
 
 	{
+		.vendor		= "Numonyx",
+		/* ..3E = 3V, uniform 64KB/4KB blocks/sectors */
+		.name		= "N25Q256..3E",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= ST_ID,
+		.model_id	= ST_N25Q256__3E,
+//		.total_size	= 32768,
+		/* FIXME(dhendrix): support 32-bit addressing */
+		.total_size	= 32768/2,
+		.page_size	= 256,
+		/* supports SFDP */
+		/* OTP: 64B total; read 0x4B, write 0x42 */
+		/* FIXME: add FEATURE_OTP when we sync w/ upstream */
+		.feature_bits	= FEATURE_WRSR_WREN,
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+#if 0
+			/* FIXME(dhendrix): support 32-bit addressing */
+			{
+				.eraseblocks = { {4 * 1024, 8192 } },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {64 * 1024, 512} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {32 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+#endif
+			{
+				.eraseblocks = { {4 * 1024, 8192/2 } },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {64 * 1024, 512/2 } },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {32/2 * 1024 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {2700, 3600},
+		/* FIXME(dhendrix): write-protect support */
+//		.wp		= &wp_w25,
+	},
+
+	{
 		.vendor		= "PMC",
 		.name		= "Pm25LV010",
 		.bustype	= BUS_SPI,
