@@ -62,6 +62,11 @@
 #define GOOGLE_RAIDEN_ENDPOINT	3
 #define GOOGLE_RAIDEN_CONFIG	1
 
+enum raiden_debug_spi_request {
+	RAIDEN_DEBUG_SPI_REQ_ENABLE  = 0x0000,
+	RAIDEN_DEBUG_SPI_REQ_DISABLE = 0x0001,
+};
+
 #define PACKET_HEADER_SIZE	2
 #define MAX_PACKET_SIZE		64
 
@@ -84,9 +89,10 @@
 		}							\
 	})
 
-static libusb_context       *context = NULL;
-static libusb_device_handle *device  = NULL;
-static uint8_t              endpoint = GOOGLE_RAIDEN_ENDPOINT;
+static libusb_context       *context  = NULL;
+static libusb_device_handle *device   = NULL;
+static uint8_t              endpoint  = GOOGLE_RAIDEN_ENDPOINT;
+static int                  interface = GOOGLE_RAIDEN_INTERFACE;
 
 static int send_command(unsigned int write_count,
 			unsigned int read_count,
@@ -193,18 +199,38 @@ static long int get_parameter(char const * name, long int default_value)
 	return value;
 }
 
+static int shutdown(void * data)
+{
+	CHECK(libusb_control_transfer(device,
+				      LIBUSB_ENDPOINT_OUT |
+				      LIBUSB_REQUEST_TYPE_VENDOR |
+				      LIBUSB_RECIPIENT_INTERFACE,
+				      RAIDEN_DEBUG_SPI_REQ_DISABLE,
+				      0,
+				      interface,
+				      NULL,
+				      0,
+				      TRANSFER_TIMEOUT_MS),
+		"Raiden: Failed to disable SPI bridge\n");
+
+	libusb_close(device);
+	libusb_exit(NULL);
+
+	return 0;
+}
+
 int raiden_debug_spi_init(void)
 {
-	uint16_t vid       = get_parameter("vid",       GOOGLE_VID);
-	uint16_t pid       = get_parameter("pid",       GOOGLE_RAIDEN_PID);
-	int      interface = get_parameter("interface", GOOGLE_RAIDEN_INTERFACE);
-	int      config    = get_parameter("config",    GOOGLE_RAIDEN_CONFIG);
+	uint16_t vid    = get_parameter("vid",    GOOGLE_VID);
+	uint16_t pid    = get_parameter("pid",    GOOGLE_RAIDEN_PID);
+	int      config = get_parameter("config", GOOGLE_RAIDEN_CONFIG);
 	int      current_config;
 
 	CHECK(libusb_init(&context), "Raiden: libusb_init failed\n");
 
-	endpoint = get_parameter("endpoint", GOOGLE_RAIDEN_ENDPOINT);
-	device   = libusb_open_device_with_vid_pid(context, vid, pid);
+	interface = get_parameter("interface", GOOGLE_RAIDEN_INTERFACE);
+	endpoint  = get_parameter("endpoint",  GOOGLE_RAIDEN_ENDPOINT);
+	device    = libusb_open_device_with_vid_pid(context, vid, pid);
 
 	if (device == NULL) {
 		msg_perr("Unable to find device 0x%04x:0x%04x\n", vid, pid);
@@ -227,7 +253,20 @@ int raiden_debug_spi_init(void)
 	      "Raiden: Could not claim device interface %d\n",
 	      interface);
 
+	CHECK(libusb_control_transfer(device,
+				      LIBUSB_ENDPOINT_OUT |
+				      LIBUSB_REQUEST_TYPE_VENDOR |
+				      LIBUSB_RECIPIENT_INTERFACE,
+				      RAIDEN_DEBUG_SPI_REQ_ENABLE,
+				      0,
+				      interface,
+				      NULL,
+				      0,
+				      TRANSFER_TIMEOUT_MS),
+		"Raiden: Failed to enable SPI bridge\n");
+
 	register_spi_programmer(&spi_programmer_raiden_debug);
+	register_shutdown(shutdown, NULL);
 
 	return 0;
 }
