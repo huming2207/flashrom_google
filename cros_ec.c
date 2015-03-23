@@ -68,6 +68,9 @@ struct wp_data {
  */
 #define SOFTWARE_SYNC_ENABLED
 
+/* For region larger use async version for FLASH_ERASE */
+#define FLASH_SMALL_REGION_THRESHOLD (16 * 1024)
+
 /* 1 if we want the flashrom to call erase_and_write_flash() again. */
 static int need_2nd_pass = 0;
 
@@ -103,9 +106,7 @@ static const char *ec_type[] = {
 	[4] = "tp",
 };
 
-/* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
- * the number of regions */
-static struct ec_response_flash_region_info regions[EC_FLASH_REGION_WP_RO + 1];
+static struct ec_response_flash_region_info regions[EC_FLASH_REGION_COUNT];
 
 /*
  * Delay after reboot before EC can respond to host command.
@@ -262,43 +263,6 @@ static int ec_cmd_version_supported(int cmd, int ver)
 	return (mask & EC_VER_MASK(ver)) ? 1 : 0;
 }
 
-/* returns 0 if successful or <0 to indicate error */
-static int set_ideal_write_size(void)
-{
-	int cmd_version, ret;
-
-	cmd_version = ec_cmd_version_supported(EC_CMD_FLASH_WRITE,
-						EC_VER_FLASH_WRITE);
-	if (cmd_version < 0) {
-		msg_perr("Cannot determine write command version\n");
-		return cmd_version;
-	} else if (cmd_version == 0) {
-		struct ec_response_flash_info info;
-
-		ret = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
-				cmd_version, NULL, 0, &info, sizeof(info));
-		if (ret < 0) {
-			msg_perr("%s(): Cannot get flash info.\n", __func__);
-			return ret;
-		}
-
-		cros_ec_priv->ideal_write_size = EC_FLASH_WRITE_VER0_SIZE;
-	} else {
-		struct ec_response_flash_info_1 info;
-
-		ret = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
-				cmd_version, NULL, 0, &info, sizeof(info));
-		if (ret < 0) {
-			msg_perr("%s(): Cannot get flash info.\n", __func__);
-			return ret;
-		}
-
-		cros_ec_priv->ideal_write_size = info.write_ideal_size;
-	}
-
-	return 0;
-}
-
 /* Perform a cold reboot.
  *
  * @param flags		flags to pass to EC_CMD_REBOOT_EC.
@@ -406,10 +370,6 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 	msg_pdbg("CROS_EC has jumped to [%s]\n", sections[target]);
 	rc = EC_RES_SUCCESS;
 	cros_ec_priv->current_image = target;
-
-	/* update max data write size in case we're jumping to an EC
-	 * firmware with different protocol */
-	set_ideal_write_size();
 
 	return rc;
 }
@@ -622,8 +582,9 @@ static int in_current_image(unsigned int addr, unsigned int len)
 int cros_ec_block_erase(struct flashctx *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
-	struct ec_params_flash_erase erase;
-	int rc;
+	struct ec_params_flash_erase_v1 erase;
+	uint32_t mask;
+	int rc, cmd_version;
 
 	if (in_current_image(blockaddr, len)) {
 		cros_ec_invalidate_copy(blockaddr, len);
@@ -631,27 +592,85 @@ int cros_ec_block_erase(struct flashctx *flash,
 		return ACCESS_DENIED;
 	}
 
-	erase.offset = blockaddr;
-	erase.size = len;
-	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE,
-				0, &erase, sizeof(erase), NULL, 0);
-	if (rc == -EC_RES_ACCESS_DENIED) {
+	erase.params.offset = blockaddr;
+	erase.params.size = len;
+	rc = ec_get_cmd_versions(EC_CMD_FLASH_ERASE, &mask);
+	if (rc < 0) {
+		msg_perr("Cannot determine erase command version\n");
+		return 0;
+	}
+	cmd_version = 31 - __builtin_clz(mask);
+
+	if (cmd_version == 0) {
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE, 0,
+				&erase.params,
+				sizeof(struct ec_params_flash_erase), NULL, 0);
+		if (rc == -EC_RES_ACCESS_DENIED) {
+			// this is active image.
+			cros_ec_invalidate_copy(blockaddr, len);
+			need_2nd_pass = 1;
+			return ACCESS_DENIED;
+		}
+		if (rc < 0) {
+			msg_perr("CROS_EC: Flash erase error at address 0x%x, rc=%d\n",
+					blockaddr, rc);
+			return rc;
+		}
+		goto end_flash_erase;
+	}
+
+	if (len >= FLASH_SMALL_REGION_THRESHOLD) {
+		erase.cmd = FLASH_ERASE_SECTOR_ASYNC;
+	} else {
+		erase.cmd = FLASH_ERASE_SECTOR;
+	}
+	/* We already verified that the flash needs to be erased */
+	erase.flag = EC_FLASH_FORCE_ERASE;
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE, cmd_version,
+			      &erase, sizeof(erase), NULL, 0);
+	switch (rc) {
+	case 0:
+		break;
+	case -EC_RES_ACCESS_DENIED:
 		// this is active image.
 		cros_ec_invalidate_copy(blockaddr, len);
 		need_2nd_pass = 1;
 		return ACCESS_DENIED;
+	case -EC_RES_BUSY:
+		msg_perr("CROS_EC: Flash erase command "
+				" already in progress\n");
+	default:
+		return rc;
+	}
+	if (len < FLASH_SMALL_REGION_THRESHOLD)
+		goto end_flash_erase;
+
+	/* Wait for the erase command to complete */
+	rc = -EC_RES_BUSY;
+	while (rc == -EC_RES_BUSY) {
+		/* wait 100ms. 128K can take up to 2s */
+		usleep(100000);
+		erase.cmd = FLASH_GET_RESULT;
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE, cmd_version,
+				&erase, sizeof(erase), NULL, 0);
 	}
 	if (rc < 0) {
 		msg_perr("CROS_EC: Flash erase error at address 0x%x, rc=%d\n",
 		         blockaddr, rc);
 		return rc;
-	} else {
-		rc = EC_RES_SUCCESS;
 	}
 
+end_flash_erase:
 #ifndef SOFTWARE_SYNC_ENABLED
 	try_latest_firmware = 1;
 #endif
+	if (rc > EC_RES_SUCCESS) {
+		/*
+		 * Can happen if the command with retried with
+		 * EC_CMD_GET_COMMS_STATUS
+		 */
+		rc = EC_RES_SUCCESS;
+	}
 	return rc;
 }
 
@@ -1014,18 +1033,17 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
 			  struct opaque_programmer *op) {
 	struct ec_response_get_protocol_info info;
 	int rc = 0;
+
 	msg_pdbg("%s: sending protoinfo command\n", __func__);
 	rc = priv->ec_command(EC_CMD_GET_PROTOCOL_INFO, 0, NULL, 0,
 			      &info, sizeof(info));
 	msg_pdbg("%s: rc:%d\n", __func__, rc);
 
 	if (rc == sizeof(info)) {
-		op->max_data_write = min(op->max_data_write,
-					 info.max_request_packet_size -
-					 sizeof(struct ec_host_request));
-		op->max_data_read = min(op->max_data_read,
-					info.max_response_packet_size -
-					sizeof(struct ec_host_response));
+		op->max_data_write = info.max_request_packet_size -
+			sizeof(struct ec_host_request);
+		op->max_data_read = info.max_response_packet_size -
+			sizeof(struct ec_host_response);
 		msg_pdbg("%s: max_write:%d max_read:%d\n", __func__,
 			 op->max_data_write, op->max_data_read);
 	}
@@ -1107,8 +1125,8 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 }
 
 int cros_ec_probe_size(struct flashctx *flash) {
-	int rc;
-	struct ec_response_flash_info info;
+	int rc = 0, cmd_version;
+	struct ec_response_flash_info_1 info;
 	struct ec_response_flash_spi_info spi_info;
 	struct ec_response_get_chip_info chip_info;
 	struct block_eraser *eraser;
@@ -1119,13 +1137,8 @@ int cros_ec_probe_size(struct flashctx *flash) {
 		.disable        = cros_ec_disable_writeprotect,
 		.wp_status      = cros_ec_wp_status,
 	};
+	uint32_t mask;
 
-	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
-				0, NULL, 0, &info, sizeof(info));
-	if (rc < 0) {
-		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
-		return 0;
-	}
 	rc = cros_ec_get_current_image();
 	if (rc < 0) {
 		msg_perr("%s(): Failed to probe (no current image): %d\n",
@@ -1135,18 +1148,33 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	cros_ec_priv->current_image = rc;
 	cros_ec_priv->region = &regions[0];
 
+	rc = ec_get_cmd_versions(EC_CMD_FLASH_INFO, &mask);
+	if (rc < 0) {
+		msg_perr("Cannot determine write command version\n");
+		return 0;
+	}
+	cmd_version = 31 - __builtin_clz(mask);
+
+	/* Request general information about flash (v1 or below). */
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO, min(cmd_version, 1),
+			      NULL, 0, &info,
+			      (cmd_version > 0 ? sizeof(info) :
+			       sizeof(struct ec_response_flash_info)));
+	if (rc < 0) {
+		msg_perr("%s(): FLASH_INFO v%d returns %d.\n", __func__,
+			 cmd_version, rc);
+		return 0;
+	}
+	if (cmd_version == 0) {
+		cros_ec_priv->ideal_write_size = EC_FLASH_WRITE_VER0_SIZE;
+	} else {
+		cros_ec_priv->ideal_write_size = info.write_ideal_size;
+		if (info.flags & EC_FLASH_INFO_ERASE_TO_0)
+			flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
+	}
 	flash->chip->total_size = info.flash_size / 1024;
 	flash->chip->page_size = opaque_programmer->max_data_read;
 	eraser = &flash->chip->block_erasers[0];
-
-	/* Allow overriding the erase block size in case EC is incorrect */
-	if (cros_ec_priv->erase_block_size > 0)
-		eraser->eraseblocks[0].size = cros_ec_priv->erase_block_size;
-	else
-		eraser->eraseblocks[0].size = info.erase_block_size;
-
-	eraser->eraseblocks[0].count = info.flash_size /
-	                               eraser->eraseblocks[0].size;
 	flash->chip->wp = &wp;
 
 	/*
@@ -1165,10 +1193,48 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	if (!strncmp(chip_info.name, "stm32l1", 7))
 		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
-	rc = set_ideal_write_size();
-	if (rc < 0) {
-		msg_perr("%s(): Unable to set write size\n", __func__);
-		return 0;
+
+	if (info.flags & EC_FLASH_INFO_NUM_BANKS_DEFINED) {
+		/* Ask for all regions information */
+		struct ec_response_flash_info_1 *info_v2;
+		int i, num_banks = info.num_banks;
+		int size_info_v2 =
+			sizeof(info) + num_banks * sizeof(struct ec_flash_bank);
+		info_v2 = malloc(size_info_v2);
+		if (!info_v2)
+			return 0;
+
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
+				      cmd_version, NULL, 0,
+				      info_v2, size_info_v2);
+		if (rc < 0) {
+			msg_perr("%s(): region FLASH_INFO v%d returns %d.\n",
+				 __func__, cmd_version, rc);
+			free(info_v2);
+			return 0;
+		}
+		for (i = 0; i < num_banks; i++) {
+			/* Allow overriding the erase block size in case EC is incorrect */
+			eraser->eraseblocks[i].size =
+				(cros_ec_priv->erase_block_size > 0 ?
+				 cros_ec_priv->erase_block_size :
+				 info_v2->banks[i].sector_erase_size);
+			eraser->eraseblocks[i].count =
+				info_v2->banks[i].sector_nb *
+				info_v2->banks[i].sector_size /
+				info_v2->banks[i].sector_erase_size;
+		}
+		free(info_v2);
+	} else {
+		/* Allow overriding the erase block size in case EC is incorrect */
+		if (cros_ec_priv->erase_block_size > 0)
+			eraser->eraseblocks[0].size =
+				cros_ec_priv->erase_block_size;
+		else
+			eraser->eraseblocks[0].size = info.erase_block_size;
+
+		eraser->eraseblocks[0].count = info.flash_size /
+			eraser->eraseblocks[0].size;
 	}
 
 	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_SPI_INFO,
