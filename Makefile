@@ -495,7 +495,7 @@ endif
 
 ifeq ($(CONFIG_RAIDEN_DEBUG_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_RAIDEN_DEBUG_SPI=1'
-PROGRAMMER_OBJS += raiden_debug_spi.o
+PROGRAMMER_OBJS += raiden_debug_spi.o usb_device.o
 NEED_USB := yes
 endif
 

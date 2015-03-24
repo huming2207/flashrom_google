@@ -48,19 +48,19 @@
  *     chip/stm32/usb_spi.c
  */
 
-#include <stdio.h>
-#include <string.h>
+#include "check.h"
 #include "programmer.h"
 #include "spi.h"
+#include "usb_device.h"
 
 #include <libusb.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#define GOOGLE_VID		0x18D1
-#define GOOGLE_RAIDEN_PID	0x500f
-#define GOOGLE_RAIDEN_INTERFACE	2
-#define GOOGLE_RAIDEN_ENDPOINT	3
-#define GOOGLE_RAIDEN_CONFIG	1
+#define GOOGLE_VID                 0x18D1
+#define GOOGLE_RAIDEN_SPI_SUBCLASS 0x51
+#define GOOGLE_RAIDEN_SPI_PROTOCOL 0x01
 
 enum raiden_debug_spi_request {
 	RAIDEN_DEBUG_SPI_REQ_ENABLE  = 0x0000,
@@ -75,24 +75,9 @@ enum raiden_debug_spi_request {
  */
 #define TRANSFER_TIMEOUT_MS	1000
 
-#define CHECK(expression, string...)					\
-	({								\
-		int error__ = (expression);				\
-									\
-		if (error__ != 0) {					\
-			msg_perr("Raiden: libusb error: %s:%d %s\n",	\
-				 __FILE__,				\
-				 __LINE__,				\
-				 libusb_error_name(error__));		\
-			msg_perr(string);				\
-			return 0x20000 | -error__;			\
-		}							\
-	})
-
-static libusb_context       *context  = NULL;
-static libusb_device_handle *device   = NULL;
-static uint8_t              endpoint  = GOOGLE_RAIDEN_ENDPOINT;
-static int                  interface = GOOGLE_RAIDEN_INTERFACE;
+struct usb_device *device       = NULL;
+uint8_t            in_endpoint  = 0;
+uint8_t            out_endpoint = 0;
 
 static int send_command(unsigned int write_count,
 			unsigned int read_count,
@@ -117,12 +102,12 @@ static int send_command(unsigned int write_count,
 
 	memcpy(buffer + PACKET_HEADER_SIZE, write_buffer, write_count);
 
-	CHECK(libusb_bulk_transfer(device,
-				   LIBUSB_ENDPOINT_OUT | endpoint,
-				   buffer,
-				   write_count + PACKET_HEADER_SIZE,
-				   &transferred,
-				   TRANSFER_TIMEOUT_MS),
+	CHECK(LIBUSB(libusb_bulk_transfer(device->handle,
+					  out_endpoint,
+					  buffer,
+					  write_count + PACKET_HEADER_SIZE,
+					  &transferred,
+					  TRANSFER_TIMEOUT_MS)),
 	      "Raiden: OUT transfer failed\n"
 	      "    write_count = %d\n"
 	      "    read_count  = %d\n",
@@ -135,12 +120,12 @@ static int send_command(unsigned int write_count,
 		return 0x10001;
 	}
 
-	CHECK(libusb_bulk_transfer(device,
-				   LIBUSB_ENDPOINT_IN | endpoint,
-				   buffer,
-				   read_count + PACKET_HEADER_SIZE,
-				   &transferred,
-				   TRANSFER_TIMEOUT_MS),
+	CHECK(LIBUSB(libusb_bulk_transfer(device->handle,
+					  in_endpoint,
+					  buffer,
+					  read_count + PACKET_HEADER_SIZE,
+					  &transferred,
+					  TRANSFER_TIMEOUT_MS)),
 	      "Raiden: IN transfer failed\n"
 	      "    write_count = %d\n"
 	      "    read_count  = %d\n",
@@ -186,34 +171,68 @@ static const struct spi_programmer spi_programmer_raiden_debug = {
 	.write_256	= default_spi_write_256,
 };
 
-static long int get_parameter(char const * name, long int default_value)
+static int match_endpoint(struct libusb_endpoint_descriptor const *descriptor,
+			  enum libusb_endpoint_direction direction)
 {
-	char *   string = extract_programmer_param(name);
-	long int value  = default_value;
+	return (((descriptor->bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) ==
+		 direction) &&
+		((descriptor->bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) ==
+		 LIBUSB_TRANSFER_TYPE_BULK));
+}
 
-	if (string)
-		value = strtol(string, NULL, 0);
+static int find_endpoints(struct usb_device *device)
+{
+	int i;
+	int in_count  = 0;
+	int out_count = 0;
 
-	free(string);
+	for (i = 0; i < device->interface_descriptor->bNumEndpoints; i++) {
+		struct libusb_endpoint_descriptor const  *endpoint =
+			&device->interface_descriptor->endpoint[i];
 
-	return value;
+		if (match_endpoint(endpoint, LIBUSB_ENDPOINT_IN)) {
+			in_count++;
+			in_endpoint = endpoint->bEndpointAddress;
+		} else if (match_endpoint(endpoint, LIBUSB_ENDPOINT_OUT)) {
+			out_count++;
+			out_endpoint = endpoint->bEndpointAddress;
+		}
+	}
+
+	if (in_count != 1 || out_count != 1) {
+		msg_perr("Raiden: Failed to find one IN and one OUT endpoint\n"
+			 "        found %d IN and %d OUT endpoints\n",
+			 in_count,
+			 out_count);
+		return 1;
+	}
+
+	msg_pdbg("Raiden: Found IN  endpoint = 0x%02x\n",  in_endpoint);
+	msg_pdbg("Raiden: Found OUT endpoint = 0x%02x\n", out_endpoint);
+
+	return 0;
 }
 
 static int shutdown(void * data)
 {
-	CHECK(libusb_control_transfer(device,
-				      LIBUSB_ENDPOINT_OUT |
-				      LIBUSB_REQUEST_TYPE_VENDOR |
-				      LIBUSB_RECIPIENT_INTERFACE,
-				      RAIDEN_DEBUG_SPI_REQ_DISABLE,
-				      0,
-				      interface,
-				      NULL,
-				      0,
-				      TRANSFER_TIMEOUT_MS),
+	struct usb_device *current;
+
+	CHECK(LIBUSB(libusb_control_transfer(
+			     device->handle,
+			     LIBUSB_ENDPOINT_OUT |
+			     LIBUSB_REQUEST_TYPE_VENDOR |
+			     LIBUSB_RECIPIENT_INTERFACE,
+			     RAIDEN_DEBUG_SPI_REQ_DISABLE,
+			     0,
+			     device->interface_descriptor->bInterfaceNumber,
+			     NULL,
+			     0,
+			     TRANSFER_TIMEOUT_MS)),
 		"Raiden: Failed to disable SPI bridge\n");
 
-	libusb_close(device);
+	usb_device_free(device);
+
+	device = NULL;
 	libusb_exit(NULL);
 
 	return 0;
@@ -221,48 +240,53 @@ static int shutdown(void * data)
 
 int raiden_debug_spi_init(void)
 {
-	uint16_t vid    = get_parameter("vid",    GOOGLE_VID);
-	uint16_t pid    = get_parameter("pid",    GOOGLE_RAIDEN_PID);
-	int      config = get_parameter("config", GOOGLE_RAIDEN_CONFIG);
-	int      current_config;
+	struct usb_match match;
 
-	CHECK(libusb_init(&context), "Raiden: libusb_init failed\n");
+	usb_match_init(&match);
 
-	interface = get_parameter("interface", GOOGLE_RAIDEN_INTERFACE);
-	endpoint  = get_parameter("endpoint",  GOOGLE_RAIDEN_ENDPOINT);
-	device    = libusb_open_device_with_vid_pid(context, vid, pid);
+	usb_match_value_default(&match.vid,      GOOGLE_VID);
+	usb_match_value_default(&match.class,    LIBUSB_CLASS_VENDOR_SPEC);
+	usb_match_value_default(&match.subclass, GOOGLE_RAIDEN_SPI_SUBCLASS);
+	usb_match_value_default(&match.protocol, GOOGLE_RAIDEN_SPI_PROTOCOL);
 
-	if (device == NULL) {
-		msg_perr("Unable to find device 0x%04x:0x%04x\n", vid, pid);
+	CHECK(LIBUSB(libusb_init(NULL)), "Raiden: libusb_init failed\n");
+
+	CHECK(usb_device_find(&match, &device),
+	      "Raiden: Failed to find devices\n");
+
+	if (device->next != NULL) {
+		struct usb_device *current;
+
+		msg_perr("Raiden: Found too many compatible devices\n");
+		msg_perr("        Use parameters to specify desired device\n");
+
+		for (current = device;
+		     current != NULL;
+		     current = usb_device_free(current))
+			usb_device_show("        ", current);
+
+		device = NULL;
+
 		return 1;
 	}
 
-	CHECK(libusb_get_configuration(device, &current_config),
-	      "Raiden: Failed to get current device configuration\n");
+	CHECK(find_endpoints(device),
+	      "Raiden: Failed to find valid endpoints\n");
 
-	if (current_config != config)
-		CHECK(libusb_set_configuration(device, config),
-		      "Raiden: Failed to set new configuration from %d to %d\n",
-		      current_config,
-		      config);
+	CHECK(usb_device_claim(device),
+	      "Raiden: Failed to claim USB device\n");
 
-	CHECK(libusb_set_auto_detach_kernel_driver(device, 1),
-	      "Raiden: Failed to enable auto kernel driver detach\n");
-
-	CHECK(libusb_claim_interface(device, interface),
-	      "Raiden: Could not claim device interface %d\n",
-	      interface);
-
-	CHECK(libusb_control_transfer(device,
-				      LIBUSB_ENDPOINT_OUT |
-				      LIBUSB_REQUEST_TYPE_VENDOR |
-				      LIBUSB_RECIPIENT_INTERFACE,
-				      RAIDEN_DEBUG_SPI_REQ_ENABLE,
-				      0,
-				      interface,
-				      NULL,
-				      0,
-				      TRANSFER_TIMEOUT_MS),
+	CHECK(LIBUSB(libusb_control_transfer(
+			     device->handle,
+			     LIBUSB_ENDPOINT_OUT |
+			     LIBUSB_REQUEST_TYPE_VENDOR |
+			     LIBUSB_RECIPIENT_INTERFACE,
+			     RAIDEN_DEBUG_SPI_REQ_ENABLE,
+			     0,
+			     device->interface_descriptor->bInterfaceNumber,
+			     NULL,
+			     0,
+			     TRANSFER_TIMEOUT_MS)),
 		"Raiden: Failed to enable SPI bridge\n");
 
 	register_spi_programmer(&spi_programmer_raiden_debug);
