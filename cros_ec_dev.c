@@ -146,12 +146,12 @@ static int cros_ec_command_dev(int command, int version,
 		cmd.result = 0;
 	}
 	if (ret < 0) {
-		msg_perr("%s(): Transfer %02x failed: %d, errno=%d\n", __func__,
-			 command, ret, errno);
+		msg_perr("%s(): Command 0x%02x failed: %d, errno=%d\n",
+			__func__, command, ret, errno);
 		return -EC_RES_ERROR;
 	}
 	if (cmd.result) {
-		msg_perr("%s(): Transfer %02x returned result: %d\n",
+		msg_perr("%s(): Command 0x%02x returned result: %d\n",
 			 __func__, command, cmd.result);
 		return -cmd.result;
 	}
