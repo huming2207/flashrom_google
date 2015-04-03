@@ -46,6 +46,10 @@ int verbose = 0;
 
 unsigned int required_erase_size = 0;	/* see comment in flash.h */
 
+/* Set if any erase/write operation is to be done. This will be used to
+ * decide if final verification is needed. */
+static int content_has_changed = 0;
+
 /* error handling stuff */
 enum error_action access_denied_action = error_ignore;
 
@@ -1416,6 +1420,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 	msg_cdbg(":");
 	/* FIXME: Assume 256 byte granularity for now to play it safe. */
 	if (need_erase(flash, curcontents, newcontents, len, gran)) {
+		content_has_changed |= 1;
 		msg_cdbg("E");
 		ret = erasefn(flash, start, len);
 		if (ret) {
@@ -1438,6 +1443,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 	while ((lenhere = get_next_write(curcontents + starthere,
 					 newcontents + starthere,
 					 len - starthere, &starthere, gran))) {
+		content_has_changed |= 1;
 		if (!writecount++)
 			msg_cdbg("W");
 		/* Needs the partial write function signature. */
@@ -2086,17 +2092,22 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 	}
 
 	if (verify_it) {
-		/* Work around chips which need some time to calm down. */
-		if (write_it && verify_it != VERIFY_PARTIAL)
-			programmer_delay(1000*1000);
+		if ((write_it || erase_it) && !content_has_changed) {
+			msg_gdbg("Nothing was erased or written, skipping "
+				"verification\n");
+		} else {
+			/* Work around chips which need some time to calm down. */
+			if (write_it && verify_it != VERIFY_PARTIAL)
+				programmer_delay(1000*1000);
 
-		ret = verify_flash(flash, newcontents, verify_it);
+			ret = verify_flash(flash, newcontents, verify_it);
 
-		/* If we tried to write, and verification now fails, we
-		 * might have an emergency situation.
-		 */
-		if (ret && write_it)
-			emergency_help_message();
+			/* If we tried to write, and verification now fails, we
+			 * might have an emergency situation.
+			 */
+			if (ret && write_it)
+				emergency_help_message();
+		}
 	}
 
 out:
