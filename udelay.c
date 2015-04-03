@@ -30,6 +30,13 @@
 #include <errno.h>
 #include "flash.h"
 
+/* 100ms is currently the highest delay period for operations that are expected
+ * to be called repeatedly (such as block erases). Delays beyond that are used
+ * in rare circumstances, so a few extra milliseconds delay shouldn't have much
+ * impact on overall runtime.
+ */
+#define IMPRECISE_MIN_DELAY_THRESHOLD_US	(100 * 1000)
+
 /* Are OS timers broken? */
 int broken_timer = 0;
 
@@ -178,16 +185,11 @@ recalibrate:
 	msg_pdbg("OK.\n");
 }
 
-void internal_delay(int usecs)
+static void imprecise_delay(int usecs)
 {
 	int ret, done_waiting = 0;
 	unsigned long long nsecs;
 	struct timespec req = { 0, 0 };
-
-	if (broken_timer) {
-		myusec_delay(usecs);
-		return;
-	}
 
 	/* flashrom delays work with a microsecond granularity. However
 	 * usleep has been obsoleted in POSIX.1-2001 and removed from
@@ -219,6 +221,21 @@ void internal_delay(int usecs)
 		myusec_calibrate_delay();
 		/* Now, for the sake of it, delay. */
 		myusec_delay(usecs);
+	}
+}
+
+void internal_delay(int usecs)
+{
+	if (broken_timer) {
+		/* Very long delays don't need much precision, so use nanosleep
+		 * instead of busy waiting to avoid excessive overhead.
+		 */
+		if (usecs > IMPRECISE_MIN_DELAY_THRESHOLD_US)
+			imprecise_delay(usecs);
+		else
+			myusec_delay(usecs);
+	} else {
+		imprecise_delay(usecs);
 	}
 }
 
