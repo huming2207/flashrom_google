@@ -661,6 +661,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
 	case CHIPSET_9_SERIES_WILDCAT_POINT:
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		straps_names = straps_names_lpt_lp;
 		break;
 	default:
@@ -670,20 +671,40 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	}
 
-	/* Enable Flash Writes */
-	ret = enable_flash_ich_dc(dev, name);
-	if (ret == ERROR_FATAL)
-		return ret;
+	switch (ich_generation) {
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		ret = enable_flash_ich(dev, name, 0xdc);
+		if (ret == ERROR_FATAL)
+			return ret;
 
-	/* Get physical address of Root Complex Register Block */
-	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
-	msg_pdbg("Root Complex Register Block address = 0x%x\n", tmp);
+		/* Read SPI BAR */
+		tmp = pci_read_long(dev, 0x10) & 0xfffff000;
+		msg_pdbg("SPI BAR is = 0x%x\n", tmp);
 
-	/* Map RCBA to virtual memory */
-	rcrb = physmap("ICH RCRB", tmp, 0x4000);
+		/* Map SPI BAR to virtual memory */
+		rcrb = physmap("PCH SPI BAR0", tmp, 0x4000);
 
-	/* Set BBS (Boot BIOS Straps) field of GCS register. */
-	gcs = mmio_readl(rcrb + 0x3410);
+		/* Set BBS (Boot BIOS Straps) field of GCS register. */
+		gcs = pci_read_long(dev, 0xdc);
+		break;
+	default:
+		/* Enable Flash Writes */
+		ret = enable_flash_ich_dc(dev, name);
+		if (ret == ERROR_FATAL)
+			return ret;
+
+		/* Get physical address of Root Complex Register Block */
+		tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+		msg_pdbg("Root Complex Register Block address = 0x%x\n", tmp);
+
+		/* Map RCBA to virtual memory */
+		rcrb = physmap("ICH RCRB", tmp, 0x4000);
+
+		/* Set BBS (Boot BIOS Straps) field of GCS register. */
+		gcs = mmio_readl(rcrb + 0x3410);
+		break;
+	}
+
 	switch (ich_generation) {
 	case CHIPSET_5_SERIES_IBEX_PEAK:
 	case CHIPSET_6_SERIES_COUGAR_POINT:
@@ -749,22 +770,44 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 			gcs = (gcs & ~0xc00) | (0x1 << 10);
 		}
 		break;
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		if (target_bus == BUS_SPI) {
+			msg_pdbg("Setting BBS to SPI -\n");
+			gcs = (gcs & ~0x40) | (0x0 << 6);
+		} else if (target_bus == BUS_LPC) {
+			msg_pdbg("Setting BBS to LPC\n");
+			gcs = (gcs & ~0x40) | (0x1 << 6);
+		}
+		break;
 	default:
 		msg_perr("Cannot determine what to set for BBS.\n");
 		return -1;
 		break;
 	}
-	rmmio_writel(gcs, rcrb + 0x3410);
 
-	msg_pdbg("GCS = 0x%x: ", gcs);
-	msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
-		 (gcs & 0x1) ? "en" : "dis");
+	switch (ich_generation) {
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		rpci_write_long(dev, 0xdc, gcs);
+		msg_pdbg("GCS = 0x%x: ", gcs);
+		msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
+			(gcs & 0x80) ? "en" : "dis");
+		break;
+	default:
+		rmmio_writel(gcs, rcrb + 0x3410);
+		msg_pdbg("GCS = 0x%x: ", gcs);
+		msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
+			(gcs & 0x1) ? "en" : "dis");
+		break;
+	}
 
 	switch (ich_generation) {
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
 	case CHIPSET_9_SERIES_WILDCAT_POINT:
 		/* Lynx Point LP uses a single bit for GCS */
 		bbs = (gcs >> 10) & 0x1;
+		break;
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		bbs = (gcs & 0x40) >> 6;
 		break;
 	default:
 		/* Older chipsets use two bits for GCS */
@@ -773,9 +816,15 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	}
 	msg_pdbg("Boot BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
 
-	buc = mmio_readb(rcrb + 0x3414);
-	msg_pdbg("Top Swap : %s\n",
-		 (buc & 1) ? "enabled (A16 inverted)" : "not enabled");
+	switch (ich_generation) {
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		break;
+	default:
+		buc = mmio_readb(rcrb + 0x3414);
+		msg_pdbg("Top Swap : %s\n",
+			(buc & 1) ? "enabled (A16 inverted)" : "not enabled");
+		break;
+	}
 
 	/* It seems the ICH7 does not support SPI and LPC chips at the same
 	 * time. At least not with our current code. So we prevent searching
@@ -854,6 +903,13 @@ static int enable_flash_wildcatpoint(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name,
 				       CHIPSET_9_SERIES_WILDCAT_POINT);
+}
+
+/* Sunrise Point */
+static int enable_flash_sunrisepoint(struct pci_dev *dev, const char *name)
+{
+	return enable_flash_ich_dc_spi(dev, name,
+					CHIPSET_100_SERIES_SUNRISE_POINT);
 }
 
 /* Baytrail */
@@ -1671,6 +1727,7 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x9ccb, OK, "Intel", "Broadwell H", enable_flash_wildcatpoint},
 	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
 	{0x8086, 0x229c, OK, "Intel", "Braswell", enable_flash_baytrail},
+	{0x8086, 0x9d24, OK, "Intel", "Skylake", enable_flash_sunrisepoint},
 #endif
 	{},
 };
@@ -1764,20 +1821,48 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 				   enable_flash_baytrail) {
 				/* Baytrail has 2 bit BBS at different offset */
 				is_new_ich = 3;
+			} else if (chipset_enables[i].doit ==
+				   enable_flash_sunrisepoint) {
+				/* Sunrise point has 1 bit BBS
+				 * in GCS register */
+				is_new_ich = 4;
 			}
 			break;
 		}
 	}
 	if (!dev) return -3;  /* unknown pci dev */
 
-	/* Get physical address of Root Complex Register Block */
-	tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
-	msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
+	switch (is_new_ich) {
+	case 4:
+		break;
+	default:
+		/* Get physical address of Root Complex Register Block */
+		tmp = pci_read_long(dev, 0xf0) & 0xffffc000;
+		msg_pdbg("\nRoot Complex Register Block address = 0x%x\n", tmp);
 
-	/* Map RCBA to virtual memory */
-	rcrb = physmap("ICH RCRB", tmp, 0x4000);
+		/* Map RCBA to virtual memory */
+		rcrb = physmap("ICH RCRB", tmp, 0x4000);
+		break;
+	}
 
 	switch (is_new_ich) {
+	case 4:
+		/* Sunrise Point BBS (Boot BIOS Straps) field of GCS register.
+		 *   0b: SPI
+		 *   1b: LPC
+		 */
+		gcs = pci_read_long(dev, 0xdc);
+		switch ((gcs & 0x40) >> 6) {
+		case 0x0:
+			/* Return BUS_PROG as HWSEQ is used */
+			*bus = BUS_PROG;
+			break;
+		case 0x1:
+			*bus = BUS_LPC;
+			break;
+		}
+		ret = 0;
+		break;
 	case 3:
 		/* Bay Trail BBS field of GCS register.
 		 *   00b: LPC
