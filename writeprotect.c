@@ -382,7 +382,7 @@ static struct w25q_range n25q064_ranges[] = {
 	 * (block protect bit 3). It is only useful when all blocks are to
 	 * be write-protected.
 	 */
-	{ X, 0, 0, {0, 0} },	/* none */
+	{ 0, 0, 0, {0, 0} },	/* none */
 
 	{ 0, 0, 0x1, {0x7f0000,       64 * 1024} },	/* block 127 */
 	{ 0, 0, 0x2, {0x7e0000,   2 * 64 * 1024} },	/* blocks 126-127 */
