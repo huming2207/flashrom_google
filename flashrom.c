@@ -1029,14 +1029,27 @@ int check_max_decode(enum chipbustype buses, uint32_t size)
 
 int probe_flash(int startchip, struct flashchip *fill_flash, int force)
 {
-	const struct flashchip *flash;
+	const struct flashchip *flash, *flash_list;
 	unsigned long base = 0;
 	char location[64];
 	uint32_t size;
 	enum chipbustype buses_common;
 	char *tmp;
 
-	for (flash = flashchips + startchip; flash && flash->name; flash++) {
+	/* Based on the host controller interface that a platform
+	 * needs to use (hwseq or swseq),
+	 * set the flashchips list here.
+	 */
+	switch (ich_generation) {
+	case CHIPSET_100_SERIES_SUNRISE_POINT:
+		flash_list = flashchips_hwseq;
+		break;
+	default:
+		flash_list = flashchips;
+		break;
+	}
+
+	for (flash = flash_list + startchip; flash && flash->name; flash++) {
 		if (chip_to_probe && strcmp(flash->name, chip_to_probe) != 0)
 			continue;
 		buses_common = buses_supported & flash->bustype;
@@ -1115,7 +1128,7 @@ notfound:
 			fill_flash->printlock(fill_flash);
 
 	/* Return position of matching chip. */
-	return flash - flashchips;
+	return flash - flash_list;
 }
 
 int verify_flash(struct flashchip *flash, uint8_t *buf, int verify_it)

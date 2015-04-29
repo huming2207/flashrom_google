@@ -665,12 +665,22 @@ int main(int argc, char *argv[])
 	}
 
 	if (chipcount > 1) {
-		msg_gerr("Multiple flash chips were detected:");
-		for (i = 0; i < chipcount; i++)
-			msg_gerr(" %s", flashes[i].name);
-		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
-		programmer_shutdown();
-		exit(1);
+		/* When using HWSEQ, Opaque flash chip gets probed
+		 * along with the flash chip */
+		if ((chipcount == 2)
+			&& ((!strcmp(flashes[0].name, "Opaque flash chip"))
+			|| (!strcmp(flashes[1].name, "Opaque flash chip")))) {
+			msg_cdbg("Two flash chips were detected.."
+				"ignoring Opaque\n");
+		} else {
+			msg_gerr("Multiple flash chips were detected:");
+			for (i = 0; i < chipcount; i++)
+				msg_gerr(" %s", flashes[i].name);
+			msg_gerr("\nPlease specify which chip to use with "
+				"the -c <chipname> option.\n");
+			programmer_shutdown();
+			exit(1);
+		}
 	} else if (!chipcount) {
 		msg_gerr("No EEPROM/flash device found.\n");
 		if (!force || !chip_to_probe) {
