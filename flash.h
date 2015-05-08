@@ -229,7 +229,6 @@ int flash_unerased_value(struct flashchip *flash);
 #define TIMING_ZERO	-2
 
 extern const struct flashchip flashchips[];
-extern const struct flashchip flashchips_hwseq[];
 
 /* print.c */
 char *flashbuses_to_text(enum chipbustype bustype);

@@ -10327,6 +10327,28 @@ const struct flashchip flashchips[] = {
 	},
 
 	{
+		.vendor		= "Programmer",
+		.name		= "Opaque flash chip",
+		.bustype	= BUS_PROG,
+		.manufacture_id	= PROGMANUF_ID,
+		.model_id	= PROGDEV_ID,
+		.total_size	= 0,
+		.page_size	= 256,
+		/* probe is assumed to work, rest will be filled in by probe */
+		.tested		= TEST_OK_PROBE,
+		.probe		= probe_opaque,
+		/* eraseblock sizes will be set by the probing function */
+		.block_erasers	=
+		{
+			{
+				.block_erase = erase_opaque,
+			}
+		},
+		.write		= write_opaque,
+		.read		= read_opaque,
+	},
+
+	{
 		.vendor		= "AMIC",
 		.name		= "unknown AMIC SPI chip",
 		.bustype	= BUS_SPI,
@@ -10497,58 +10519,6 @@ const struct flashchip flashchips[] = {
 	},
 
 	{ NULL 	}
-};
-
-/* List of all flashchips on platforms
- * that use HWSEQ host controller interface
- */
-const struct flashchip flashchips_hwseq[] = {
-	{
-		.vendor		= "Winbond",
-		.name		= "W25R128FV",
-		.bustype	= BUS_PROG,
-		.manufacture_id	= WINBOND_NEX_ID,
-		.model_id	= WINBOND_NEX_W25R128FV,
-		.total_size	= 0,
-		.page_size	= 256,
-		/* probe is assumed to work, rest will be filled in by probe */
-		.tested		= TEST_OK_PROBE,
-		.probe		= probe_opaque,
-		/* eraseblock sizes will be set by the probing function */
-		.block_erasers	=
-		{
-			{
-				.block_erase = erase_opaque,
-			}
-		},
-		.write		= write_opaque,
-		.read		= read_opaque,
-		.wp		= &wp_w25r,
-	},
-
-	{
-		.vendor		= "Programmer",
-		.name		= "Opaque flash chip",
-		.bustype	= BUS_PROG,
-		.manufacture_id	= PROGMANUF_ID,
-		.model_id	= PROGDEV_ID,
-		.total_size	= 0,
-		.page_size	= 256,
-		/* probe is assumed to work, rest will be filled in by probe */
-		.tested		= TEST_OK_PROBE,
-		.probe		= probe_opaque,
-		/* eraseblock sizes will be set by the probing function */
-		.block_erasers	=
-		{
-			{
-				.block_erase = erase_opaque,
-			}
-		},
-		.write		= write_opaque,
-		.read		= read_opaque,
-	},
-
-	{NULL}
 };
 
 int flash_erase_value(struct flashchip *flash)

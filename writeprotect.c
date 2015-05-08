@@ -527,37 +527,6 @@ static struct w25q_range w25q64_ranges[] = {
 	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
 };
 
-struct w25q_range w25r128_ranges[] = {
-	{ X, X, 0, {0, 0} },	/* none */
-
-	{ 0, 0, 0x1, {0xfc0000, 256 * 1024} },
-	{ 0, 0, 0x2, {0xf80000, 512 * 1024} },
-	{ 0, 0, 0x3, {0xf00000, 1024 * 1024} },
-	{ 0, 0, 0x4, {0xe00000, 2048 * 1024} },
-	{ 0, 0, 0x5, {0xc00000, 4096 * 1024} },
-	{ 0, 0, 0x6, {0x800000, 8192 * 1024} },
-
-	{ 0, 1, 0x1, {0x000000, 256 * 1024} },
-	{ 0, 1, 0x2, {0x000000, 512 * 1024} },
-	{ 0, 1, 0x3, {0x000000, 1024 * 1024} },
-	{ 0, 1, 0x4, {0x000000, 2048 * 1024} },
-	{ 0, 1, 0x5, {0x000000, 4096 * 1024} },
-	{ 0, 1, 0x6, {0x000000, 8192 * 1024} },
-	{ X, X, 0x7, {0x000000, 16384 * 1024} },
-
-	{ 1, 0, 0x1, {0xfff000, 4 * 1024} },
-	{ 1, 0, 0x2, {0xffe000, 8 * 1024} },
-	{ 1, 0, 0x3, {0xffc000, 16 * 1024} },
-	{ 1, 0, 0x4, {0xff8000, 32 * 1024} },
-	{ 1, 0, 0x5, {0xff8000, 32 * 1024} },
-
-	{ 1, 1, 0x1, {0x000000, 4 * 1024} },
-	{ 1, 1, 0x2, {0x000000, 8 * 1024} },
-	{ 1, 1, 0x3, {0x000000, 16 * 1024} },
-	{ 1, 1, 0x4, {0x000000, 32 * 1024} },
-	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
-};
-
 struct w25q_range w25x10_ranges[] = {
 	{ X, X, 0, {0, 0} },    /* none */
 	{ 0, 0, 0x1, {0x010000, 64 * 1024} },
@@ -688,10 +657,6 @@ static int w25_range_table(const struct flashchip *flash,
                 case WINBOND_NEX_W25Q64DW:
 			*w25q_ranges = w25q64_ranges;
 			*num_entries = ARRAY_SIZE(w25q64_ranges);
-			break;
-		case WINBOND_NEX_W25R128FV:
-			*w25q_ranges = w25r128_ranges;
-			*num_entries = ARRAY_SIZE(w25r128_ranges);
 			break;
 		default:
 			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
@@ -946,93 +911,6 @@ static int w25_set_range(const struct flashchip *flash,
 		return 1;
 	}
 }
-static int w25r_set_range(const struct flashchip *flash,
-		unsigned int start, unsigned int len)
-{
-	struct w25q_status status;
-	struct flashchip chip;
-	uint8_t arr, expected;
-	int ret;
-
-	memset(&status, 0, sizeof(status));
-	memset(&chip, 0, sizeof(chip));
-	memcpy(&chip, flash, sizeof(chip));
-
-	/* passing a copy of flash since it is read only */
-	ret = flash->read(&chip, &arr, 0, 1);
-	if (ret) {
-		msg_cerr("Read status register failed.\n");
-		return ret;
-	}
-	memcpy(&status, &arr, 1);
-	msg_cdbg("%s: old status: 0x%02x\n", __func__, arr);
-
-	if (w25_range_to_status(flash, start, len, &status))
-		return -1;
-
-	msg_cdbg("status.busy: %x\n", status.busy);
-	msg_cdbg("status.wel: %x\n", status.wel);
-	msg_cdbg("status.bp0: %x\n", status.bp0);
-	msg_cdbg("status.bp1: %x\n", status.bp1);
-	msg_cdbg("status.bp2: %x\n", status.bp2);
-	msg_cdbg("status.tb: %x\n", status.tb);
-	msg_cdbg("status.sec: %x\n", status.sec);
-	msg_cdbg("status.srp0: %x\n", status.srp0);
-
-	memcpy(&expected, &status, sizeof(status));
-	ret = flash->write(&chip, &expected, 0, 1);
-	if (ret) {
-		msg_cerr("Write status register failed.\n");
-		return ret;
-	}
-	ret = flash->read(&chip, &arr, 0, 1);
-	if (ret) {
-		msg_cerr("Read status register failed.\n");
-		return ret;
-	}
-	msg_cdbg("%s: new status: 0x%02x\n", __func__, arr);
-
-	if ((arr & MASK_WP_AREA) == (expected & MASK_WP_AREA)) {
-		return 0;
-	} else {
-		msg_cerr("expected=0x%02x, but actual=0x%02x.\n",
-			expected, arr);
-		return 1;
-	}
-}
-
-static int w25r_wp_status(const struct flashchip *flash)
-{
-	struct w25q_status sr;
-	struct flashchip chip;
-	uint8_t tmp;
-	unsigned int start, len;
-	int ret = 0;
-
-	memset(&sr, 0, sizeof(sr));
-	memset(&chip, 0, sizeof(chip));
-	memcpy(&chip, flash, sizeof(chip));
-
-	ret = flash->read(&chip, &tmp, 0, 1);
-	if (ret) {
-		msg_cerr("Read status register failed.\n");
-		return ret;
-	}
-	memcpy(&sr, &tmp, 1);
-	msg_cinfo("WP: status: 0x%02x\n", tmp);
-	msg_cinfo("WP: status.srp0: %x\n", sr.srp0);
-	msg_cinfo("WP: write protect is %s.\n",
-		(sr.srp0) ? "enabled" : "disabled");
-	msg_cinfo("WP: write protect range: ");
-	if (w25_status_to_range(flash, &sr, &start, &len)) {
-		msg_cinfo("(cannot resolve the range)\n");
-		ret = -1;
-	} else {
-		msg_cinfo("start=0x%08x, len=0x%08x\n", start, len);
-	}
-	return ret;
-}
-
 
 /* Print out the current status register value with human-readable text. */
 static int w25_wp_status(const struct flashchip *flash)
@@ -1081,44 +959,6 @@ static int w25_set_srp0(const struct flashchip *flash, int enable)
 	tmp = spi_read_status_register();
 	msg_cdbg("%s: new status: 0x%02x\n", __func__, tmp);
 	if ((tmp & MASK_WP_AREA) != (expected & MASK_WP_AREA))
-		return 1;
-
-	return 0;
-}
-
-static int w25_set_srp(const struct flashchip *flash, int enable)
-{
-	struct w25q_status status;
-	struct flashchip chip;
-	int tmp = 0;
-	uint8_t arr, expected;
-
-	memset(&status, 0, sizeof(status));
-	memset(&chip, 0, sizeof(chip));
-	memcpy(&chip, flash, sizeof(chip));
-
-	tmp = flash->read(&chip, &arr, 0, 1);
-	if (tmp) {
-		msg_cerr("Read status register failed.\n");
-		return tmp;
-	}
-	memcpy(&status, &arr, 1);
-	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
-
-	status.srp0 = enable ? 1 : 0;
-	memcpy(&expected, &status, sizeof(status));
-	tmp = flash->write(&chip, &expected, 0, 1);
-	if (tmp) {
-		msg_cerr("Write status register failed.\n");
-		return tmp;
-	}
-	tmp = flash->read(&chip, &arr, 0, 1);
-	if (tmp) {
-		msg_cerr("Read status register failed.\n");
-		return tmp;
-	}
-	msg_cdbg("%s: new status: 0x%02x\n", __func__, arr);
-	if ((arr & MASK_WP_AREA) != (expected & MASK_WP_AREA))
 		return 1;
 
 	return 0;
@@ -1307,17 +1147,6 @@ enum wp_mode get_wp_mode(const char *mode_str)
 	return wp_mode;
 }
 
-static int w25r_disable_writeprotect(const struct flashchip *flash)
-{
-	int ret;
-
-	ret = w25_set_srp(flash, 0);
-	if (ret)
-		msg_cerr("%s(): error=%d.\n", __func__, ret);
-
-	return ret;
-}
-
 static int w25q_disable_writeprotect(const struct flashchip *flash,
 		enum wp_mode wp_mode)
 {
@@ -1356,26 +1185,6 @@ static int w25q_disable_writeprotect(const struct flashchip *flash,
 static int w25q_disable_writeprotect_default(const struct flashchip *flash)
 {
 	return w25q_disable_writeprotect(flash, WP_MODE_HARDWARE);
-}
-
-static int w25r_enable_writeprotect(const struct flashchip *flash,
-		enum wp_mode wp_mode)
-{
-	int ret;
-
-	switch (wp_mode) {
-	case WP_MODE_HARDWARE:
-		ret = w25_set_srp(flash, 1);
-		break;
-	default:
-		msg_perr("%s(): invalid mode for Sunrise Point %d\n",
-			__func__, wp_mode);
-		break;
-	}
-	if (ret)
-		msg_cerr("%s(): error=%d.\n", __func__, ret);
-
-	return ret;
 }
 
 static int w25q_enable_writeprotect(const struct flashchip *flash,
@@ -1488,15 +1297,6 @@ struct wp wp_w25q = {
 	 */
 	.disable	= w25q_disable_writeprotect_default,
 	.wp_status	= w25q_wp_status,
-};
-
-/* W25R Series */
-struct wp wp_w25r = {
-	.list_ranges	= w25_list_ranges,
-	.set_range	= w25r_set_range,
-	.enable		= w25r_enable_writeprotect,
-	.disable	= w25r_disable_writeprotect,
-	.wp_status	= w25r_wp_status,
 };
 
 struct generic_range gd25q32_cmp0_ranges[] = {
