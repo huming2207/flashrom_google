@@ -42,6 +42,7 @@ struct wp {
 /* winbond w25-series */
 extern struct wp wp_w25;	/* older winbond chips (w25p, w25x, etc) */
 extern struct wp wp_w25q;
+extern struct wp wp_w25r;
 
 extern struct wp wp_generic;
 extern struct wp wp_wpce775x;

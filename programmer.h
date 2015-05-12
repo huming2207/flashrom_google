@@ -265,6 +265,7 @@ int board_flash_enable(const char *vendor, const char *part);
 /* chipset_enable.c */
 int chipset_flash_enable(void);
 int get_target_bus_from_chipset(enum chipbustype *target_bus);
+enum ich_chipset ich_generation;
 
 /* processor_enable.c */
 int processor_flash_enable(void);

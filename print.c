@@ -58,7 +58,7 @@ char *flashbuses_to_text(enum chipbustype bustype)
 	return ret;
 }
 
-static void print_supported_chips(void)
+static void print_supported_chips(int host_controller)
 {
 	const char *delim = "/";
 	const int mintoklen = 5;
@@ -67,13 +67,21 @@ static void print_supported_chips(void)
 	int maxvendorlen = strlen("Vendor") + 1;
 	int maxchiplen = strlen("Device") + 1;
 	int maxtypelen = strlen("Type") + 1;
-	const struct flashchip *f;
+	const struct flashchip *f, *flash;
 	char *s;
 	char *tmpven, *tmpdev;
 	int tmpvenlen, tmpdevlen, curvenlen, curdevlen;
 
+	if (!host_controller) {
+		flash = flashchips;
+		msg_ginfo("\nList of chips that use "
+			"SPI host controller interface:\n");
+	} else {
+		flash = flashchips_hwseq;
+		msg_ginfo("\nList of chips that use Opaque interface:\n");
+	}
 	/* calculate maximum column widths and by iterating over all chips */
-	for (f = flashchips; f->name != NULL; f++) {
+	for (f = flash; f->name != NULL; f++) {
 		/* Ignore "unknown XXXX SPI chip" entries. */
 		if (!strncmp(f->name, "unknown", 7))
 			continue;
@@ -160,7 +168,7 @@ static void print_supported_chips(void)
 	msg_ginfo("\n\n");
 	msg_ginfo("(P = PROBE, R = READ, E = ERASE, W = WRITE)\n\n");
 
-	for (f = flashchips; f->name != NULL; f++) {
+	for (f = flash; f->name != NULL; f++) {
 		/* Don't print "unknown XXXX SPI chip" entries. */
 		if (!strncmp(f->name, "unknown", 7))
 			continue;
@@ -417,7 +425,10 @@ static void print_supported_boards_helper(const struct board_info *boards,
 
 void print_supported(void)
 {
-	print_supported_chips();
+	/* Print the list of chips that use swseq */
+	print_supported_chips(0);
+	/* Print the list of chips that use hwseq */
+	print_supported_chips(1);
 
 	msg_ginfo("\nSupported programmers:\n");
 	list_programmers_linebreak(0, 80, 0);
