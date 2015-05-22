@@ -767,8 +767,8 @@ int handle_partial_verify(
     int (*verify) (struct flashchip *flash, uint8_t *buf,
                    unsigned int start, unsigned int len, const char *message)) {
 	unsigned int start = 0;
-	int entry;
 	unsigned int size = flash->total_size * 1024;
+	int i;
 
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to read the complete image.
@@ -778,28 +778,38 @@ int handle_partial_verify(
 
 	/* Walk through the table and write content to file for those included
 	 * partition. */
-	while (start < size) {
-		int len;
+	for (i = 0; i < romimages; i++) {
+		unsigned int start, len, start_align, len_align;
 
-		entry = find_next_included_romentry(start);
-		/* No more romentries for remaining region? */
-		if (entry < 0) {
-			break;
+		if (!rom_entries[i].included)
+			continue;
+
+		/* round down to nearest eraseable block boundary */
+		start_align = rom_entries[i].start % required_erase_size;
+		start = rom_entries[i].start - start_align;
+
+		/* round up to nearest eraseable block boundary */
+		len = rom_entries[i].end - start + 1;
+		len_align = len % required_erase_size;
+		if (len_align)
+			len = len + required_erase_size - len_align;
+
+		if (start_align || len_align) {
+			msg_gdbg("\n%s: Re-aligned partial verify due to "
+				"easeable block size requirement:\n"
+				"\trom_entries[%d].start: 0x%06x, len: 0x%06x, "
+				"aligned start: 0x%06x, len: 0x%06x\n",
+				__func__, i, rom_entries[i].start,
+				rom_entries[i].end -
+				rom_entries[i].start + 1,
+				start, len);
 		}
 
 		/* read content from flash. */
-		len = rom_entries[entry].end - rom_entries[entry].start + 1;
-		if (verify(flash, buf + rom_entries[entry].start,
-		           rom_entries[entry].start, len, NULL)) {
+		if (verify(flash, buf + start, start, len, NULL)) {
 			msg_perr("flash partial verify failed.");
 			return -1;
 		}
-
-		/* Skip to location after current romentry. */
-		start = rom_entries[entry].end + 1;
-		/* Catch overflow. */
-		if (!start)
-			break;
 	}
 
 	return 0;
