@@ -321,6 +321,11 @@ int internal_init(void)
 	}
 #endif
 
+#if CONFIG_LINUX_MTD == 1
+	if (!linux_mtd_init())
+		return 0;
+#endif
+
 #if defined(__arm__) || defined(__mips__) && CONFIG_LINUX_SPI == 1
 	/* On the ARM platform, we prefer /dev/spidev if it is supported.
 	 * That means, if user specifies

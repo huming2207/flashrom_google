@@ -340,6 +340,8 @@ CONFIG_RAIDEN_DEBUG_SPI ?= no
 # Enable Linux I2C for ChromeOS EC
 CONFIG_LINUX_I2C ?= no
 
+CONFIG_LINUX_MTD ?= no
+
 # Disable Linux spidev interface support for now, until we check for a Linux
 # device (not host, as DOS binaries for example are built on a Linux host).
 CONFIG_LINUX_SPI ?= no
@@ -502,6 +504,11 @@ endif
 ifeq ($(CONFIG_LINUX_I2C), yes)
 FEATURE_CFLAGS += -D'CONFIG_LINUX_I2C=1'
 PROGRAMMER_OBJS += linux_i2c.o
+endif
+
+ifeq ($(CONFIG_LINUX_MTD), yes)
+FEATURE_CFLAGS += -D'CONFIG_LINUX_MTD=1'
+PROGRAMMER_OBJS += linux_mtd.o
 endif
 
 ifeq ($(CONFIG_LINUX_SPI), yes)

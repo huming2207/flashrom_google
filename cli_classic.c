@@ -93,6 +93,9 @@ static enum programmer default_programmer =
 #if CONFIG_SATAMV == 1
 	PROGRAMMER_SATAMV
 #endif
+#if CONFIG_LINUX_MTD == 1
+	PROGRAMMER_LINUX_MTD
+#endif
 #if CONFIG_LINUX_SPI == 1
 	PROGRAMMER_LINUX_SPI
 #endif

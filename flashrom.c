@@ -280,6 +280,16 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
+#if CONFIG_LINUX_MTD == 1
+	{
+		.name			= "linux_mtd",
+		.init			= linux_mtd_init,
+		.map_flash_region	= fallback_map,
+		.unmap_flash_region	= fallback_unmap,
+		.delay			= internal_delay,
+	},
+#endif
+
 #if CONFIG_LINUX_SPI == 1
 	{
 		.name			= "linux_spi",

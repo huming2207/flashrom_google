@@ -84,6 +84,9 @@ enum programmer {
 #if CONFIG_SATAMV == 1
 	PROGRAMMER_SATAMV,
 #endif
+#if CONFIG_LINUX_MTD == 1
+	PROGRAMMER_LINUX_MTD,
+#endif
 #if CONFIG_LINUX_SPI == 1
 	PROGRAMMER_LINUX_SPI,
 #endif
@@ -527,6 +530,11 @@ int linux_i2c_xfer(int bus, int addr, const void *inbuf,
 		   int insize, const void *outbuf, int outsize);
 #endif
 
+/* linux_mtd.c */
+#if CONFIG_LINUX_MTD == 1
+int linux_mtd_init(void);
+#endif
+
 /* linux_spi.c */
 #if CONFIG_LINUX_SPI == 1
 int linux_spi_init(void);
@@ -592,6 +600,9 @@ enum spi_controller {
 #endif
 #if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__) || defined(__arm__)))
 	SPI_CONTROLLER_BITBANG,
+#endif
+#if CONFIG_LINUX_MTD == 1
+	SPI_CONTROLLER_LINUX_MTD,
 #endif
 #if CONFIG_LINUX_SPI == 1
 	SPI_CONTROLLER_LINUX,
