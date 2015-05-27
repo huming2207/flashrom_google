@@ -527,35 +527,68 @@ static struct w25q_range w25q64_ranges[] = {
 	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
 };
 
-struct w25q_range w25r128_ranges[] = {
-	{ X, X, 0, {0, 0} },	/* none */
+static struct w25q_range w25rq128_cmp0_ranges[] = {
+	{ X, X, 0, {0, 0} },				/* NONE */
 
-	{ 0, 0, 0x1, {0xfc0000, 256 * 1024} },
-	{ 0, 0, 0x2, {0xf80000, 512 * 1024} },
-	{ 0, 0, 0x3, {0xf00000, 1024 * 1024} },
-	{ 0, 0, 0x4, {0xe00000, 2048 * 1024} },
-	{ 0, 0, 0x5, {0xc00000, 4096 * 1024} },
-	{ 0, 0, 0x6, {0x800000, 8192 * 1024} },
+	{ 0, 0, 0x1, {0xfc0000, 256 * 1024} },		/* Upper 1/64 */
+	{ 0, 0, 0x2, {0xf80000, 512 * 1024} },		/* Upper 1/32 */
+	{ 0, 0, 0x3, {0xf00000, 1024 * 1024} },		/* Upper 1/16 */
+	{ 0, 0, 0x4, {0xe00000, 2048 * 1024} },		/* Upper 1/8 */
+	{ 0, 0, 0x5, {0xc00000, 4096 * 1024} },		/* Upper 1/4 */
+	{ 0, 0, 0x6, {0x800000, 8192 * 1024} },		/* Upper 1/2 */
 
-	{ 0, 1, 0x1, {0x000000, 256 * 1024} },
-	{ 0, 1, 0x2, {0x000000, 512 * 1024} },
-	{ 0, 1, 0x3, {0x000000, 1024 * 1024} },
-	{ 0, 1, 0x4, {0x000000, 2048 * 1024} },
-	{ 0, 1, 0x5, {0x000000, 4096 * 1024} },
-	{ 0, 1, 0x6, {0x000000, 8192 * 1024} },
-	{ X, X, 0x7, {0x000000, 16384 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 256 * 1024} },		/* Lower 1/64 */
+	{ 0, 1, 0x2, {0x000000, 512 * 1024} },		/* Lower 1/32 */
+	{ 0, 1, 0x3, {0x000000, 1024 * 1024} },		/* Lower 1/16 */
+	{ 0, 1, 0x4, {0x000000, 2048 * 1024} },		/* Lower 1/8 */
+	{ 0, 1, 0x5, {0x000000, 4096 * 1024} },		/* Lower 1/4 */
+	{ 0, 1, 0x6, {0x000000, 8192 * 1024} },		/* Lower 1/2 */
 
-	{ 1, 0, 0x1, {0xfff000, 4 * 1024} },
-	{ 1, 0, 0x2, {0xffe000, 8 * 1024} },
-	{ 1, 0, 0x3, {0xffc000, 16 * 1024} },
-	{ 1, 0, 0x4, {0xff8000, 32 * 1024} },
-	{ 1, 0, 0x5, {0xff8000, 32 * 1024} },
+	{ X, X, 0x7, {0x000000, 16384 * 1024} },	/* ALL */
 
-	{ 1, 1, 0x1, {0x000000, 4 * 1024} },
-	{ 1, 1, 0x2, {0x000000, 8 * 1024} },
-	{ 1, 1, 0x3, {0x000000, 16 * 1024} },
-	{ 1, 1, 0x4, {0x000000, 32 * 1024} },
-	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
+	{ 1, 0, 0x1, {0xfff000, 4 * 1024} },		/* Upper 1/4096 */
+	{ 1, 0, 0x2, {0xffe000, 8 * 1024} },		/* Upper 1/2048 */
+	{ 1, 0, 0x3, {0xffc000, 16 * 1024} },		/* Upper 1/1024 */
+	{ 1, 0, 0x4, {0xff8000, 32 * 1024} },		/* Upper 1/512 */
+	{ 1, 0, 0x5, {0xff8000, 32 * 1024} },		/* Upper 1/512 */
+
+	{ 1, 1, 0x1, {0x000000, 4 * 1024} },		/* Lower 1/4096 */
+	{ 1, 1, 0x2, {0x000000, 8 * 1024} },		/* Lower 1/2048 */
+	{ 1, 1, 0x3, {0x000000, 16 * 1024} },		/* Lower 1/1024 */
+	{ 1, 1, 0x4, {0x000000, 32 * 1024} },		/* Lower 1/512 */
+	{ 1, 1, 0x5, {0x000000, 32 * 1024} },		/* Lower 1/512 */
+};
+
+static struct w25q_range w25rq128_cmp1_ranges[] = {
+	{ X, X, 0x0, {0x000000, 16 * 1024 * 1024} },	/* ALL */
+
+	{ 0, 0, 0x1, {0x000000, 16128 * 1024} },	/* Lower 63/64 */
+	{ 0, 0, 0x2, {0x000000, 15872 * 1024} },	/* Lower 31/32 */
+	{ 0, 0, 0x3, {0x000000, 15 * 1024 * 1024} },	/* Lower 15/16 */
+	{ 0, 0, 0x4, {0x000000, 14 * 1024 * 1024} },	/* Lower 7/8 */
+	{ 0, 0, 0x5, {0x000000, 12 * 1024 * 1024} },	/* Lower 3/4 */
+	{ 0, 0, 0x6, {0x000000, 8 * 1024 * 1024} },	/* Lower 1/2 */
+
+	{ 0, 1, 0x1, {0x040000, 16128 * 1024} },	/* Upper 63/64 */
+	{ 0, 1, 0x2, {0x080000, 15872 * 1024} },	/* Upper 31/32 */
+	{ 0, 1, 0x3, {0x100000, 15 * 1024 * 1024} },	/* Upper 15/16 */
+	{ 0, 1, 0x4, {0x200000, 14 * 1024 * 1024} },	/* Upper 7/8 */
+	{ 0, 1, 0x5, {0x400000, 12 * 1024 * 1024} },	/* Upper 3/4 */
+	{ 0, 1, 0x6, {0x800000, 8 * 1024 * 1024} },	/* Upper 1/2 */
+
+	{ X, X, 0x7, {0x000000, 0} },			/* NONE */
+
+	{ 1, 0, 0x1, {0x000000, 16380 * 1024} },	/* Lower 4095/4096 */
+	{ 1, 0, 0x2, {0x000000, 16376 * 1024} },	/* Lower 2048/2048 */
+	{ 1, 0, 0x3, {0x000000, 16368 * 1024} },	/* Lower 1023/1024 */
+	{ 1, 0, 0x4, {0x000000, 16352 * 1024} },	/* Lower 511/512 */
+	{ 1, 0, 0x5, {0x000000, 16352 * 1024} },	/* Lower 511/512 */
+
+	{ 1, 1, 0x1, {0x001000, 16380 * 1024} },	/* Upper 4095/4096 */
+	{ 1, 1, 0x2, {0x002000, 16376 * 1024} },	/* Upper 2047/2048 */
+	{ 1, 1, 0x3, {0x004000, 16368 * 1024} },	/* Upper 1023/1024 */
+	{ 1, 1, 0x4, {0x008000, 16352 * 1024} },	/* Upper 511/512 */
+	{ 1, 1, 0x5, {0x008000, 16352 * 1024} },	/* Upper 511/512 */
 };
 
 struct w25q_range w25x10_ranges[] = {
@@ -644,6 +677,27 @@ static struct w25q_range a25l040_ranges[] = {
 	{ X, X, 0x7, {0x00000, 512 * 1024} },
 };
 
+/* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
+static uint8_t w25q_read_status_register_2(void)
+{
+	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x35 };
+	unsigned char readarr[2];
+	int ret;
+
+	/* Read Status Register */
+	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
+	if (ret) {
+		/*
+		 * FIXME: make this a benign failure for now in case we are
+		 * unable to execute the opcode
+		 */
+		msg_cdbg("RDSR2 failed!\n");
+		readarr[0] = 0x00;
+	}
+
+	return readarr[0];
+}
+
 /* Given a flash chip, this function returns its range table. */
 static int w25_range_table(const struct flashchip *flash,
                            struct w25q_range **w25q_ranges,
@@ -689,9 +743,16 @@ static int w25_range_table(const struct flashchip *flash,
 			*w25q_ranges = w25q64_ranges;
 			*num_entries = ARRAY_SIZE(w25q64_ranges);
 			break;
-		case WINBOND_NEX_W25R128FV:
-			*w25q_ranges = w25r128_ranges;
-			*num_entries = ARRAY_SIZE(w25r128_ranges);
+		case WINBOND_NEX_W25Q128:
+			if (w25q_read_status_register_2() & (1 << 6)) {
+				/* CMP == 1 */
+				*w25q_ranges = w25rq128_cmp1_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
+			} else {
+				/* CMP == 0 */
+				*w25q_ranges = w25rq128_cmp0_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp0_ranges);
+			}
 			break;
 		default:
 			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
@@ -1166,27 +1227,6 @@ static int w25_list_ranges(const struct flashchip *flash)
 	}
 
 	return 0;
-}
-
-/* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
-uint8_t w25q_read_status_register_2(void)
-{
-	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x35 };
-	unsigned char readarr[2];
-	int ret;
-
-	/* Read Status Register */
-	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
-	if (ret) {
-		/*
-		 * FIXME: make this a benign failure for now in case we are
-		 * unable to execute the opcode
-		 */
-		msg_cdbg("RDSR2 failed!\n");
-		readarr[0] = 0x00;
-	}
-
-	return readarr[0];
 }
 
 static int w25q_wp_status(const struct flashchip *flash)
