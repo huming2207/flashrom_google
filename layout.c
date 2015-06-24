@@ -734,7 +734,7 @@ int handle_partial_read(
 
 		if (start_align || len_align) {
 			msg_gdbg("\n%s: Re-aligned partial read due to "
-				"easeable block size requirement:\n"
+				"eraseable block size requirement:\n"
 				"\trom_entries[%d].start: 0x%06x, len: 0x%06x, "
 				"aligned start: 0x%06x, len: 0x%06x\n",
 				__func__, i, rom_entries[i].start,
@@ -794,7 +794,7 @@ int handle_partial_verify(
 
 		if (start_align || len_align) {
 			msg_gdbg("\n%s: Re-aligned partial verify due to "
-				"easeable block size requirement:\n"
+				"eraseable block size requirement:\n"
 				"\trom_entries[%d].start: 0x%06x, len: 0x%06x, "
 				"aligned start: 0x%06x, len: 0x%06x\n",
 				__func__, i, rom_entries[i].start,
