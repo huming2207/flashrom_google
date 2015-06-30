@@ -667,6 +667,16 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 		int tmp, j;
 
 		chunksize = min(flash->page_size, len - i);
+#ifdef ICH_GENERATION
+		OPCODE opcode;
+		opcode.spi_type = SPI_OPCODE_TYPE_READ_WITH_ADDRESS;
+		/* Check for flash region permissions */
+		if (check_fd_permissions(&opcode, start + i, chunksize)) {
+			/* Insufficient permissions,
+			 * continue with next block */
+			continue;
+		}
+#endif
 		tmp = flash->read(flash, readbuf + i, start + i, chunksize);
 
 		/* Since this function explicitly compares the bytes, we need

@@ -645,9 +645,23 @@ enum ich_chipset {
 };
 
 extern uint32_t ichspi_bbar;
+
+/* ICH9R SPI commands */
+#define SPI_OPCODE_TYPE_READ_NO_ADDRESS         0
+#define SPI_OPCODE_TYPE_WRITE_NO_ADDRESS        1
+#define SPI_OPCODE_TYPE_READ_WITH_ADDRESS       2
+#define SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS      3
+
+typedef struct _OPCODE {
+	uint8_t opcode;         /* This commands spi opcode */
+	uint8_t spi_type;       /* This commands spi type */
+	uint8_t atomic;         /* Use preop: (0: none, 1: preop0, 2: preop1 */
+} OPCODE;
+
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
 int via_init_spi(struct pci_dev *dev);
+int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count);
 
 /* ene_lpc.c */
 int ene_probe_spi_flash(const char *name);

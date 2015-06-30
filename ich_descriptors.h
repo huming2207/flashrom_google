@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include "programmer.h" /* for enum ich_chipset */
 
+#define ICH_GENERATION /* Identifies ICH/PCH family */
 /* FIXME: Replace with generic return codes */
 #define ICH_RET_OK	0
 #define ICH_RET_ERR	-1
