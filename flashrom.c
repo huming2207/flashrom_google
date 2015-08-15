@@ -1497,23 +1497,25 @@ static int walk_eraseregions(struct flashchip *flash, int erasefunction,
 							unsigned int len)),
 			     void *param1, void *param2)
 {
-	int i, j, rc = 0;
+	int i, j, rc = -1;
 	unsigned int start = 0;
 	unsigned int len;
 	struct block_eraser eraser = flash->block_erasers[erasefunction];
 
-	if (required_erase_size &&
-		(eraser.eraseblocks[i].size != required_erase_size)) {
-		msg_cdbg("%u does not meet erase alignment requirement\n",
-				eraser.eraseblocks[i].size);
-		return -1;
-	}
-
 	for (i = 0; i < NUM_ERASEREGIONS; i++) {
-		/* count==0 for all automatically initialized array
+		/* count==0 and size==0 for all automatically initialized array
 		 * members so the loop below won't be executed for them.
 		 */
 		len = eraser.eraseblocks[i].size;
+		if (!len)
+			continue;
+
+		if (required_erase_size && (len != required_erase_size)) {
+			msg_cdbg("%u does not meet erase alignment", len);
+			rc = -1;
+			break;
+		}
+
 		for (j = 0; j < eraser.eraseblocks[i].count; j++) {
 			/* Print this for every block except the first one. */
 			if (i || j)
