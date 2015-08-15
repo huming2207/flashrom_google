@@ -620,7 +620,7 @@ static int enable_flash_vt8237s_spi(struct pci_dev *dev, const char *name)
 }
 
 static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
-				   enum ich_chipset ich_generation)
+				   enum ich_chipset generation)
 {
 	int ret, ret_spi;
 	uint8_t bbs, buc;
@@ -636,7 +636,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	static const char *const straps_names_lpt_lp[] = { "SPI", "LPC", "unknown", "unknown" };
 	static const char *const straps_names_unknown[] = { "unknown", "unknown", "unknown", "unknown" };
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_ICH7:
 		/* EP80579 may need further changes, but this is the least
 		 * intrusive way to get correct BOOT Strap printing without
@@ -671,7 +671,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	}
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		ret = enable_flash_ich(dev, name, 0xdc);
 		if (ret == ERROR_FATAL)
@@ -705,7 +705,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	}
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_5_SERIES_IBEX_PEAK:
 	case CHIPSET_6_SERIES_COUGAR_POINT:
 	case CHIPSET_7_SERIES_PANTHER_POINT:
@@ -785,7 +785,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	}
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		rpci_write_long(dev, 0xdc, gcs);
 		msg_pdbg("GCS = 0x%x: ", gcs);
@@ -800,7 +800,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		break;
 	}
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
 	case CHIPSET_9_SERIES_WILDCAT_POINT:
 		/* Lynx Point LP uses a single bit for GCS */
@@ -816,7 +816,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	}
 	msg_pdbg("Boot BIOS Straps: 0x%x (%s)\n", bbs, straps_names[bbs]);
 
-	switch (ich_generation) {
+	switch (generation) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		break;
 	default:
@@ -831,7 +831,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	 * on ICH7 when the southbridge is strapped to LPC
 	 */
 	internal_buses_supported = BUS_FWH;
-	if (ich_generation == CHIPSET_ICH7) {
+	if (generation == CHIPSET_ICH7) {
 		if (bbs == 0x03) {
 			/* If strapped to LPC, no further SPI initialization is
 			 * required. */
@@ -843,7 +843,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	}
 
 	/* This adds BUS_SPI */
-	ret_spi = ich_init_spi(dev, tmp, rcrb, ich_generation);
+	ret_spi = ich_init_spi(dev, tmp, rcrb, generation);
 	if (ret_spi == ERROR_FATAL)
 		return ret_spi;
 	
@@ -919,7 +919,6 @@ static int enable_flash_baytrail(struct pci_dev *dev, const char *name)
 	uint8_t bbs, buc;
 	uint32_t tmp, gcs;
 	void *rcrb, *spibar;
-	enum ich_chipset ich_generation = CHIPSET_BAYTRAIL;
 
 	static const char *const straps_names[] = { "LPC", "unknown",
 						    "unknown", "SPI" };
@@ -970,7 +969,7 @@ static int enable_flash_baytrail(struct pci_dev *dev, const char *name)
 	msg_pdbg("SPI_BASE_ADDRESS = 0x%x\n", tmp);
 	spibar = physmap("BYT SBASE", tmp, 512);
 
-	ret_spi = ich_init_spi(dev, tmp, spibar, ich_generation);
+	ret_spi = ich_init_spi(dev, tmp, spibar, CHIPSET_BAYTRAIL);
 	if (ret_spi == ERROR_FATAL)
 		return ret_spi;
 
