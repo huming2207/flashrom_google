@@ -443,7 +443,6 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 int s25fl_block_erase(struct flashchip *flash,
 		      unsigned int addr, unsigned int blocklen)
 {
-	unsigned char status;
 	int result;
 
 	struct spi_command erase_cmds[] = {

@@ -1410,6 +1410,7 @@ static int w25r_enable_writeprotect(const struct flashchip *flash,
 	default:
 		msg_perr("%s(): invalid mode for Sunrise Point %d\n",
 			__func__, wp_mode);
+		ret = -1;
 		break;
 	}
 	if (ret)

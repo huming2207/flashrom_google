@@ -1522,7 +1522,6 @@ static void pch_hwseq_set_addr(uint32_t addr)
  */
 static uint32_t pch_hwseq_get_erase_block_size(unsigned int addr)
 {
-	uint8_t enc_berase;
 	static const uint32_t dec_berase[4] = {
 		256,
 		4 * 1024,
@@ -1572,7 +1571,7 @@ static int pch_hwseq_wait_for_cycle_complete(unsigned int timeout,
 int pch_hwseq_probe(struct flashchip *flash)
 {
 	uint32_t total_size, boundary = 0; /*There are no partitions in flash*/
-	uint32_t erase_size_low, size_low, erase_size_high, size_high;
+	uint32_t erase_size_high, size_high;
 	struct block_eraser *eraser;
 
 	total_size = hwseq_data.size_comp0 + hwseq_data.size_comp1;

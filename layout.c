@@ -766,8 +766,6 @@ int handle_partial_verify(
     uint8_t *buf,
     int (*verify) (struct flashchip *flash, uint8_t *buf,
                    unsigned int start, unsigned int len, const char *message)) {
-	unsigned int start = 0;
-	unsigned int size = flash->total_size * 1024;
 	int i;
 
 	/* If no regions were specified for inclusion, assume
