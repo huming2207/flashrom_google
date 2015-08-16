@@ -47,6 +47,14 @@
 static usb_dev_handle *dediprog_handle;
 static int dediprog_endpoint;
 
+enum dediprog_devtype {
+	DEV_UNKNOWN		= 0,
+	DEV_SF100		= 100,
+	DEV_SF600		= 600,
+};
+
+enum dediprog_devtype dediprog_devicetype;
+
 enum dediprog_leds {
 	LED_INVALID		= -1,
 	LED_NONE		= 0,
@@ -134,10 +142,14 @@ static int dediprog_firmwareversion = FIRMWARE_VERSION(0, 0, 0);
 /* Returns true if firmware (and thus hardware) supports the "new" protocol */
 static int is_new_prot(void)
 {
-	/* if (SF100) */
-	return dediprog_firmwareversion >= FIRMWARE_VERSION(5, 5, 0);
-	/* else if (SF600)
-	return dediprog_firmwareversion >= FIRMWARE_VERSION(6, 9, 0); */
+	switch (dediprog_devicetype) {
+	case DEV_SF100:
+		return dediprog_firmwareversion >= FIRMWARE_VERSION(5, 5, 0);
+	case DEV_SF600:
+		return dediprog_firmwareversion >= FIRMWARE_VERSION(6, 9, 0);
+	default:
+		return 0;
+	}
 }
 
 static int dediprog_read(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, uint8_t *bytes, size_t size)
@@ -577,6 +589,7 @@ static int dediprog_check_devicestring(void)
 {
 	int ret;
 	int fw[3];
+	int sfnum;
 	char buf[0x11];
 
 #if 0
@@ -598,16 +611,21 @@ static int dediprog_check_devicestring(void)
 	}
 	buf[0x10] = '\0';
 	msg_pdbg("Found a %s\n", buf);
-	if (memcmp(buf, "SF100", 0x5) != 0) {
+	if (memcmp(buf, "SF100", 0x5) == 0)
+		dediprog_devicetype = DEV_SF100;
+	else if (memcmp(buf, "SF600", 0x5) == 0)
+		dediprog_devicetype = DEV_SF600;
+	else {
 		msg_perr("Device not a SF100!\n");
 		return 1;
 	}
-	if (sscanf(buf, "SF100 V:%d.%d.%d ", &fw[0], &fw[1], &fw[2]) != 3) {
+	if (sscanf(buf, "SF%d V:%d.%d.%d ", &sfnum, &fw[0], &fw[1], &fw[2])
+	    != 4 || sfnum != dediprog_devicetype) {
 		msg_perr("Unexpected firmware version string '%s'\n", buf);
 		return 1;
 	}
 	/* Only these major versions were tested. */
-	if (fw[0] < 2 || fw[0] > 6) {
+	if (fw[0] < 2 || fw[0] > 7) {
 		msg_perr("Unexpected firmware version %d.%d.%d!\n", fw[0], fw[1], fw[2]);
 		return 1;
 	}
@@ -768,6 +786,7 @@ static int dediprog_shutdown(void *data)
 	msg_pspew("%s\n", __func__);
 
 	dediprog_firmwareversion = FIRMWARE_VERSION(0, 0, 0);
+	dediprog_devicetype = DEV_UNKNOWN;
 
 	/* URB 28. Command Set SPI Voltage to 0. */
 	if (dediprog_set_spi_voltage(0x0))
