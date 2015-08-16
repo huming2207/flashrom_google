@@ -429,7 +429,19 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 	 * space in a USB bulk transfer must be filled with 0xff padding.
 	 */
 	const unsigned int count = len / chunksize;
-	const char count_and_cmd[] = {count & 0xff, (count >> 8) & 0xff, 0x00, dedi_spi_cmd};
+	const char count_and_cmd_old[] = {count & 0xff, (count >> 8) & 0xff, 0x00, dedi_spi_cmd};
+	const char count_and_cmd_new[] = {
+		count & 0xff,
+		(count >> 8) & 0xff,
+		0,			/* used for 24-bit address support? */
+		dedi_spi_cmd,
+		JEDEC_BYTE_PROGRAM,	/* FIXME: needs to be determined based on byte 3? */
+		0,
+		start & 0xff,
+		(start >> 8) & 0xff,
+		(start >> 16) & 0xff,
+		(start >> 24) & 0xff,
+	};
 	char usbbuf[512];
 
 	/*
@@ -452,15 +464,28 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 	/* No idea if the hardware can handle empty writes, so chicken out. */
 	if (!len)
 		return 0;
-	/* Command Write SPI Bulk. No idea which write command is used on the
-	 * SPI side.
-	 */
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_WRITE, start % 0x10000, start / 0x10000,
-			      (char *)count_and_cmd, sizeof(count_and_cmd), DEFAULT_TIMEOUT);
-	if (ret != sizeof(count_and_cmd)) {
-		msg_perr("Command Write SPI Bulk failed, %i %s!\n", ret,
-			 usb_strerror());
-		return 1;
+	if (!is_new_prot()) {
+		/* Command Write SPI Bulk. No idea which write command is used on the
+		 * SPI side.
+		 */
+		ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_WRITE, start % 0x10000, start / 0x10000,
+				      (char *)count_and_cmd_old, sizeof(count_and_cmd_old), DEFAULT_TIMEOUT);
+		if (ret != sizeof(count_and_cmd_old)) {
+			msg_perr("Command Write SPI Bulk failed, %i %s!\n", ret,
+				 usb_strerror());
+			return 1;
+		}
+	} else {
+		/* Command Write SPI Bulk. No idea which write command is used on the
+		 * SPI side.
+		 */
+		ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_WRITE, 0, 0,
+				      (char *)count_and_cmd_new, sizeof(count_and_cmd_new), DEFAULT_TIMEOUT);
+		if (ret != sizeof(count_and_cmd_new)) {
+			msg_perr("Command Write SPI Bulk failed, %i %s!\n", ret,
+				 usb_strerror());
+			return 1;
+		}
 	}
 
 	for (i = 0; i < count; i++) {
