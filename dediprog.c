@@ -130,16 +130,26 @@ enum dediprog_writemode {
 
 static int dediprog_firmwareversion = FIRMWARE_VERSION(0, 0, 0);
 
-#if 0
-/* Might be useful for other pieces of code as well. */
-static void print_hex(void *buf, size_t len)
+/* Returns true if firmware (and thus hardware) supports the "new" protocol */
+static int is_new_prot(void)
 {
-	size_t i;
-
-	for (i = 0; i < len; i++)
-		msg_pdbg(" %02x", ((uint8_t *)buf)[i]);
+	/* if (SF100) */
+	return dediprog_firmwareversion >= FIRMWARE_VERSION(5, 5, 0);
+	/* else if (SF600)
+	return dediprog_firmwareversion >= FIRMWARE_VERSION(6, 9, 0); */
 }
-#endif
+
+static int dediprog_read(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, uint8_t *bytes, size_t size)
+{
+	return usb_control_msg(dediprog_handle, REQTYPE_EP_IN, cmd, value, idx,
+			       (char *)bytes, size, DEFAULT_TIMEOUT);
+}
+
+static int dediprog_write(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, const uint8_t *bytes, size_t size)
+{
+	return usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, cmd, value, idx,
+			       (char *)bytes, size, DEFAULT_TIMEOUT);
+}
 
 /* Might be useful for other USB devices as well. static for now. */
 /* device parameter allows user to specify one device of multiple installed */
@@ -166,24 +176,30 @@ static int dediprog_set_leds(int leds)
 	if (leds < LED_NONE || leds > LED_ALL)
 		leds = LED_ALL;
 
-	/* Older Dediprogs with 2.x.x and 3.x.x firmware only had
-	 * two LEDs, and they were reversed. So map them around if 
-	 * we have an old device. On those devices the LEDs map as
-	 * follows:
+	/* Older Dediprogs with 2.x.x and 3.x.x firmware only had two LEDs, assigned to different bits. So map
+	 * them around if we have an old device. On those devices the LEDs map as follows:
 	 *   bit 2 == 0: green light is on.
-	 *   bit 0 == 0: red light is on. 
+	 *   bit 0 == 0: red light is on.
+	 *
+	 * Additionally, the command structure has changed with the "new" protocol.
+	 *
+	 * FIXME: take IO pins into account
 	 */
-	int target_leds;
-	if (dediprog_firmwareversion < FIRMWARE_VERSION(5,0,0)) {
-		target_leds = ((leds & LED_ERROR) >> 2) |
-			((leds & LED_PASS) << 2);
+	int target_leds, ret;
+	if (is_new_prot()) {
+		target_leds = (leds ^ 7) << 8;
+		ret = dediprog_write(CMD_SET_IO_LED, target_leds, 0, NULL, 0);
 	} else {
-		target_leds = leds;
+		if (dediprog_firmwareversion < FIRMWARE_VERSION(5, 0, 0)) {
+			target_leds = ((leds & LED_ERROR) >> 2) | ((leds & LED_PASS) << 2);
+		} else {
+			target_leds = leds;
+		}
+		target_leds ^= 7;
+
+		ret = dediprog_write(CMD_SET_IO_LED, 0x9, target_leds, NULL, 0);
 	}
 
-	target_leds ^= 7;
-	int ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_SET_IO_LED, 0x09, target_leds,
-				  NULL, 0x0, DEFAULT_TIMEOUT);
 	if (ret != 0x0) {
 		msg_perr("Command Set LED 0x%x failed (%s)!\n", leds, usb_strerror());
 		return 1;
@@ -222,8 +238,7 @@ static int dediprog_set_spi_voltage(int millivolt)
 		/* Wait some time as the original driver does. */
 		programmer_delay(200 * 1000);
 	}
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_SET_VCC, voltage_selector, 0,
-			      NULL, 0x0, DEFAULT_TIMEOUT);
+	ret = dediprog_write(CMD_SET_VCC, voltage_selector, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Voltage 0x%x failed!\n",
 			 voltage_selector);
@@ -263,8 +278,7 @@ static int dediprog_set_spi_speed(unsigned int spispeed_idx)
 	const struct dediprog_spispeeds *spispeed = &spispeeds[spispeed_idx];
 	msg_pdbg("SPI speed is %sHz\n", spispeed->name);
 
-	int ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_SET_SPI_CLK, spispeed->speed, 0xff,
-				  NULL, 0x0, DEFAULT_TIMEOUT);
+	int ret = dediprog_write(CMD_SET_SPI_CLK, spispeed->speed, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Speed 0x%x failed!\n", spispeed->speed);
 		return 1;
@@ -285,10 +299,7 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 	/* chunksize must be 512, other sizes will NOT work at all. */
 	const unsigned int chunksize = 0x200;
 	const unsigned int count = len / chunksize;
-	const char count_and_chunk[] = {count & 0xff,
-					(count >> 8) & 0xff,
-					chunksize & 0xff,
-					(chunksize >> 8) & 0xff};
+	unsigned int cmd_len;
 
 	if ((start % chunksize) || (len % chunksize)) {
 		msg_perr("%s: Unaligned start=%i, len=%i! Please report a bug "
@@ -299,15 +310,34 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 	/* No idea if the hardware can handle empty reads, so chicken out. */
 	if (!len)
 		return 0;
-	/* Command Read SPI Bulk. No idea which read command is used on the
-	 * SPI side.
-	 */
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_READ, start % 0x10000,
-			      start / 0x10000, (char *)count_and_chunk,
-			      sizeof(count_and_chunk), DEFAULT_TIMEOUT);
-	if (ret != sizeof(count_and_chunk)) {
-		msg_perr("Command Read SPI Bulk failed, %i %s!\n", ret,
-			 usb_strerror());
+	/* Command Read SPI Bulk. */
+	if (is_new_prot()) {
+		const uint8_t read_cmd[] = {
+			count & 0xff,
+			(count >> 8) & 0xff,
+			0,
+			READ_MODE_FAST,
+			0,
+			0,
+			start & 0xff,
+			(start >> 8) & 0xff,
+			(start >> 16) & 0xff,
+			(start >> 24) & 0xff,
+			};
+
+		cmd_len = sizeof(read_cmd);
+		ret = dediprog_write(CMD_READ, 0, 0, read_cmd, cmd_len);
+	} else {
+		const uint8_t read_cmd[] = {count & 0xff,
+					(count >> 8) & 0xff,
+					chunksize & 0xff,
+					(chunksize >> 8) & 0xff};
+
+		cmd_len = sizeof(read_cmd);
+		ret = dediprog_write(CMD_READ, start % 0x10000, start / 0x10000, read_cmd, cmd_len);
+	}
+	if (ret != cmd_len) {
+		msg_perr("Command Read SPI Bulk failed, %i %s!\n", ret, usb_strerror());
 		return 1;
 	}
 
@@ -519,8 +549,12 @@ static int dediprog_spi_send_command(unsigned int writecnt,
 		return 1;
 	}
 	
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_OUT, CMD_TRANSCEIVE, 0, readcnt ? 0x1 : 0x0,
-			      (char *)writearr, writecnt, DEFAULT_TIMEOUT);
+	/* New protocol has the read flag as value while the old protocol had it in the index field. */
+	if (is_new_prot()) {
+		ret = dediprog_write(CMD_TRANSCEIVE, readcnt ? 1 : 0, 0, writearr, writecnt);
+	} else {
+		ret = dediprog_write(CMD_TRANSCEIVE, 0, readcnt ? 1 : 0, writearr, writecnt);
+	}
 	if (ret != writecnt) {
 		msg_perr("Send SPI failed, expected %i, got %i %s!\n",
 			 writecnt, ret, usb_strerror());
@@ -529,8 +563,7 @@ static int dediprog_spi_send_command(unsigned int writecnt,
 	if (readcnt == 0)
 		return 0;
 
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_IN, CMD_TRANSCEIVE, 0, 0,
-			     (char *)readarr, readcnt, DEFAULT_TIMEOUT);
+	ret = dediprog_read(CMD_TRANSCEIVE, 0, 0, readarr, readcnt);
 	if (ret != readcnt) {
 		msg_perr("Receive SPI failed, expected %i, got %i %s!\n",
 			 readcnt, ret, usb_strerror());
@@ -557,8 +590,7 @@ static int dediprog_check_devicestring(void)
 	}
 #endif
 	/* Command Receive Device String. */
-	ret = usb_control_msg(dediprog_handle, REQTYPE_EP_IN, CMD_READ_PROG_INFO, 0, 0,
-			      buf, 0x10, DEFAULT_TIMEOUT);
+	ret = dediprog_read(CMD_READ_PROG_INFO, 0, 0, (uint8_t *)buf, 0x10);
 	if (ret != 0x10) {
 		msg_perr("Incomplete/failed Command Receive Device String!\n");
 		return 1;
@@ -570,16 +602,16 @@ static int dediprog_check_devicestring(void)
 		return 1;
 	}
 	if (sscanf(buf, "SF100 V:%d.%d.%d ", &fw[0], &fw[1], &fw[2]) != 3) {
-		msg_perr("Unexpected firmware version string!\n");
+		msg_perr("Unexpected firmware version string '%s'\n", buf);
 		return 1;
 	}
-	/* Only these versions were tested. */
-	if (fw[0] < 2 || fw[0] > 5) {
-		msg_perr("Unexpected firmware version %d.%d.%d!\n", fw[0],
-			 fw[1], fw[2]);
+	/* Only these major versions were tested. */
+	if (fw[0] < 2 || fw[0] > 6) {
+		msg_perr("Unexpected firmware version %d.%d.%d!\n", fw[0], fw[1], fw[2]);
 		return 1;
 	}
 	dediprog_firmwareversion = FIRMWARE_VERSION(fw[0], fw[1], fw[2]);
+
 	return 0;
 }
 
