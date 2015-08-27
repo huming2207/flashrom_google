@@ -133,6 +133,12 @@
 #define FPB_FPBA_OFF		0	/* 0-12: Block/Sector Erase Size */
 #define FPB_FPBA			(0x1FFF << FPB_FPBA_OFF)
 
+// ICH9R SPI commands
+#define SPI_OPCODE_TYPE_READ_NO_ADDRESS		0
+#define SPI_OPCODE_TYPE_WRITE_NO_ADDRESS	1
+#define SPI_OPCODE_TYPE_READ_WITH_ADDRESS	2
+#define SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS	3
+
 // ICH7 registers
 #define ICH7_REG_SPIS		0x00	/* 16 Bits */
 #define SPIS_SCIP		0x0001
@@ -219,6 +225,12 @@ enum ich_chipset ich_generation = CHIPSET_ICH_UNKNOWN;
 uint32_t ichspi_bbar = 0;
 
 static void *ich_spibar = NULL;
+
+typedef struct _OPCODE {
+	uint8_t opcode;		//This commands spi opcode
+	uint8_t spi_type;	//This commands spi type
+	uint8_t atomic;		//Use preop: (0: none, 1: preop0, 2: preop1
+} OPCODE;
 
 /* Suggested opcode definition:
  * Preop 1: Write Enable
@@ -1071,12 +1083,11 @@ struct fd_region {
 	{ .name = "Platform Data" },
 };
 
-int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
+static int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
 {
 	int i;
 	uint8_t type = opcode->spi_type;
 	int ret = 0;
-	const char *region = NULL;
 
 	/* check flash descriptor permissions (if present) */
 	for (i = 0; i < num_fd_regions; i++) {
@@ -1084,11 +1095,8 @@ int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
 		enum fd_access_level level;
 
 		if ((addr + count - 1 < fd_regions[i].base) ||
-		    (addr > fd_regions[i].limit)) {
+		    (addr > fd_regions[i].limit))
 			continue;
-		}
-
-		region = name;
 
 		if (!fd_regions[i].permission) {
 			msg_perr("No permissions set for flash region %s\n",
@@ -1114,13 +1122,6 @@ int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
 			}
 		}
 		break;
-	}
-
-	if (!region) {
-		msg_pspew("%s: Cannot access address 0x%08x"
-			  " as it does not belong to any known"
-			  " flash region\n", __func__, addr);
-		ret = SPI_ACCESS_DENIED;
 	}
 
 	return ret;
@@ -1600,14 +1601,6 @@ int pch_hwseq_block_erase(struct flashchip *flash,
 	uint32_t erase_block;
 	uint16_t hsfc;
 	uint32_t timeout = 5000 * 1000; /* 5 s for max 64 kB */
-	OPCODE opcode;
-
-	opcode.spi_type = SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS;
-	/* Check for flash region permissions */
-	if (check_fd_permissions(&opcode, addr, len)) {
-		/* Access denied, return */
-		return 0;
-	}
 
 	erase_block = pch_hwseq_get_erase_block_size(addr);
 	if (len != erase_block) {
@@ -1656,7 +1649,6 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
-	OPCODE opcode;
 
 	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to read from an inaccessible memory address "
@@ -1671,16 +1663,6 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 	while (len > 0) {
 		block_len = min(len, opaque_programmer->max_data_read);
-		opcode.spi_type = SPI_OPCODE_TYPE_READ_WITH_ADDRESS;
-		/* Check for flash region permissions */
-		if (check_fd_permissions(&opcode, addr, block_len)) {
-			/* Access denied,
-			 * continue with next block */
-			addr += block_len;
-			buf += block_len;
-			len -= block_len;
-			continue;
-		}
 		pch_hwseq_set_addr(addr);
 		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 		hsfc &= ~HSFSC_FCYCLE; /* set read operation */
@@ -1710,7 +1692,6 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
-	OPCODE opcode;
 
 	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to write to an inaccessible memory address "
@@ -1725,16 +1706,6 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	while (len > 0) {
 		pch_hwseq_set_addr(addr);
 		block_len = min(len, opaque_programmer->max_data_write);
-		opcode.spi_type = SPI_OPCODE_TYPE_WRITE_WITH_ADDRESS;
-		/* Check for flash region permissions */
-		if (check_fd_permissions(&opcode, addr, block_len)) {
-			/* Access denied,
-			 * continue with next block */
-			addr += block_len;
-			buf += block_len;
-			len -= block_len;
-			continue;
-		}
 		ich_fill_data(buf, block_len, PCH100_REG_FDATA0);
 		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 		hsfc &= ~HSFSC_FCYCLE; /* clear operation */
@@ -1830,7 +1801,6 @@ static void do_ich9_spi_frap(uint32_t frap, int i)
 		      (((ICH_BRRA(frap) >> i) & 1) << 0);
 	int offset = ICH9_REG_FREG0 + i * 4;
 	uint32_t freg = mmio_readl(ich_spibar + offset);
-	const int locked_index = 0;
 
 	msg_pdbg("0x%02X: 0x%08x (FREG%i: %s)\n",
 		     offset, freg, i, fd_regions[i].name);
@@ -1841,7 +1811,6 @@ static void do_ich9_spi_frap(uint32_t frap, int i)
 	if (fd_regions[i].base > fd_regions[i].limit) {
 		/* this FREG is disabled */
 		msg_pdbg("%s region is unused.\n", region_names[i]);
-		fd_regions[i].permission = &fd_region_permissions[locked_index];
 		return;
 	}
 
