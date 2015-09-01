@@ -744,6 +744,7 @@ static int w25_range_table(const struct flashchip *flash,
 			*num_entries = ARRAY_SIZE(w25q64_ranges);
 			break;
 		case WINBOND_NEX_W25Q128:
+		case WINBOND_NEX_W25Q128FW:
 			if (w25q_read_status_register_2() & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
