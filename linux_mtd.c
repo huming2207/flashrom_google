@@ -294,7 +294,7 @@ static int linux_mtd_setup(int dev_num)
 
 		tmp = (char *)scanft(LINUX_MTD_SYSFS_ROOT, "type", "nor", 1);
 		if (!tmp) {
-			msg_perr("%s: NOR type device not found.\n", __func__);
+			msg_pdbg("%s: NOR type device not found.\n", __func__);
 			goto linux_mtd_setup_exit;
 		}
 
