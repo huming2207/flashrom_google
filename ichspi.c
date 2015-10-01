@@ -216,7 +216,8 @@
 *	64 * 1024
 */
 #define ERASE_BLOCK_SIZE 1
-
+#define HWSEQ_READ		 0
+#define HWSEQ_WRITE		 1
 
 /* ICH SPI configuration lock-down. May be set during chipset enabling. */
 static int ichspi_lock = 0;
@@ -1083,6 +1084,48 @@ struct fd_region {
 	{ .name = "Platform Data" },
 };
 
+static int check_fd_permissions_hwseq(int op_type, uint32_t addr, int count)
+{
+	int i;
+	int ret = 0;
+
+	/* check flash descriptor permissions (if present) */
+	for (i = 0; i < num_fd_regions; i++) {
+		const char *name = fd_regions[i].name;
+		enum fd_access_level level;
+
+		if ((addr + count - 1 < fd_regions[i].base) ||
+		    (addr > fd_regions[i].limit))
+			continue;
+
+		if (!fd_regions[i].permission) {
+			msg_perr("No permissions set for flash region %s\n",
+				  fd_regions[i].name);
+			break;
+		}
+		level = fd_regions[i].permission->level;
+
+		if (op_type == HWSEQ_READ) {
+			if (level != FD_REGION_READ_ONLY &&
+			    level != FD_REGION_READ_WRITE) {
+				msg_pspew("%s: Cannot read address 0x%08x in "
+					"region %s\n", __func__, addr, name);
+				ret = SPI_ACCESS_DENIED;
+			}
+		} else if (op_type == HWSEQ_WRITE) {
+			if (level != FD_REGION_WRITE_ONLY &&
+			    level != FD_REGION_READ_WRITE) {
+				msg_pspew("%s: Cannot write to address 0x%08x "
+					"in region %s\n", __func__, addr, name);
+				ret = SPI_ACCESS_DENIED;
+			}
+		}
+		break;
+	}
+
+	return ret;
+}
+
 static int check_fd_permissions(OPCODE *opcode, uint32_t addr, int count)
 {
 	int i;
@@ -1601,6 +1644,8 @@ int pch_hwseq_block_erase(struct flashchip *flash,
 	uint32_t erase_block;
 	uint16_t hsfc;
 	uint32_t timeout = 5000 * 1000; /* 5 s for max 64 kB */
+	int result;
+	int op_type;
 
 	erase_block = pch_hwseq_get_erase_block_size(addr);
 	if (len != erase_block) {
@@ -1626,6 +1671,12 @@ int pch_hwseq_block_erase(struct flashchip *flash,
 		return -1;
 	}
 
+	/* Check flash region permissions before erasing */
+	op_type = HWSEQ_WRITE;
+	result = check_fd_permissions_hwseq(op_type, addr, len);
+	if (result)
+		return result;
+
 	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
 
 	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
@@ -1649,6 +1700,8 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
+	int result;
+	int op_type;
 
 	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to read from an inaccessible memory address "
@@ -1663,6 +1716,11 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 
 	while (len > 0) {
 		block_len = min(len, opaque_programmer->max_data_read);
+		/* Check flash region permissions before reading */
+		op_type = HWSEQ_READ;
+		result = check_fd_permissions_hwseq(op_type, addr, block_len);
+		if (result)
+			return result;
 		pch_hwseq_set_addr(addr);
 		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 		hsfc &= ~HSFSC_FCYCLE; /* set read operation */
@@ -1692,6 +1750,8 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
+	int result;
+	int op_type;
 
 	if ((addr + len) > (flash->total_size * 1024)) {
 		msg_perr("Request to write to an inaccessible memory address "
@@ -1706,6 +1766,11 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	while (len > 0) {
 		pch_hwseq_set_addr(addr);
 		block_len = min(len, opaque_programmer->max_data_write);
+		/* Check flash region permissions before writing */
+		op_type = HWSEQ_WRITE;
+		result = check_fd_permissions_hwseq(op_type, addr, block_len);
+		if (result)
+			return result;
 		ich_fill_data(buf, block_len, PCH100_REG_FDATA0);
 		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 		hsfc &= ~HSFSC_FCYCLE; /* clear operation */
