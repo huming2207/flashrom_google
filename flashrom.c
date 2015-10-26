@@ -1800,6 +1800,8 @@ void check_chip_supported(const struct flashchip *flash)
 				msg_cdbg(" ERASE");
 			if (flash->tested & TEST_BAD_WRITE)
 				msg_cdbg(" WRITE");
+			if (flash->tested & TEST_BAD_UREAD)
+				msg_cdbg(" UNBOUNDED READ");
 			msg_cdbg("\n");
 		}
 		if ((!(flash->tested & TEST_BAD_PROBE) && !(flash->tested & TEST_OK_PROBE)) ||
@@ -1815,6 +1817,8 @@ void check_chip_supported(const struct flashchip *flash)
 				msg_cdbg(" ERASE");
 			if (!(flash->tested & TEST_BAD_WRITE) && !(flash->tested & TEST_OK_WRITE))
 				msg_cdbg(" WRITE");
+			if (!(flash->tested & TEST_BAD_UREAD) && !(flash->tested & TEST_OK_UREAD))
+				msg_cdbg(" UNBOUNDED READ");
 			msg_cdbg("\n");
 		}
 		/* FIXME: This message is designed towards CLI users. */

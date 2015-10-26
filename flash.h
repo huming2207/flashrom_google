@@ -126,6 +126,7 @@ extern enum chipbustype target_bus;
 
 /* Erasing flash produces zeroes rather than ones */
 #define FEATURE_ERASE_TO_ZERO	(1 << 8)
+#define FEATURE_UNBOUND_READ	(1 << 10)
 
 struct flashchip {
 	const char *vendor;
@@ -205,18 +206,22 @@ int flash_unerased_value(struct flashchip *flash);
 #define TEST_OK_READ	(1 << 1)
 #define TEST_OK_ERASE	(1 << 2)
 #define TEST_OK_WRITE	(1 << 3)
+#define TEST_OK_UREAD	(1 << 4)
 #define TEST_OK_PR	(TEST_OK_PROBE | TEST_OK_READ)
 #define TEST_OK_PRE	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE)
 #define TEST_OK_PRW	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_WRITE)
 #define TEST_OK_PREW	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE | TEST_OK_WRITE)
-#define TEST_OK_MASK	0x0f
+#define TEST_OK_PREWU	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE | TEST_OK_WRITE | TEST_OK_UREAD)
+#define TEST_OK_MASK	0x1f
 
-#define TEST_BAD_PROBE	(1 << 4)
-#define TEST_BAD_READ	(1 << 5)
-#define TEST_BAD_ERASE	(1 << 6)
-#define TEST_BAD_WRITE	(1 << 7)
+#define TEST_BAD_PROBE	(1 << 5)
+#define TEST_BAD_READ	(1 << 6)
+#define TEST_BAD_ERASE	(1 << 7)
+#define TEST_BAD_WRITE	(1 << 8)
+#define TEST_BAD_UREAD	(1 << 9)
 #define TEST_BAD_PREW	(TEST_BAD_PROBE | TEST_BAD_READ | TEST_BAD_ERASE | TEST_BAD_WRITE)
-#define TEST_BAD_MASK	0xf0
+#define TEST_BAD_PREWU	(TEST_BAD_PROBE | TEST_BAD_READ | TEST_BAD_ERASE | TEST_BAD_WRITE | TEST_BAD_UREAD)
+#define TEST_BAD_MASK	0x3e0
 
 /* Timing used in probe routines. ZERO is -2 to differentiate between an unset
  * field and zero delay.

@@ -56,6 +56,7 @@ int spi_byte_program(unsigned int addr, uint8_t databyte);
 int spi_nbyte_program(unsigned int addr, uint8_t *bytes, unsigned int len);
 int spi_nbyte_read(unsigned int addr, uint8_t *bytes, unsigned int len);
 int spi_read_chunked(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
+int spi_read_unbound(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
 int spi_write_chunked(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
 int spi_aai_write(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 
