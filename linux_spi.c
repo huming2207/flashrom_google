@@ -67,7 +67,7 @@ static const struct spi_programmer spi_programmer_linux = {
 };
 
 static char devfs_path[32]; 	/* at least big enough to fit /dev/spidevX.Y */
-static char *linux_spi_probe(void)
+static char *check_sysfs(void)
 {
 	int i;
 	const char *sysfs_path = NULL;
@@ -104,6 +104,32 @@ static char *linux_spi_probe(void)
 	if (i == ARRAY_SIZE(modalias))
 		return NULL;
 	return devfs_path;
+}
+
+static char *check_fdt(void)
+{
+	unsigned int bus, cs;
+
+	if (fdt_find_spi_nor_flash(&bus, &cs) < 0)
+		return NULL;
+
+	sprintf(devfs_path, "/dev/spidev%u.%u", bus, cs);
+	return devfs_path;
+}
+
+static char *linux_spi_probe(void)
+{
+	char *ret;
+
+	ret = check_fdt();
+	if (ret)
+		return ret;
+
+	ret = check_sysfs();
+	if (ret)
+		return ret;
+
+	return NULL;
 }
 
 /*
