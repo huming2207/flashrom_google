@@ -1,5 +1,5 @@
 /*
- * Copyright 2012, The Chromium OS Authors
+ * Copyright 2015, The Chromium OS Authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,16 +34,21 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <glob.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "flash.h"
+
+#define FDT_ROOT	"/proc/device-tree"
+#define FDT_ALIASES	"/proc/device-tree/aliases"
 
 /* returns 1 if string if found, 0 if not, and <0 to indicate error */
 static int find_string(const char *path, const char *str)
@@ -172,3 +177,154 @@ const char *scanft(const char *root, const char *filename,
 	return ret;
 }
 
+/*
+ * do_fdt_find_spi_nor_flash - Search FDT via procfs for SPI NOR flash
+ *
+ * @prefix:	Prefix of alias, for example "spi" will match spi*.
+ * @compat:	String to look for in "compatible" node
+ *
+ * This function attempt to match FDT aliases with devices that have the given
+ * compatible string.
+ *
+ * Example: If prefix is "spi" and compat is "jedec,spi-nor" then this function
+ * will read the device descriptors in every alias beginning with "spi" and
+ * search their respective devicetree nodes for "compatible" files containing
+ * the string "jedec,spi-nor".
+ *
+ * returns 0 to indicate NOR flash has been found, <0 to indicate error
+ */
+static int do_fdt_find_spi_nor_flash(const char *prefix,
+		const char *compat, unsigned int *bus, uint32_t *cs)
+{
+	DIR *dp;
+	struct dirent *d;
+	struct stat s;
+	int found = 0;
+
+	if ((dp = opendir(FDT_ALIASES)) == NULL)
+		return -1;
+
+	/*
+	 * This loop will go thru the aliases sub-directory and kick-off a
+	 * recursive search thru matching devicetree nodes.
+	 */
+	while (!found && (d = readdir(dp))) {
+		char node[PATH_MAX];
+		char pattern[PATH_MAX];
+		char alias[64];
+		int i, fd, len;
+		glob_t pglob;
+
+		/* allow partial match */
+		if (strncmp(prefix, d->d_name, strlen(prefix)))
+			continue;
+
+		sprintf(node, "%s/%s", FDT_ALIASES, d->d_name);
+		if (stat(node, &s) < 0) {
+			msg_pdbg("%s: Error stat'ing %s: %s\n",
+			        __func__, node, strerror(errno));
+			continue;
+		}
+
+		if (!S_ISREG(s.st_mode))
+			continue;
+
+		fd = open(node, O_RDONLY);
+		if (fd < 0) {
+			msg_perr("Could not open %s\n", d->d_name);
+			continue;
+		}
+
+		/* devicetree strings and files aren't always terminated */
+		len = read(fd, alias, sizeof(alias) - 1);
+		if (len < 0) {
+			msg_perr("Could not read %s\n", d->d_name);
+			close(fd);
+			continue;
+		}
+		alias[len] = '\0';
+		close(fd);
+
+		/* We expect something in the form "/<type>@<address>", for
+		   example "/spi@ff110000" */
+		if (alias[0] != '/')
+			continue;
+
+		snprintf(node, sizeof(node), "%s%s", FDT_ROOT, alias);
+
+		/*
+		 * Descend into this node's directory. According to the DT
+		 * specification, the SPI device node will be a subnode of
+		 * the bus node. Thus, we need to look for:
+		 * <path-to-spi-bus-node>/.../compatible
+		 */
+		sprintf(pattern, "%s/*/compatible", node);
+		msg_pspew("Scanning glob pattern \"%s\"\n", pattern);
+		i = glob(pattern, 0, NULL, &pglob);
+		if (i == GLOB_NOSPACE)
+			goto err_out;
+		else if (i != 0)
+			continue;
+
+		/*
+		 * For chip-select, look at the "reg" file located in
+		 * the same sub-directory as the "compatible" file.
+		 */
+		for (i = 0; i < pglob.gl_pathc; i++) {
+			char *reg_path;
+
+			if (!find_string(pglob.gl_pathv[i], compat))
+				continue;
+
+			reg_path = strdup(pglob.gl_pathv[i]);
+			if (!reg_path) {
+				globfree(&pglob);
+				goto err_out;
+			}
+
+			sprintf(strstr(reg_path, "compatible"), "reg");
+			fd = open(reg_path, O_RDONLY);
+			if (fd < 0) {
+				msg_gerr("Cannot open \"%s\"\n", reg_path);
+				free(reg_path);
+				continue;
+			}
+
+			/* value is a 32-bit big-endian unsigned in FDT.  */
+			if (read(fd, cs, 4) != 4) {
+				msg_gerr("Cannot read \"%s\"\n", reg_path);
+				free(reg_path);
+				close(fd);
+				continue;
+			}
+
+			*cs = ntohl(*cs);
+			found = 1;
+			free(reg_path);
+			close(fd);
+		}
+
+		if (found) {
+			/* Extract bus from the alias filename. */
+			if (sscanf(d->d_name, "spi%u", bus) != 1) {
+				msg_gerr("Unexpected format: \"d->d_name\"\n");
+				found = 0;
+				globfree(&pglob);
+				goto err_out;
+			}
+		}
+
+		globfree(&pglob);
+	}
+
+err_out:
+	closedir(dp);
+	return found ? 0 : -1;
+}
+
+/* Wrapper in case we want to use a list of compat strings or extend
+ * this to search for other types of devices */
+int fdt_find_spi_nor_flash(unsigned int *bus, unsigned int *cs)
+{
+	return do_fdt_find_spi_nor_flash("spi", "jedec,spi-nor", bus, cs);
+}

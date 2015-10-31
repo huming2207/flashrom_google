@@ -1,5 +1,5 @@
 /*
- * Copyright 2012, The Chromium OS Authors
+ * Copyright 2015, The Chromium OS Authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,3 +31,4 @@
 
 const char *scanft(const char *root, const char *filename,
 		   const char *str, int symdepth);
+int fdt_find_spi_nor_flash(unsigned int *bus, unsigned int *cs);
