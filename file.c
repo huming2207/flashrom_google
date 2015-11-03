@@ -45,45 +45,75 @@
 
 #include "flash.h"
 
-/*returns 1 if contents matches, 0 if not, and <0 to indicate error */
-static int file_contents_match(const char *path, const char *str)
+/* returns 1 if string if found, 0 if not, and <0 to indicate error */
+static int find_string(const char *path, const char *str)
 {
-	FILE *fp;
-	char *content;
-	int len = strlen(str);
-	int ret = -1;
+	int fd, ret = 0;
+	struct stat s;
+	off_t i;
 
-	content = malloc(len);
-	if (!content)
-		return -1;
-
-	if ((fp = fopen(path, "r")) == NULL) {
-		msg_pdbg("Error opening %s: %s\n", path, strerror(errno));
-		goto file_contents_match_done;
-	}
-	if (fread(content, 1, len, fp) < 1) {
-		msg_pdbg("Error reading %s: %s\n", path, strerror(ferror(fp)));
-		goto file_contents_match_done;
+	if (stat(path, &s) < 0) {
+		msg_gerr("Cannot stat file \"%s\"\n", path);
+		ret = -1;
+		goto find_string_exit_0;
 	}
 
-	if (!strncmp(str, content, len))
-		ret = 1;
-	else
-		ret = 0;
+	if (s.st_size < strlen(str))
+		goto find_string_exit_0;
 
-file_contents_match_done:
-	fclose(fp);
-	free(content);
+	fd = open(path, O_RDONLY, 0);
+	if (fd < 0) {
+		msg_gerr("Cannot open file \"%s\"\n", path);
+		ret = -1;
+		goto find_string_exit_0;
+	}
+
+	/* mmap() would be nice but it might not be implemented for some
+	 * files in sysfs and procfs */
+	for (i = 0; i <= s.st_size - strlen(str); i++) {
+		int match_found = 1;
+		off_t j;
+
+		if (lseek(fd, i, SEEK_SET) == (off_t)-1) {
+			msg_gerr("Failed to seek within \"%s\"\n", path);
+			ret = -1;
+			goto find_string_exit_1;
+		}
+
+		for (j = 0; j < strlen(str); j++) {
+			char c;
+
+			if (read(fd, &c, 1) != 1) {
+				msg_gerr("Failed to read \"%s\"\n", path);
+				ret = -1;
+				goto find_string_exit_1;
+			}
+
+			if (str[j] != c) {
+				match_found = 0;
+				break;
+			}
+		}
+
+		if (match_found) {
+			ret = 1;
+			break;
+		}
+
+	}
+
+find_string_exit_1:
+	close(fd);
+find_string_exit_0:
 	return ret;
 }
 
  /*
- * scanft - scan filetree for file with option to parse some content
+ * scanft - scan filetree for file with option to search for content
  *
  * @root:	Where to begin search
  * @filename:	Name of file to search for
- * @str:	Optional NULL terminated string to check at the beginning
- * 		of the file
+ * @str:	Optional NULL terminated string to search for
  * @symdepth:	Maximum depth of symlinks to follow. A negative value means
  * 		follow indefinitely. Zero means do not follow symlinks.
  *
@@ -130,7 +160,7 @@ const char *scanft(const char *root, const char *filename,
 		snprintf(newpath, sizeof(newpath), "%s/%s", root, d->d_name);
 
 		if (!strcmp(d->d_name, filename)) {
-			if (!str || file_contents_match(newpath, str))
+			if (!str || (find_string(newpath, str) == 1))
 				ret = strdup(newpath);
 		}
 
