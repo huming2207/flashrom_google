@@ -67,7 +67,7 @@ int linux_i2c_init(void)
 
 int linux_i2c_open(int bus, int addr, int force)
 {
-	char *dev;
+	char *dev = NULL;
 	int ret = 1;
 	int path_len = strlen(I2C_DEV_PREFIX) + 4;
 	int request = force ? I2C_SLAVE_FORCE : I2C_SLAVE;

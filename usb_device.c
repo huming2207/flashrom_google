@@ -267,8 +267,6 @@ int usb_device_find(struct usb_match const *match, struct usb_device **devices)
  */
 static int usb_device_open(struct usb_device *device)
 {
-	int      current_config;
-
 	if (device->handle == NULL)
 		CHECK(LIBUSB(libusb_open(device->device, &device->handle)),
 		      "USB: Failed to open device\n");

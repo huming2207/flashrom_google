@@ -137,8 +137,8 @@ static enum ene_ec_state ec_state = EC_STATE_NORMAL;
 
 #define ENE_KB94X_PAUSE_WAKEUP_PORT  0x64
 
-static const uint8_t mask_input_buffer_full    = 2;
-static const uint8_t mask_output_buffer_full   = 1;
+#define MASK_INPUT_BUFFER_FULL	2
+#define MASK_OUTPUT_BUFFER_FULL	1
 
 const int port_ene_bank   = 1;
 const int port_ene_offset = 2;
@@ -152,7 +152,7 @@ static void ec_command(uint8_t cmd, uint8_t data)
 
 	/* Spin wait for EC input buffer empty */
 	gettimeofday(&begin, NULL);
-	while (INB(found_chip->port_ec_command) & mask_input_buffer_full) {
+	while (INB(found_chip->port_ec_command) & MASK_INPUT_BUFFER_FULL) {
 		gettimeofday(&now, NULL);
 		if ((now.tv_sec - begin.tv_sec) >= EC_COMMAND_TIMEOUT) {
 			msg_pdbg("%s: buf not empty\n", __func__);
@@ -167,7 +167,7 @@ static void ec_command(uint8_t cmd, uint8_t data)
 		/* Spin wait for EC input buffer empty */
 		gettimeofday(&begin, NULL);
 		while (INB(found_chip->port_ec_command) &
-		       mask_input_buffer_full) {
+		       MASK_INPUT_BUFFER_FULL) {
 			gettimeofday(&now, NULL);
 			if ((now.tv_sec - begin.tv_sec) >=
 			     EC_COMMAND_TIMEOUT) {

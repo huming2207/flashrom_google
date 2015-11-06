@@ -215,8 +215,6 @@ static int find_endpoints(struct usb_device *device)
 
 static int shutdown(void * data)
 {
-	struct usb_device *current;
-
 	CHECK(LIBUSB(libusb_control_transfer(
 			     device->handle,
 			     LIBUSB_ENDPOINT_OUT |

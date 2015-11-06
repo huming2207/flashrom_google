@@ -269,7 +269,7 @@ static struct opaque_programmer opaque_programmer_cros_ec_i2c = {
 
 int cros_ec_probe_i2c(const char *name)
 {
-	const char *path, *s, *p;
+	const char *path, *s;
 	int ret = 1;
 	int old_timeout = ec_timeout_usec;
 

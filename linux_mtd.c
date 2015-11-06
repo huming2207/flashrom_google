@@ -43,7 +43,6 @@ static char sysfs_path[PATH_MAX];
 
 static int dev_fd = -1;
 
-static char *mtd_device_name;
 static int mtd_device_is_writeable;
 
 /* Size info is presented in bytes in sysfs. */
@@ -112,7 +111,6 @@ static int read_sysfs_string(const char *filename, char *buf, int len)
 
 static int read_sysfs_int(const char *filename, unsigned long int *val)
 {
-	uint32_t tmp;
 	char buf[32];
 	char *endptr;
 
@@ -253,7 +251,6 @@ static int linux_mtd_write(struct flashchip *flash, uint8_t *buf,
 static int linux_mtd_erase(struct flashchip *flash,
 			unsigned int start, unsigned int len)
 {
-	struct region_info_user region_info;
 	uint32_t u;
 
 	if (mtd_numeraseregions != 0) {
