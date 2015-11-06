@@ -281,7 +281,7 @@ int usb_device_show(char const *prefix, struct usb_device *device)
 	struct libusb_device_descriptor descriptor;
 	unsigned char                   product[256];
 
-	CHECK(usb_device_open(device), "");
+	CHECK(usb_device_open(device), "USB: Failed to open device\n");
 
 	CHECK(LIBUSB(libusb_get_device_descriptor(device->device, &descriptor)),
 	      "USB: Failed to get device descriptor\n");
@@ -308,7 +308,7 @@ int usb_device_claim(struct usb_device *device)
 {
 	int current_config;
 
-	CHECK(usb_device_open(device), "");
+	CHECK(usb_device_open(device), "USB: Failed to open device\n");
 
 	CHECK(LIBUSB(libusb_get_configuration(device->handle,
 					      &current_config)),
