@@ -45,7 +45,8 @@
 #define REQTYPE_EP_OUT (USB_ENDPOINT_OUT | USB_TYPE_VENDOR | USB_RECIP_ENDPOINT)	/* 0x42 */
 #define REQTYPE_EP_IN (USB_ENDPOINT_IN | USB_TYPE_VENDOR | USB_RECIP_ENDPOINT)		/* 0xC2 */
 static usb_dev_handle *dediprog_handle;
-static int dediprog_endpoint;
+static int dediprog_in_endpoint;
+static int dediprog_out_endpoint;
 
 enum dediprog_devtype {
 	DEV_UNKNOWN		= 0,
@@ -355,7 +356,7 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 	}
 
 	for (i = 0; i < count; i++) {
-		ret = usb_bulk_read(dediprog_handle, 0x80 | dediprog_endpoint,
+		ret = usb_bulk_read(dediprog_handle, 0x80 | dediprog_in_endpoint,
 				    (char *)buf + i * chunksize, chunksize,
 				    DEFAULT_TIMEOUT);
 		if (ret != chunksize) {
@@ -465,7 +466,7 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 	for (i = 0; i < count; i++) {
 		memset(usbbuf, 0xff, sizeof(usbbuf));
 		memcpy(usbbuf, buf + i * chunksize, chunksize);
-		ret = usb_bulk_write(dediprog_handle, dediprog_endpoint,
+		ret = usb_bulk_write(dediprog_handle, dediprog_out_endpoint,
 				    usbbuf, 512,
 				    DEFAULT_TIMEOUT);
 		if (ret != 512) {
@@ -921,7 +922,6 @@ int dediprog_init(void)
 			msg_perr("Could not close USB device!\n");
 		return 1;
 	}
-	dediprog_endpoint = 2;
 
 	if (register_shutdown(dediprog_shutdown, NULL))
 		return 1;
@@ -935,6 +935,15 @@ int dediprog_init(void)
 		if (dediprog_check_devicestring())
 			return 1;
 	}
+
+	/* SF100 firmware exposes only one endpoint for in/out, SF600 firmware
+           exposes separate endpoints for in and out. */
+	dediprog_in_endpoint = 2;
+	if (dediprog_devicetype == DEV_SF100)
+		dediprog_out_endpoint = 2;
+	else
+		dediprog_out_endpoint = 1;
+
 
 	/* Set all possible LEDs as soon as possible to indicate activity.
 	 * Because knowing the firmware version is required to set the LEDs correctly we need to this after
