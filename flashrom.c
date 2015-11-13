@@ -1461,10 +1461,13 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 			return ret;
 		}
 
-		if (check_erased_range(flash, start, len)) {
-			msg_cerr("ERASE FAILED!\n");
-			return -1;
+		if (programmer_table[programmer].paranoid) {
+			if (check_erased_range(flash, start, len)) {
+				msg_cerr("ERASE FAILED!\n");
+				return -1;
+			}
 		}
+
 		/* Erase was successful. Adjust curcontents. */
 		memset(curcontents, flash_erase_value(flash), len);
 		skip = 0;
