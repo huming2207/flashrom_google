@@ -197,18 +197,23 @@ static int dediprog_bulk_read_poll(const struct dediprog_transfer_status *const 
 	return 0;
 }
 
-static int dediprog_read(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, uint8_t *bytes, size_t size)
+static int dediprog_read_ep(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, uint8_t *bytes, size_t size)
 {
 	return libusb_control_transfer(dediprog_handle, REQTYPE_EP_IN, cmd, value, idx,
 				      (unsigned char *)bytes, size, DEFAULT_TIMEOUT);
 }
 
-static int dediprog_write(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, const uint8_t *bytes, size_t size)
+static int dediprog_write_ep(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, const uint8_t *bytes, size_t size)
 {
 	return libusb_control_transfer(dediprog_handle, REQTYPE_EP_OUT, cmd, value, idx,
 				      (unsigned char *)bytes, size, DEFAULT_TIMEOUT);
 }
 
+static int dediprog_read_other(enum dediprog_cmds cmd, unsigned int value, unsigned int idx, const uint8_t *bytes, size_t size)
+{
+	return libusb_control_transfer(dediprog_handle, REQTYPE_OTHER_IN, cmd, value, idx,
+				      (unsigned char *)bytes, size, DEFAULT_TIMEOUT);
+}
 
 #if 0
 /* Might be useful for other USB devices as well. static for now. */
@@ -294,7 +299,7 @@ static int dediprog_set_leds(int leds)
 	int target_leds, ret;
 	if (is_new_prot()) {
 		target_leds = (leds ^ 7) << 8;
-		ret = dediprog_write(CMD_SET_IO_LED, target_leds, 0, NULL, 0);
+		ret = dediprog_write_ep(CMD_SET_IO_LED, target_leds, 0, NULL, 0);
 	} else {
 		if (dediprog_firmwareversion < FIRMWARE_VERSION(5, 0, 0)) {
 			target_leds = ((leds & LED_ERROR) >> 2) | ((leds & LED_PASS) << 2);
@@ -303,7 +308,7 @@ static int dediprog_set_leds(int leds)
 		}
 		target_leds ^= 7;
 
-		ret = dediprog_write(CMD_SET_IO_LED, 0x9, target_leds, NULL, 0);
+		ret = dediprog_write_ep(CMD_SET_IO_LED, 0x9, target_leds, NULL, 0);
 	}
 
 	if (ret != 0x0) {
@@ -344,7 +349,7 @@ static int dediprog_set_spi_voltage(int millivolt)
 		/* Wait some time as the original driver does. */
 		programmer_delay(200 * 1000);
 	}
-	ret = dediprog_write(CMD_SET_VCC, voltage_selector, 0, NULL, 0);
+	ret = dediprog_write_ep(CMD_SET_VCC, voltage_selector, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Voltage 0x%x failed!\n",
 			 voltage_selector);
@@ -384,7 +389,7 @@ static int dediprog_set_spi_speed(unsigned int spispeed_idx)
 	const struct dediprog_spispeeds *spispeed = &spispeeds[spispeed_idx];
 	msg_pdbg("SPI speed is %sHz\n", spispeed->name);
 
-	int ret = dediprog_write(CMD_SET_SPI_CLK, spispeed->speed, 0, NULL, 0);
+	int ret = dediprog_write_ep(CMD_SET_SPI_CLK, spispeed->speed, 0, NULL, 0);
 	if (ret != 0x0) {
 		msg_perr("Command Set SPI Speed 0x%x failed!\n", spispeed->speed);
 		return 1;
@@ -435,7 +440,7 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 			};
 
 		cmd_len = sizeof(read_cmd);
-		ret = dediprog_write(CMD_READ, 0, 0, read_cmd, cmd_len);
+		ret = dediprog_write_ep(CMD_READ, 0, 0, read_cmd, cmd_len);
 	} else {
 		const uint8_t read_cmd[] = {count & 0xff,
 					(count >> 8) & 0xff,
@@ -443,7 +448,7 @@ static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
 					(chunksize >> 8) & 0xff};
 
 		cmd_len = sizeof(read_cmd);
-		ret = dediprog_write(CMD_READ, start % 0x10000, start / 0x10000, read_cmd, cmd_len);
+		ret = dediprog_write_ep(CMD_READ, start % 0x10000, start / 0x10000, read_cmd, cmd_len);
 	}
 	if (ret != cmd_len) {
 		msg_perr("Command Read SPI Bulk failed, %i %s!\n", ret, libusb_error_name(ret));
@@ -599,7 +604,7 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 		/* Command Write SPI Bulk. No idea which write command is used on the
 		 * SPI side.
 		 */
-		ret = dediprog_write(CMD_WRITE, start % 0x10000, start / 0x10000,
+		ret = dediprog_write_ep(CMD_WRITE, start % 0x10000, start / 0x10000,
 				      count_and_cmd_old, sizeof(count_and_cmd_old));
 		if (ret != sizeof(count_and_cmd_old)) {
 			msg_perr("Command Write SPI Bulk failed, %i %s!\n", ret,
@@ -610,7 +615,7 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 		/* Command Write SPI Bulk. No idea which write command is used on the
 		 * SPI side.
 		 */
-		ret = dediprog_write(CMD_WRITE, 0, 0,
+		ret = dediprog_write_ep(CMD_WRITE, 0, 0,
 				      count_and_cmd_new, sizeof(count_and_cmd_new));
 		if (ret != sizeof(count_and_cmd_new)) {
 			msg_perr("Command Write SPI Bulk failed, %i %s!\n", ret,
@@ -719,9 +724,9 @@ static int dediprog_spi_send_command(unsigned int writecnt,
 	
 	/* New protocol has the read flag as value while the old protocol had it in the index field. */
 	if (is_new_prot()) {
-		ret = dediprog_write(CMD_TRANSCEIVE, readcnt ? 1 : 0, 0, writearr, writecnt);
+		ret = dediprog_write_ep(CMD_TRANSCEIVE, readcnt ? 1 : 0, 0, writearr, writecnt);
 	} else {
-		ret = dediprog_write(CMD_TRANSCEIVE, 0, readcnt ? 1 : 0, writearr, writecnt);
+		ret = dediprog_write_ep(CMD_TRANSCEIVE, 0, readcnt ? 1 : 0, writearr, writecnt);
 	}
 	if (ret != writecnt) {
 		msg_perr("Send SPI failed, expected %i, got %i %s!\n",
@@ -731,7 +736,7 @@ static int dediprog_spi_send_command(unsigned int writecnt,
 	if (readcnt == 0)
 		return 0;
 
-	ret = dediprog_read(CMD_TRANSCEIVE, 0, 0, readarr, readcnt);
+	ret = dediprog_read_ep(CMD_TRANSCEIVE, 0, 0, readarr, readcnt);
 	if (ret != readcnt) {
 		msg_perr("Receive SPI failed, expected %i, got %i %s!\n",
 			 readcnt, ret, libusb_error_name(ret));
@@ -748,7 +753,7 @@ static int dediprog_check_devicestring(void)
 	char buf[0x11];
 
 	/* Command Receive Device String. */
-	ret = dediprog_read(CMD_READ_PROG_INFO, 0, 0, (uint8_t *)buf, 0x10);
+	ret = dediprog_read_ep(CMD_READ_PROG_INFO, 0, 0, (uint8_t *)buf, 0x10);
 	if (ret != 0x10) {
 		msg_perr("Incomplete/failed Command Receive Device String!\n");
 		return 1;
@@ -789,7 +794,7 @@ static int dediprog_set_voltage(void)
 	unsigned char buf[0x1];
 
 	memset(buf, 0, sizeof(buf));
-	ret = dediprog_write(CMD_SET_VOLTAGE, 0x0, 0x0, buf, 0x1);
+	ret = dediprog_read_other(CMD_SET_VOLTAGE, 0x0, 0x0, buf, 0x1);
 	if (ret < 0) {
 		msg_perr("Command A failed (%s)!\n", libusb_error_name(ret));
 		return 1;
@@ -830,7 +835,7 @@ static int dediprog_command_b(void)
 
 static int set_target_flash(enum dediprog_target target)
 {
-	int ret = dediprog_write(CMD_SET_TARGET, target, 0, NULL, 0);
+	int ret = dediprog_write_ep(CMD_SET_TARGET, target, 0, NULL, 0);
 	if (ret != 0) {
 		msg_perr("set_target_flash failed (%s)!\n", libusb_error_name(ret));
 		return 1;
