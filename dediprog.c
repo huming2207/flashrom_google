@@ -765,7 +765,7 @@ static int dediprog_check_devicestring(void)
 	else if (memcmp(buf, "SF600", 0x5) == 0)
 		dediprog_devicetype = DEV_SF600;
 	else {
-		msg_perr("Device not a SF100!\n");
+		msg_perr("Device not a SF100 or SF600!\n");
 		return 1;
 	}
 	if (sscanf(buf, "SF%d V:%d.%d.%d ", &sfnum, &fw[0], &fw[1], &fw[2])
@@ -803,7 +803,6 @@ static int dediprog_set_voltage(void)
 		msg_perr("Unexpected response to init!\n");
 		return 1;
 	}
-
 	return 0;
 }
 
@@ -1042,7 +1041,7 @@ int dediprog_init(void)
 	}
 	dediprog_handle = get_device_by_vid_pid_number(0x0483, 0xdada, (unsigned int) usedevice);
 	if (!dediprog_handle) {
-		msg_perr("Could not find a Dediprog SF100 on USB!\n");
+		msg_perr("Could not find a Dediprog programmer on USB!\n");
 		libusb_exit(usb_ctx);
 		return 1;
 	}
