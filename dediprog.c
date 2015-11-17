@@ -140,6 +140,11 @@ enum dediprog_writemode {
 	WRITE_MODE_4B_ADDR_256B_PAGE_PGM_FLAGS	= 12,
 };
 
+enum dediprog_standalone_mode {
+	ENTER_STANDALONE_MODE = 0,
+	LEAVE_STANDALONE_MODE = 1,
+};
+
 #ifndef LIBUSB_HAVE_ERROR_NAME
 /* Quick and dirty replacement for missing libusb_error_name in older libusb 1.0. */
 const char *libusb_error_name(int error_code)
@@ -806,6 +811,23 @@ static int dediprog_set_voltage(void)
 	return 0;
 }
 
+static int dediprog_leave_standalone_mode(void)
+{
+	int ret;
+
+	if (dediprog_devicetype != DEV_SF600)
+		return 0;
+
+	msg_pdbg("Leaving standalone mode\n");
+	ret = dediprog_write_ep(CMD_SET_STANDALONE, LEAVE_STANDALONE_MODE, 0, NULL, 0);
+	if (ret) {
+		msg_perr("Failed to leave standalone mode (%s)!\n", libusb_error_name(ret));
+		return 1;
+	}
+
+	return 0;
+}
+
 #if 0
 /* Something.
  * Present in eng_detect_blink.log with firmware 3.1.8
@@ -1094,6 +1116,9 @@ int dediprog_init(void)
 		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
+
+	if (dediprog_leave_standalone_mode())
+		return 1;
 
 //	register_spi_master(&spi_master_dediprog);
 	register_spi_programmer(&spi_programmer_dediprog);
