@@ -34,6 +34,7 @@
 #endif
 
 #include "flash.h"
+#include "flashchips.h"
 #include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
@@ -324,7 +325,11 @@ static int dediprog_set_leds(int leds)
 	return 0;
 }
 
-static int dediprog_set_spi_voltage(int millivolt)
+static int dediprog_supply_voltages[] = {
+	0, 1800, 2500, 3500,
+};
+
+static int dediprog_set_spi_flash_voltage_manual(int millivolt)
 {
 	int ret;
 	uint16_t voltage_selector;
@@ -365,6 +370,62 @@ static int dediprog_set_spi_voltage(int millivolt)
 		programmer_delay(200 * 1000);
 	}
 	return 0;
+}
+
+static int dediprog_spi_send_command(unsigned int writecnt,
+				     unsigned int readcnt,
+				     const unsigned char *writearr,
+				     unsigned char *readarr);
+static int dediprog_set_spi_flash_voltage_auto(void)
+{
+	int i;
+	int spi_flash_ranges;
+
+	spi_flash_ranges = flash_supported_voltage_ranges(BUS_SPI);
+	if (spi_flash_ranges < 0)
+		return -1;
+
+	for (i = 0; i < ARRAY_SIZE(dediprog_supply_voltages); i++) {
+		int j;
+		int v = dediprog_supply_voltages[i];	/* shorthand */
+
+		for (j = 0; j < spi_flash_ranges; j++) {
+			/* Dediprog can supply a voltage in this range. */
+			if ((v >= voltage_ranges[j].min) && (v <= voltage_ranges[j].max)) {
+				struct flashchip dummy;
+
+				msg_cdbg("%s: trying %d\n", __func__, v);
+				if (dediprog_set_spi_flash_voltage_manual(v)) {
+					msg_cerr("%s: Failed to set SPI voltage\n", __func__);
+					return 1;
+				}
+
+				clear_spi_id_cache();
+				if (probe_flash(0, &dummy, 0) < 0) {
+					/* No dice, try next voltage supported by Dediprog. */
+					break;
+				}
+
+				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
+					(dummy.model_id == GENERIC_DEVICE_ID)) {
+					break;
+				}
+
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+
+/* FIXME: ugly function signature */
+static int dediprog_set_spi_voltage(int millivolt, int probe)
+{
+	if (probe)
+		return dediprog_set_spi_flash_voltage_auto();
+	else
+		return dediprog_set_spi_flash_voltage_manual(millivolt);
 }
 
 struct dediprog_spispeeds {
@@ -957,7 +1018,7 @@ static int dediprog_shutdown(void *data)
 	dediprog_devicetype = DEV_UNKNOWN;
 
 	/* URB 28. Command Set SPI Voltage to 0. */
-	if (dediprog_set_spi_voltage(0x0))
+	if (dediprog_set_spi_voltage(0x0, 0))
 		return 1;
 
 	if (libusb_release_interface(dediprog_handle, 0)) {
@@ -975,7 +1036,7 @@ int dediprog_init(void)
 {
 	char *voltage, *device, *spispeed, *target_str;
 	int spispeed_idx = 1;
-	int millivolt = 3500;
+	int millivolt = 0;
 	long usedevice = 0;
 	long target = 1;
 	int i, ret;
@@ -1109,10 +1170,13 @@ int dediprog_init(void)
 	 * dediprog_setup() has queried the device and set dediprog_firmwareversion. */
 	dediprog_set_leds(LED_ALL);
 
+	/* FIXME: need to do this so buses_supported gets SPI */
+	register_spi_programmer(&spi_programmer_dediprog);
+
 	/* Select target/socket, frequency and VCC. */
 	if (set_target_flash(FLASH_TYPE_APPLICATION_FLASH_1) ||
 	    dediprog_set_spi_speed(spispeed_idx) ||
-	    dediprog_set_spi_voltage(millivolt)) {
+	    dediprog_set_spi_voltage(millivolt, voltage ? 0 : 1)) {
 		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
@@ -1120,8 +1184,6 @@ int dediprog_init(void)
 	if (dediprog_leave_standalone_mode())
 		return 1;
 
-//	register_spi_master(&spi_master_dediprog);
-	register_spi_programmer(&spi_programmer_dediprog);
 
 	dediprog_set_leds(LED_NONE);
 
