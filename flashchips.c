@@ -22,6 +22,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
@@ -10677,4 +10680,82 @@ int flash_erase_value(struct flashchip *flash)
 int flash_unerased_value(struct flashchip *flash)
 {
 	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0xff : 0;
+}
+
+struct voltage_range voltage_ranges[NUM_VOLTAGE_RANGES];
+
+static int compar(const void *_x, const void *_y)
+{
+	const struct voltage_range *x = _x;
+	const struct voltage_range *y = _y;
+
+	/*
+	 * qsort() places entries in ascending order. We will sort by minimum
+	 * voltage primarily and max voltage secondarily, and move empty sets
+	 * to the end of array.
+	 */
+	if (x->min == 0)
+		return 1;
+	if (y->min == 0)
+		return -1;
+
+	if (x->min < y->min)
+		return -1;
+	if (x->min > y->min)
+		return 1;
+
+	if (x->min == y->min) {
+		if (x->max < y->max)
+			return -1;
+		if (x->max > y->max)
+			return 1;
+	}
+
+	return 0;
+}
+
+int flash_supported_voltage_ranges(enum chipbustype bus)
+{
+	int i;
+	int unique_ranges = 0;
+
+	/* clear array in case user calls this function multiple times */
+	memset(voltage_ranges, 0, sizeof(voltage_ranges));
+
+	for (i = 0; i < ARRAY_SIZE(flashchips); i++) {
+		int j;
+		int match_found = 0;
+
+		if (unique_ranges >= NUM_VOLTAGE_RANGES) {
+			msg_cerr("Increase NUM_VOLTAGE_RANGES.\n");
+			return -1;
+		}
+
+		if (!(flashchips[i].bustype & bus))
+			continue;
+
+		for (j = 0; j < NUM_VOLTAGE_RANGES; j++) {
+			if ((flashchips[i].voltage.min == voltage_ranges[j].min) &&
+				(flashchips[i].voltage.max == voltage_ranges[j].max))
+				match_found |= 1;
+
+			if (!voltage_ranges[j].min && !voltage_ranges[j].max)
+				break;
+		}
+
+		if (!match_found) {
+			voltage_ranges[j] = flashchips[i].voltage;
+			unique_ranges++;
+		}
+	}
+
+	qsort(&voltage_ranges[0], NUM_VOLTAGE_RANGES,
+			sizeof(voltage_ranges[0]), compar);
+
+	for (i = 0; i < NUM_VOLTAGE_RANGES; i++) {
+		msg_cspew("%s: voltage_range[%d]: { %u, %u }\n",
+			__func__, i, voltage_ranges[i].min, voltage_ranges[i].max);
+	}
+
+	return unique_ranges;
 }

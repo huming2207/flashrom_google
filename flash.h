@@ -128,6 +128,10 @@ extern enum chipbustype target_bus;
 #define FEATURE_ERASE_TO_ZERO	(1 << 8)
 #define FEATURE_UNBOUND_READ	(1 << 10)
 
+struct voltage_range {
+	uint16_t min, max;
+};
+
 struct flashchip {
 	const char *vendor;
 	const char *name;
@@ -182,10 +186,7 @@ struct flashchip {
 	int (*unlock) (struct flashchip *flash);
 	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	struct {
-		uint16_t min;
-		uint16_t max;
-	} voltage;
+	struct voltage_range voltage;
 
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_memory;
@@ -365,5 +366,10 @@ int spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr);
 int spi_send_multicommand(struct spi_command *cmds);
 uint32_t spi_get_valid_read_addr(void);
+
+#define NUM_VOLTAGE_RANGES	16
+extern struct voltage_range voltage_ranges[];
+/* returns number of unique voltage ranges, or <0 to indicate failure */
+extern int flash_supported_voltage_ranges(enum chipbustype bus);
 
 #endif				/* !__FLASH_H__ */
