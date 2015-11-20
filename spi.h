@@ -133,4 +133,6 @@
 #define SPI_PROGRAMMER_ERROR	-6
 #define SPI_ACCESS_DENIED	-7
 
+void clear_spi_id_cache(void);
+
 #endif		/* !__SPI_H__ */

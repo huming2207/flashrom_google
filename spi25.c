@@ -29,6 +29,26 @@
 #include "programmer.h"
 #include "spi.h"
 
+enum id_type {
+	RDID,
+	RDID4,
+	REMS,
+//	RES1,	/* TODO */
+	RES2,
+	NUM_ID_TYPES,
+};
+
+static struct {
+	int is_cached;
+	unsigned char bytes[4];		/* enough to hold largest ID type */
+} id_cache[NUM_ID_TYPES];
+
+void clear_spi_id_cache(void)
+{
+	memset(id_cache, 0, sizeof(id_cache));
+	return;
+}
+
 static int spi_rdid(unsigned char *readarr, int bytes)
 {
 	static const unsigned char cmd[JEDEC_RDID_OUTSIZE] = { JEDEC_RDID };
@@ -165,25 +185,21 @@ static int compare_id(struct flashchip *flash, uint32_t id1, uint32_t id2)
 
 int probe_spi_rdid(struct flashchip *flash)
 {
-	unsigned char readarr[3];
-	static int cached = 0;
-	static uint32_t id1, id2;
+	uint32_t id1, id2;
 
-	if (!cached) {
-		if (spi_rdid(readarr, 3))
+	if (!id_cache[RDID].is_cached) {
+		if (spi_rdid(id_cache[RDID].bytes, 3))
 			return 0;
-		rdid_get_ids(readarr, 3, &id1, &id2);
-		cached = 1;
+		id_cache[RDID].is_cached = 1;
 	}
 
+	rdid_get_ids(id_cache[RDID].bytes, 3, &id1, &id2);
 	return compare_id(flash, id1, id2);
 }
 
 int probe_spi_rdid4(struct flashchip *flash)
 {
-	unsigned char readarr[4];
-	static uint32_t id1, id2;
-	static int cached = 0;
+	uint32_t id1, id2;
 
 	/* Some SPI controllers do not support commands with writecnt=1 and
 	 * readcnt=4.
@@ -201,31 +217,28 @@ int probe_spi_rdid4(struct flashchip *flash)
 		break;
 	}
 
-	if (!cached) {
-		if (spi_rdid(readarr, 4))
+	if (!id_cache[RDID4].is_cached) {
+		if (spi_rdid(id_cache[RDID4].bytes, 4))
 			return 0;
-		rdid_get_ids(readarr, 4, &id1, &id2);
-		cached = 1;
+		id_cache[RDID4].is_cached = 1;
 	}
+
+	rdid_get_ids(id_cache[RDID4].bytes, 4, &id1, &id2);
 	return compare_id(flash, id1, id2);
 }
 
 int probe_spi_rems(struct flashchip *flash)
 {
-	unsigned char readarr[JEDEC_REMS_INSIZE];
-	static uint32_t id1, id2;
-	static int cached = 0;
+	uint32_t id1, id2;
 
-	if (!cached) {
-		if (spi_rems(readarr)) {
+	if (!id_cache[REMS].is_cached) {
+		if (spi_rems(id_cache[REMS].bytes))
 			return 0;
-		}
-
-		id1 = readarr[0];
-		id2 = readarr[1];
-		cached = 1;
+		id_cache[REMS].is_cached = 1;
 	}
 
+	id1 = id_cache[REMS].bytes[0];
+	id2 = id_cache[REMS].bytes[1];
 	return compare_id(flash, id1, id2);
 }
 
@@ -275,16 +288,16 @@ int probe_spi_res1(struct flashchip *flash)
 
 int probe_spi_res2(struct flashchip *flash)
 {
-	unsigned char readarr[2];
 	uint32_t id1, id2;
 
-	if (spi_res(readarr, 2)) {
-		return 0;
+	if (!id_cache[RES2].is_cached) {
+		if (spi_res(id_cache[RES2].bytes, 2))
+			return 0;
+		id_cache[RES2].is_cached = 1;
 	}
 
-	id1 = readarr[0];
-	id2 = readarr[1];
-
+	id1 = id_cache[RES2].bytes[0];
+	id2 = id_cache[RES2].bytes[1];
 	msg_cdbg("%s: id1 0x%x, id2 0x%x\n", __func__, id1, id2);
 
 	if (id1 != flash->manufacture_id || id2 != flash->model_id)
