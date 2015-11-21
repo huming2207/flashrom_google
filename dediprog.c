@@ -885,32 +885,6 @@ static int dediprog_leave_standalone_mode(void)
 	return 0;
 }
 
-#if 0
-/* Something.
- * Present in eng_detect_blink.log with firmware 3.1.8
- * Always preceded by Command Receive Device String
- */
-static int dediprog_command_b(void)
-{
-	int ret;
-	char buf[0x3];
-
-	ret = usb_control_msg(dediprog_handle, REQTYPE_OTHER_IN, 0x7, 0x0, 0xef00,
-			      buf, 0x3, DEFAULT_TIMEOUT);
-	if (ret < 0) {
-		msg_perr("Command B failed (%s)!\n", usb_strerror());
-		return 1;
-	}
-	if ((ret != 0x3) || (buf[0] != 0xff) || (buf[1] != 0xff) ||
-	    (buf[2] != 0xff)) {
-		msg_perr("Unexpected response to Command B!\n");
-		return 1;
-	}
-
-	return 0;
-}
-#endif
-
 static int set_target_flash(enum dediprog_target target)
 {
 	int ret = dediprog_write_ep(CMD_SET_TARGET, target, 0, NULL, 0);
