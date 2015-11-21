@@ -325,109 +325,6 @@ static int dediprog_set_leds(int leds)
 	return 0;
 }
 
-static int dediprog_supply_voltages[] = {
-	0, 1800, 2500, 3500,
-};
-
-static int dediprog_set_spi_flash_voltage_manual(int millivolt)
-{
-	int ret;
-	uint16_t voltage_selector;
-
-	switch (millivolt) {
-	case 0:
-		/* Admittedly this one is an assumption. */
-		voltage_selector = 0x0;
-		break;
-	case 1800:
-		voltage_selector = 0x12;
-		break;
-	case 2500:
-		voltage_selector = 0x11;
-		break;
-	case 3500:
-		voltage_selector = 0x10;
-		break;
-	default:
-		msg_perr("Unknown voltage %i mV! Aborting.\n", millivolt);
-		return 1;
-	}
-	msg_pdbg("Setting SPI voltage to %u.%03u V\n", millivolt / 1000,
-		 millivolt % 1000);
-
-	if (voltage_selector == 0) {
-		/* Wait some time as the original driver does. */
-		programmer_delay(200 * 1000);
-	}
-	ret = dediprog_write_ep(CMD_SET_VCC, voltage_selector, 0, NULL, 0);
-	if (ret != 0x0) {
-		msg_perr("Command Set SPI Voltage 0x%x failed!\n",
-			 voltage_selector);
-		return 1;
-	}
-	if (voltage_selector != 0) {
-		/* Wait some time as the original driver does. */
-		programmer_delay(200 * 1000);
-	}
-	return 0;
-}
-
-static int dediprog_spi_send_command(unsigned int writecnt,
-				     unsigned int readcnt,
-				     const unsigned char *writearr,
-				     unsigned char *readarr);
-static int dediprog_set_spi_flash_voltage_auto(void)
-{
-	int i;
-	int spi_flash_ranges;
-
-	spi_flash_ranges = flash_supported_voltage_ranges(BUS_SPI);
-	if (spi_flash_ranges < 0)
-		return -1;
-
-	for (i = 0; i < ARRAY_SIZE(dediprog_supply_voltages); i++) {
-		int j;
-		int v = dediprog_supply_voltages[i];	/* shorthand */
-
-		for (j = 0; j < spi_flash_ranges; j++) {
-			/* Dediprog can supply a voltage in this range. */
-			if ((v >= voltage_ranges[j].min) && (v <= voltage_ranges[j].max)) {
-				struct flashchip dummy;
-
-				msg_cdbg("%s: trying %d\n", __func__, v);
-				if (dediprog_set_spi_flash_voltage_manual(v)) {
-					msg_cerr("%s: Failed to set SPI voltage\n", __func__);
-					return 1;
-				}
-
-				clear_spi_id_cache();
-				if (probe_flash(0, &dummy, 0) < 0) {
-					/* No dice, try next voltage supported by Dediprog. */
-					break;
-				}
-
-				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
-					(dummy.model_id == GENERIC_DEVICE_ID)) {
-					break;
-				}
-
-				return 0;
-			}
-		}
-	}
-
-	return 1;
-}
-
-/* FIXME: ugly function signature */
-static int dediprog_set_spi_voltage(int millivolt, int probe)
-{
-	if (probe)
-		return dediprog_set_spi_flash_voltage_auto();
-	else
-		return dediprog_set_spi_flash_voltage_manual(millivolt);
-}
-
 struct dediprog_spispeeds {
 	const char *const name;
 	const int speed;
@@ -847,6 +744,105 @@ static int dediprog_check_devicestring(void)
 	dediprog_firmwareversion = FIRMWARE_VERSION(fw[0], fw[1], fw[2]);
 
 	return 0;
+}
+
+static int dediprog_supply_voltages[] = {
+	0, 1800, 2500, 3500,
+};
+
+static int dediprog_set_spi_flash_voltage_manual(int millivolt)
+{
+	int ret;
+	uint16_t voltage_selector;
+
+	switch (millivolt) {
+	case 0:
+		/* Admittedly this one is an assumption. */
+		voltage_selector = 0x0;
+		break;
+	case 1800:
+		voltage_selector = 0x12;
+		break;
+	case 2500:
+		voltage_selector = 0x11;
+		break;
+	case 3500:
+		voltage_selector = 0x10;
+		break;
+	default:
+		msg_perr("Unknown voltage %i mV! Aborting.\n", millivolt);
+		return 1;
+	}
+	msg_pdbg("Setting SPI voltage to %u.%03u V\n", millivolt / 1000,
+		 millivolt % 1000);
+
+	if (voltage_selector == 0) {
+		/* Wait some time as the original driver does. */
+		programmer_delay(200 * 1000);
+	}
+	ret = dediprog_write_ep(CMD_SET_VCC, voltage_selector, 0, NULL, 0);
+	if (ret != 0x0) {
+		msg_perr("Command Set SPI Voltage 0x%x failed!\n",
+			 voltage_selector);
+		return 1;
+	}
+	if (voltage_selector != 0) {
+		/* Wait some time as the original driver does. */
+		programmer_delay(200 * 1000);
+	}
+	return 0;
+}
+
+static int dediprog_set_spi_flash_voltage_auto(void)
+{
+	int i;
+	int spi_flash_ranges;
+
+	spi_flash_ranges = flash_supported_voltage_ranges(BUS_SPI);
+	if (spi_flash_ranges < 0)
+		return -1;
+
+	for (i = 0; i < ARRAY_SIZE(dediprog_supply_voltages); i++) {
+		int j;
+		int v = dediprog_supply_voltages[i];	/* shorthand */
+
+		for (j = 0; j < spi_flash_ranges; j++) {
+			/* Dediprog can supply a voltage in this range. */
+			if ((v >= voltage_ranges[j].min) && (v <= voltage_ranges[j].max)) {
+				struct flashchip dummy;
+
+				msg_cdbg("%s: trying %d\n", __func__, v);
+				if (dediprog_set_spi_flash_voltage_manual(v)) {
+					msg_cerr("%s: Failed to set SPI voltage\n", __func__);
+					return 1;
+				}
+
+				clear_spi_id_cache();
+				if (probe_flash(0, &dummy, 0) < 0) {
+					/* No dice, try next voltage supported by Dediprog. */
+					break;
+				}
+
+				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
+					(dummy.model_id == GENERIC_DEVICE_ID)) {
+					break;
+				}
+
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+
+/* FIXME: ugly function signature */
+static int dediprog_set_spi_voltage(int millivolt, int probe)
+{
+	if (probe)
+		return dediprog_set_spi_flash_voltage_auto();
+	else
+		return dediprog_set_spi_flash_voltage_manual(millivolt);
 }
 
 /*
