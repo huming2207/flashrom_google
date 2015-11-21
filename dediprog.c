@@ -1161,10 +1161,10 @@ int dediprog_init(void)
 		dediprog_out_endpoint = 1;
 
 
-	/* Set all possible LEDs as soon as possible to indicate activity.
+	/* Set some LEDs as soon as possible to indicate activity.
 	 * Because knowing the firmware version is required to set the LEDs correctly we need to this after
 	 * dediprog_setup() has queried the device and set dediprog_firmwareversion. */
-	dediprog_set_leds(LED_ALL);
+	dediprog_set_leds(LED_PASS | LED_BUSY);
 
 	/* FIXME: need to do this so buses_supported gets SPI */
 	register_spi_programmer(&spi_programmer_dediprog);
