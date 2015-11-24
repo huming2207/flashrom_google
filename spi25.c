@@ -1029,10 +1029,24 @@ int spi_read_unbound(struct flashchip *flash, uint8_t *buf, unsigned int start, 
 	unsigned int i;
 
 	for (i = start; i < (start + len); i += chunksize) {
-		rc = spi_nbyte_read(i, buf + (i - start), min(chunksize, start + len - i));
-		if (rc)
-			break;
+		int chunk_status = 0;
+		unsigned int toread = min(chunksize, start + len - i);
+
+		chunk_status = spi_nbyte_read(i, buf + (i - start), toread);
+		if (chunk_status) {
+			if (ignore_error(chunk_status)) {
+				/* fill this chunk with 0xff bytes and
+				   let caller know about the error */
+				memset(buf + (i - start), 0xff, toread);
+				rc = chunk_status;
+				continue;
+			} else {
+				rc = chunk_status;
+				break;
+			}
+		}
 	}
+
 	return rc;
 }
 
