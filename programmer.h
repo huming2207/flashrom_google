@@ -118,6 +118,13 @@ struct programmer_entry {
 	void (*unmap_flash_region) (void *virt_addr, size_t len);
 
 	void (*delay) (int usecs);
+
+	/*
+	 * If set, use extra precautions such as erasing with small block sizes
+	 * and verifying more rigorously. This will incur a performance penalty
+	 * but is good for programming the ROM in-system on a live machine.
+	 */
+	int paranoid;
 };
 
 extern const struct programmer_entry programmer_table[];
