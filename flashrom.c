@@ -696,7 +696,7 @@ int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, u
 					msg_cerr("%s FAILED at 0x%08x! "
 						 "Expected=0x%02x, Read=0x%02x,",
 						 message, start + i + j, cmpbuf[i + j],
-						 readbuf[j]);
+						 readbuf[i + j]);
 			}
 		}
 	}
