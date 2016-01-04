@@ -637,6 +637,22 @@ int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *ne
 			break;
 		}
 
+		if (rom_entries[entry].start > size) {
+			msg_gerr("Layout entry \"%s\" begins beyond ROM size.\n",
+						rom_entries[entry].name);
+			return 1;
+		} else if (rom_entries[entry].end > (size - 1)) {
+			msg_gerr("Layout entry \"%s\" ends beyond ROM size.\n",
+						rom_entries[entry].name);
+			return 1;
+		}
+
+		if (rom_entries[entry].start > rom_entries[entry].end) {
+			msg_gerr("Layout entry \"%s\" has an invalid range.\n",
+						rom_entries[entry].name);
+			return 1;
+		}
+
 		/* For non-included region, copy from old content. */
 		if (rom_entries[entry].start > start)
 			memcpy(newcontents + start, oldcontents + start,
