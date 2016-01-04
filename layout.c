@@ -691,14 +691,10 @@ static int write_content_to_file(int entry, uint8_t *buf) {
 	return 0;
 }
 
-/*  Reads flash content specified with -i argument into *buf. */
-int handle_partial_read(
-    struct flashchip *flash,
-    uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf,
-                 unsigned int start, unsigned int len),
-    int write_to_file) {
-	int i, count = 0, erase_size_found = 0;
+/* sets required_erase_size (global variable), returns 0 if successful */
+static int set_required_erase_size(struct flashchip *flash)
+{
+	int i, erase_size_found = 0;
 
 	/*
 	 * Find eraseable block size for read alignment.
@@ -726,11 +722,26 @@ int handle_partial_read(
 		return -1;
 	}
 
+	return 0;
+}
+
+/*  Reads flash content specified with -i argument into *buf. */
+int handle_partial_read(
+    struct flashchip *flash,
+    uint8_t *buf,
+    int (*read) (struct flashchip *flash, uint8_t *buf,
+                 unsigned int start, unsigned int len),
+    int write_to_file) {
+	int i, count = 0;
+
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to read the complete image.
 	 */
 	if (num_include_args == 0)
 		return 0;
+
+	if (set_required_erase_size(flash))
+		return -1;
 
 	for (i = 0; i < romimages; i++) {
 		unsigned int start, len, start_align, len_align;
