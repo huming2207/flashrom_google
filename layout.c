@@ -801,6 +801,9 @@ int handle_partial_verify(
 	if (num_include_args == 0)
 		return 0;
 
+	if (set_required_erase_size(flash))
+		return -1;
+
 	/* Walk through the table and write content to file for those included
 	 * partition. */
 	for (i = 0; i < romimages; i++) {
