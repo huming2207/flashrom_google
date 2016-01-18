@@ -1700,7 +1700,7 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
-	int result;
+	int result = 0, chunk_status = 0;
 	int op_type;
 
 	if ((addr + len) > (flash->total_size * 1024)) {
@@ -1718,30 +1718,40 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		block_len = min(len, opaque_programmer->max_data_read);
 		/* Check flash region permissions before reading */
 		op_type = HWSEQ_READ;
-		result = check_fd_permissions_hwseq(op_type, addr, block_len);
-		if (result)
-			return result;
-		pch_hwseq_set_addr(addr);
-		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
-		hsfc &= ~HSFSC_FCYCLE; /* set read operation */
-		if (!addr && len == 1) {
-			/* read status register */
-			hsfc |= (0x8 << HSFSC_FCYCLE_OFF);
-		}
-		hsfc &= ~HSFSC_FDBC; /* clear byte count */
-		/* set byte count */
-		hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
-		hsfc |= HSFSC_FGO; /* start */
-		REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+		chunk_status = check_fd_permissions_hwseq(op_type,
+							addr, block_len);
+		if (chunk_status) {
+			if (ignore_error(chunk_status)) {
+				/* fill this chunk with 0xff bytes and
+				 * inform the caller about the error */
+				memset(buf, 0xff, block_len);
+				result = chunk_status;
+			} else {
+				return chunk_status;
+			}
+		} else {
+			pch_hwseq_set_addr(addr);
+			hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+			hsfc &= ~HSFSC_FCYCLE; /* set read operation */
+			if (!addr && len == 1) {
+				/* read status register */
+				hsfc |= (0x8 << HSFSC_FCYCLE_OFF);
+			}
+			hsfc &= ~HSFSC_FDBC; /* clear byte count */
+			/* set byte count */
+			hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
+			hsfc |= HSFSC_FGO; /* start */
+			REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
 
-		if (pch_hwseq_wait_for_cycle_complete(timeout, block_len))
-			return 1;
-		ich_read_data(buf, block_len, PCH100_REG_FDATA0);
+			if (pch_hwseq_wait_for_cycle_complete(timeout, block_len))
+				return 1;
+			ich_read_data(buf, block_len, PCH100_REG_FDATA0);
+		}
 		addr += block_len;
 		buf += block_len;
 		len -= block_len;
 	}
-	return 0;
+	return result;
 }
 
 int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
