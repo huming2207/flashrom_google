@@ -36,6 +36,8 @@ struct opaque_programmer opaque_programmer_none = {
 	.probe = NULL,
 	.read = NULL,
 	.write = NULL,
+	.read_status = NULL,
+	.write_status = NULL,
 	.erase = NULL,
 };
 
@@ -84,6 +86,28 @@ int erase_opaque(struct flashchip *flash, unsigned int blockaddr, unsigned int b
 		return 1;
 	}
 	return opaque_programmer->erase(flash, blockaddr, blocklen);
+}
+
+uint8_t read_status_opaque(const struct flashchip *flash)
+{
+	if (!opaque_programmer->read_status) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->read_status(flash);
+}
+
+int write_status_opaque(const struct flashchip *flash, int status)
+{
+	if (!opaque_programmer->write_status) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->write_status(flash, status);
 }
 
 void register_opaque_programmer(struct opaque_programmer *pgm)

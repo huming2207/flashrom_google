@@ -186,6 +186,8 @@ struct flashchip {
 	int (*unlock) (struct flashchip *flash);
 	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	uint8_t (*read_status) (const struct flashchip *flash);
+	int (*write_status) (const struct flashchip *flash, int status);
 	struct voltage_range voltage;
 
 	/* Some flash devices have an additional register space. */
