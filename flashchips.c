@@ -10671,7 +10671,9 @@ const struct flashchip flashchips_hwseq[] = {
 		},
 		.write		= write_opaque,
 		.read		= read_opaque,
-		.wp		= &wp_w25r,
+		.read_status	= read_status_opaque,
+		.write_status	= write_status_opaque,
+		.wp		= &wp_w25,
 	},
 
 	{NULL}

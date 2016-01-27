@@ -45,7 +45,7 @@ int spi_block_erase_c7(struct flashchip *flash, unsigned int addr, unsigned int 
 int spi_chip_write_1(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, int unsigned len);
-uint8_t spi_read_status_register(void);
+uint8_t spi_read_status_register(const struct flashchip *flash);
 int spi_write_status_register(const struct flashchip *flash, int status);
 void spi_prettyprint_status_register_bit(uint8_t status, int bit);
 void spi_prettyprint_status_register_bp3210(uint8_t status, int bp);
@@ -65,6 +65,8 @@ int probe_opaque(struct flashchip *flash);
 int read_opaque(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int write_opaque(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int erase_opaque(struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
+uint8_t read_status_opaque(const struct flashchip *flash);
+int write_status_opaque(const struct flashchip *flash, int status);
 
 /* a25.c */
 int spi_prettyprint_status_register_amic_a25l05p(struct flashchip *flash);
@@ -97,7 +99,7 @@ int unlock_lh28f008bjt(struct flashchip *flash);
 
 /* ichspi.c */
 int ich_hwseq_probe(struct flashchip *flash);
-int ich_hwseq_read(struct flashchip *flash, uint8_t *buf, int start, int len);
+int ich_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int ich_hwseq_block_erase(struct flashchip *flash, unsigned int addr, unsigned int blocklen);
 int ich_hwseq_write_256(struct flashchip *flash, uint8_t *buf, int start, int len);
 

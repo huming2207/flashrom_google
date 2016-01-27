@@ -152,7 +152,7 @@ static int s25fs_software_reset(struct flashchip *flash)
 
 static int s25f_poll_status(const struct flashchip *flash)
 {
-	uint8_t tmp = spi_read_status_register();
+	uint8_t tmp = spi_read_status_register(flash);
 
 	while (tmp & JEDEC_RDSR_BIT_WIP) {
 		/*
@@ -175,7 +175,7 @@ static int s25f_poll_status(const struct flashchip *flash)
 		}
 
 		programmer_delay(1000 * 10);
-		tmp = spi_read_status_register();
+		tmp = spi_read_status_register(flash);
 	}
 
 	return 0;
@@ -275,7 +275,7 @@ static int s25f_write_cr1(const struct flashchip *flash, uint8_t data)
 		.writecnt	= CMD_WRR_LEN,
 		.writearr	= (const unsigned char[]){
 					CMD_WRR,
-					spi_read_status_register(),
+					spi_read_status_register(flash),
 					data,
 				},
 		.readcnt	= 0,
