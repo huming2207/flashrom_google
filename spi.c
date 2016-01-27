@@ -38,6 +38,8 @@ const struct spi_programmer spi_programmer_none = {
 	.multicommand = NULL,
 	.read = NULL,
 	.write_256 = NULL,
+	.read_status = NULL,
+	.write_status = NULL,
 };
 
 const struct spi_programmer *spi_programmer = &spi_programmer_none;
@@ -183,6 +185,30 @@ int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start
 	}
 
 	return spi_programmer->write_256(flash, buf, start, len);
+}
+
+uint8_t spi_chip_read_status(const struct flashchip *flash)
+{
+	if (!spi_programmer->read_status) {
+		msg_perr("%s called, but SPI status read is unsupported on this "
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
+
+	return spi_programmer->read_status(flash);
+}
+
+int spi_chip_write_status(const struct flashchip *flash, int status)
+{
+	if (!spi_programmer->write_status) {
+		msg_perr("%s called, but SPI status write is unsupported on this "
+			 "hardware. Please report a bug at "
+			 "flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
+
+	return spi_programmer->write_status(flash, status);
 }
 
 /*
