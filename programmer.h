@@ -631,6 +631,8 @@ struct spi_programmer {
 	/* Optimized functions for this programmer */
 	int (*read)(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*write_256)(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	uint8_t (*read_status)(const struct flashchip *flash);
+	int (*write_status)(const struct flashchip *flash, int status);
 };
 
 extern const struct spi_programmer *spi_programmer;
@@ -699,6 +701,8 @@ struct opaque_programmer {
 	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*erase) (struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
+	uint8_t (*read_status) (const struct flashchip *flash);
+	int (*write_status) (const struct flashchip *flash, int status);
 	const void *data;
 };
 extern struct opaque_programmer *opaque_programmer;
