@@ -31,6 +31,7 @@
 #include "programmer.h"
 #include "spi.h"
 #include "ich_descriptors.h"
+#include "chipdrivers.h"
 
 /* ICH9 controller register definition */
 #define ICH9_REG_HSFS		0x04	/* 16 Bits Hardware Sequencing Flash Status */
@@ -1733,10 +1734,6 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 			pch_hwseq_set_addr(addr);
 			hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 			hsfc &= ~HSFSC_FCYCLE; /* set read operation */
-			if (!addr && len == 1) {
-				/* read status register */
-				hsfc |= (0x8 << HSFSC_FCYCLE_OFF);
-			}
 			hsfc &= ~HSFSC_FDBC; /* clear byte count */
 			/* set byte count */
 			hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
@@ -1752,6 +1749,37 @@ int pch_hwseq_read(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		len -= block_len;
 	}
 	return result;
+}
+
+uint8_t pch_hwseq_read_status(const struct flashchip *flash)
+{
+	uint16_t hsfc;
+	uint16_t timeout = 100 * 60;
+	int len = 1;
+	uint8_t buf;
+
+	msg_pdbg("Reading Status register\n");
+
+	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
+	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+
+	hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+	hsfc &= ~HSFSC_FCYCLE; /* set read operation */
+
+	/* read status register */
+	hsfc |= (0x8 << HSFSC_FCYCLE_OFF);
+
+	hsfc &= ~HSFSC_FDBC; /* clear byte count */
+	/* set byte count */
+	hsfc |= (((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
+	hsfc |= HSFSC_FGO; /* start */
+	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+	if (pch_hwseq_wait_for_cycle_complete(timeout, len)) {
+		msg_perr("Reading Status register failed\n!!");
+		return -1;
+	}
+	ich_read_data(&buf, len, PCH100_REG_FDATA0);
+	return buf;
 }
 
 int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
@@ -1784,13 +1812,8 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		ich_fill_data(buf, block_len, PCH100_REG_FDATA0);
 		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
 		hsfc &= ~HSFSC_FCYCLE; /* clear operation */
-		if (!addr && len == 1) {
-			/* write status register */
-			hsfc |= (0x7 << HSFSC_FCYCLE_OFF);
-		} else {
-			/* set write operation */
-			hsfc |= (0x2 << HSFSC_FCYCLE_OFF);
-		}
+		/* set write operation */
+		hsfc |= (0x2 << HSFSC_FCYCLE_OFF);
 		hsfc &= ~HSFSC_FDBC; /* clear byte count */
 		/* set byte count */
 		hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
@@ -1802,6 +1825,38 @@ int pch_hwseq_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 		addr += block_len;
 		buf += block_len;
 		len -= block_len;
+	}
+	return 0;
+}
+
+int pch_hwseq_write_status(const struct flashchip *flash, int status)
+{
+	uint16_t hsfc;
+	uint16_t timeout = 100 * 60;
+	int len = 1;
+	uint8_t buf = status;
+
+	msg_pdbg("Writing status register\n");
+
+	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
+	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+
+	ich_fill_data(&buf, len, PCH100_REG_FDATA0);
+	hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+	hsfc &= ~HSFSC_FCYCLE; /* clear operation */
+
+	/* write status register */
+	hsfc |= (0x7 << HSFSC_FCYCLE_OFF);
+	hsfc &= ~HSFSC_FDBC; /* clear byte count */
+
+	/* set byte count */
+	hsfc |= (((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
+	hsfc |= HSFSC_FGO; /* start */
+	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+
+	if (pch_hwseq_wait_for_cycle_complete(timeout, len)) {
+		msg_perr("Writing Status register failed\n!!");
+		return -1;
 	}
 	return 0;
 }
@@ -1981,6 +2036,8 @@ static struct opaque_programmer opaque_programmer_pch_hwseq = {
 	.probe = pch_hwseq_probe,
 	.read = pch_hwseq_read,
 	.write = pch_hwseq_write,
+	.read_status = pch_hwseq_read_status,
+	.write_status = pch_hwseq_write_status,
 	.erase = pch_hwseq_block_erase,
 };
 
