@@ -19,7 +19,7 @@
 #include "ipc_lock.h"
 #include "locks.h"
 
-static struct ipc_lock cros_ec_lock = IPC_LOCK_INIT(CROS_EC_LOCK);
+static struct ipc_lock cros_ec_lock = LOCKFILE_INIT(CROS_EC_LOCKFILE_NAME);
 
 int acquire_cros_ec_lock(int timeout_secs)
 {
