@@ -21,17 +21,8 @@
 #ifndef LOCKS_H__
 #define LOCKS_H__
 
-/* this is the base key, since we have to pick something global */
-#define IPC_LOCK_KEY	(0x67736c00 & 0xfffffc00) /* 22 bits "gsl" */
-
-/* The ordering of the following keys matters a lot. We don't want to reorder
- * keys and have a new binary dependent on deployed/used because it will break
- * atomicity of existing users and binaries. In other words, DO NOT REORDER. */
-
-/* this is the "big lock". */
-#define BIGLOCK		(IPC_LOCK_KEY + 0)
-
-/* for Google EC */
-#define CROS_EC_LOCK		(IPC_LOCK_KEY + 1)
+#define SYSTEM_LOCKFILE_DIR	"/var/run/lock"
+#define LOCKFILE_NAME		"firmware_utility_lock"
+#define CROS_EC_LOCKFILE_NAME	"cros_ec_lock"
 
 #endif /* LOCKS_H__ */
