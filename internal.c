@@ -129,6 +129,7 @@ int register_superio(struct superio s)
 int is_laptop = 0;
 int laptop_ok = 1;	/* FIXME: proper whitelisting hasn't been added yet */
 
+#if __FLASHROM_LITTLE_ENDIAN__
 static const struct par_programmer par_programmer_internal = {
 		.chip_readb		= internal_chip_readb,
 		.chip_readw		= internal_chip_readw,
@@ -139,6 +140,7 @@ static const struct par_programmer par_programmer_internal = {
 		.chip_writel		= internal_chip_writel,
 		.chip_writen		= fallback_chip_writen,
 };
+#endif
 
 enum chipbustype internal_buses_supported = BUS_NONE;
 
@@ -201,7 +203,9 @@ int internal_init(void)
 	int force_laptop = 0;
 	int not_a_laptop = 0;
 	char *arg;
+#if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
 	int probe_target_bus_later = 0;
+#endif
 
 	arg = extract_programmer_param("boardenable");
 	if (arg && !strcmp(arg,"force")) {
@@ -267,8 +271,10 @@ int internal_init(void)
 
 		free(arg);
 	} else {
+#if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
 		/* The pacc must be initialized before access pci devices. */
 		probe_target_bus_later = 1;
+#endif
 	}
 
 	get_io_perms();
