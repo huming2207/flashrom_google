@@ -2004,20 +2004,6 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 	 * everything before we can write.
 	 */
 
-	if (erase_it) {
-		/* FIXME: Do we really want the scary warning if erase failed?
-		 * After all, after erase the chip is either blank or partially
-		 * blank or it has the old contents. A blank chip won't boot,
-		 * so if the user wanted erase and reboots afterwards, the user
-		 * knows very well that booting won't work.
-		 */
-		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
-			emergency_help_message();
-			ret = 1;
-		}
-		goto out;
-	}
-
 	if (write_it || verify_it) {
 		/*
 		 * Note: This must be done before any files specified by -i
@@ -2093,6 +2079,20 @@ int doit(struct flashchip *flash, int force, const char *filename, int read_it,
 	if (handle_romentries(flash, oldcontents, newcontents)) {
 		ret = 1;
 		msg_cerr("Error handling ROM entries.\n");
+		goto out;
+	}
+
+	if (erase_it) {
+		/* FIXME: Do we really want the scary warning if erase failed?
+		 * After all, after erase the chip is either blank or partially
+		 * blank or it has the old contents. A blank chip won't boot,
+		 * so if the user wanted erase and reboots afterwards, the user
+		 * knows very well that booting won't work.
+		 */
+		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
+			emergency_help_message();
+			ret = 1;
+		}
 		goto out;
 	}
 
