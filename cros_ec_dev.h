@@ -44,5 +44,6 @@ struct cros_ec_command {
 
 #define CROS_EC_DEV_IOC		':'
 #define CROS_EC_DEV_IOCXCMD	_IOWR(':', 0, struct cros_ec_command)
+#define CROS_EC_DEV_RETRY	3
 
 #endif /* _CROS_EC_DEV_H_ */
