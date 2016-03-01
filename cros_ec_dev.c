@@ -111,7 +111,7 @@ static int command_wait_for_response(void)
 }
 
 /*
- * cros_ec_command_dev - Issue command to CROS_EC device
+ * __cros_ec_command_dev - Issue command to CROS_EC device
  *
  * @command:	command code
  * @outdata:	data to send to EC
@@ -127,7 +127,7 @@ static int command_wait_for_response(void)
  *
  * Returns >=0 for success, or negative if other error.
  */
-static int cros_ec_command_dev(int command, int version,
+static int __cros_ec_command_dev(int command, int version,
 			   const void *outdata, int outsize,
 			   void *indata, int insize)
 {
@@ -154,6 +154,40 @@ static int cros_ec_command_dev(int command, int version,
 		msg_perr("%s(): Command 0x%02x returned result: %d\n",
 			 __func__, command, cmd.result);
 		return -cmd.result;
+	}
+
+	return ret;
+}
+
+/*
+ * cros_ec_command_dev - Issue command to CROS_EC device with retry
+ *
+ * @command:	command code
+ * @outdata:	data to send to EC
+ * @outsize:	number of bytes in outbound payload
+ * @indata:	(unallocated) buffer to store data received from EC
+ * @insize:	number of bytes in inbound payload
+ *
+ * This uses the kernel Chrome OS EC driver to communicate with the EC.
+ *
+ * The outdata and indata buffers contain payload data (if any); command
+ * and response codes as well as checksum data are handled transparently by
+ * this function.
+ *
+ * Returns >=0 for success, or negative if other error.
+ */
+static int cros_ec_command_dev(int command, int version,
+			   const void *outdata, int outsize,
+			   void *indata, int insize)
+{
+	int ret = EC_RES_ERROR;
+	int try;
+
+	for (try = 0; try < CROS_EC_DEV_RETRY; try++) {
+		ret = __cros_ec_command_dev(command, version, outdata,
+					    outsize, indata, insize);
+		if (ret >= 0)
+			return ret;
 	}
 
 	return ret;
