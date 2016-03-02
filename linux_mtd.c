@@ -481,7 +481,7 @@ static int mtd_wp_status(const struct flashchip *flash)
 
 	/* For now, assume only one contiguous region can be locked (NOR) */
 	/* FIXME: use flash struct members instead of raw MTD values here */
-	for (u = 0; u < mtd_total_size / mtd_erasesize; u += mtd_erasesize) {
+	for (u = 0; u < mtd_total_size; u += mtd_erasesize) {
 		int rc;
 		struct erase_info_user erase_info = {
 			.start = u,
