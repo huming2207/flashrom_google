@@ -21,7 +21,7 @@
 #ifndef LOCKS_H__
 #define LOCKS_H__
 
-#define SYSTEM_LOCKFILE_DIR	"/var/run/lock"
+#define SYSTEM_LOCKFILE_DIR	"/run/lock"
 #define LOCKFILE_NAME		"firmware_utility_lock"
 #define CROS_EC_LOCKFILE_NAME	"cros_ec_lock"
 
