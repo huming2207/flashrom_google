@@ -477,6 +477,7 @@ static int mtd_wp_disable_writeprotect(const struct flashchip *flash)
 static int mtd_wp_status(const struct flashchip *flash)
 {
 	uint32_t start = 0, end = 0;
+	int start_found = 0, end_found = 0;
 	unsigned int u;
 
 	/* For now, assume only one contiguous region can be locked (NOR) */
@@ -493,14 +494,18 @@ static int mtd_wp_status(const struct flashchip *flash)
 			msg_perr("%s: ioctl: %s\n", __func__, strerror(errno));
 			return 1;
 		} else if (rc == 1) {
-			if (!start)
+			if (!start_found) {
 				start = erase_info.start;
+				start_found = 1;
+			}
 		} else if (rc == 0) {
-			if (start)
-				end = erase_info.start - 1;
+			if (start_found) {
+				end = erase_info.start;
+				end_found = 1;
+			}
 		}
 
-		if (start && end) {
+		if (start_found && end_found) {
 			msg_pinfo("WP: write protect range: start=0x%08x, "
 				"len=0x%08x\n", start, end - start);
 			/* TODO: Replace this break with "start = end = 0" if
