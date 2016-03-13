@@ -175,7 +175,7 @@ int read_romlayout(char *name)
 			msg_gerr("Ignoring the rest of the layout file.\n");
 			break;
 		}
-		if (2 != fscanf(romlayout, "%s %s\n", tempstr, rom_entries[romimages].name))
+		if (2 != fscanf(romlayout, "%255s %255s\n", tempstr, rom_entries[romimages].name))
 			continue;
 #if 0
 		// fscanf does not like arbitrary comments like that :( later
