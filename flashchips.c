@@ -4165,17 +4165,21 @@ const struct flashchip flashchips[] = {
 	},
 
 	{
+		/*
+		 * TODO: add FEATURE_OTP when we sync w/ upstream. Also, there
+		 * a GD25Q128B without QPI support which can be differentiated
+		 * using SFDP, but for now we only care about the GD25Q128C.
+		 */
 		.vendor		= "GigaDevice",
-		.name		= "GD25Q128",
+		.name		= "GD25Q128C",
 		.bustype	= BUS_SPI,
 		.manufacture_id	= GIGADEVICE_ID,
 		.model_id	= GIGADEVICE_GD25Q128,
 		.total_size	= 16384,
 		.page_size	= 256,
-		/* FIXME: add FEATURE_OTP when we sync w/ upstream */
 		/* OTP: 1024B total, 256B reserved; read 0x48; write 0x42 */
 		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ,
-		.tested		= TEST_UNTESTED,
+		.tested		= TEST_OK_PREWU,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
