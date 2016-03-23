@@ -1077,44 +1077,6 @@ static int w25_set_srp0(const struct flashchip *flash, int enable)
 	return 0;
 }
 
-static int w25_set_srp(const struct flashchip *flash, int enable)
-{
-	struct w25q_status status;
-	struct flashchip chip;
-	int tmp = 0;
-	uint8_t arr, expected;
-
-	memset(&status, 0, sizeof(status));
-	memset(&chip, 0, sizeof(chip));
-	memcpy(&chip, flash, sizeof(chip));
-
-	tmp = flash->read(&chip, &arr, 0, 1);
-	if (tmp) {
-		msg_cerr("Read status register failed.\n");
-		return tmp;
-	}
-	memcpy(&status, &arr, 1);
-	msg_cdbg("%s: old status: 0x%02x\n", __func__, tmp);
-
-	status.srp0 = enable ? 1 : 0;
-	memcpy(&expected, &status, sizeof(status));
-	tmp = flash->write(&chip, &expected, 0, 1);
-	if (tmp) {
-		msg_cerr("Write status register failed.\n");
-		return tmp;
-	}
-	tmp = flash->read(&chip, &arr, 0, 1);
-	if (tmp) {
-		msg_cerr("Read status register failed.\n");
-		return tmp;
-	}
-	msg_cdbg("%s: new status: 0x%02x\n", __func__, arr);
-	if ((arr & MASK_WP_AREA) != (expected & MASK_WP_AREA))
-		return 1;
-
-	return 0;
-}
-
 static int w25_enable_writeprotect(const struct flashchip *flash,
 		enum wp_mode wp_mode)
 {
