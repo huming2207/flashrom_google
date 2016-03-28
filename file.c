@@ -50,21 +50,36 @@
 #define FDT_ROOT	"/proc/device-tree"
 #define FDT_ALIASES	"/proc/device-tree/aliases"
 
+/* Like strstr(), but allowing NULL bytes within haystack */
+static int __find_string(const char *haystack, size_t hlen, const char *needle)
+{
+	const char *p = haystack;
+	const char *end = haystack + hlen;
+
+	while (p < end) {
+		if (strstr(p, needle))
+			return 1;
+		p = memchr(p, '\0', end - p);
+		if (!p)
+			/* Not found? We're at the end */
+			return 0;
+		else
+			/* Skip past the NULL separator */
+			p++;
+	}
+
+	return 0;
+}
+
 /* returns 1 if string if found, 0 if not, and <0 to indicate error */
 static int find_string(const char *path, const char *str)
 {
-	int fd, ret = 0;
-	struct stat s;
-	off_t i;
+	char contents[4096];
+	int fd, ret;
+	ssize_t len;
 
-	if (stat(path, &s) < 0) {
-		msg_gerr("Cannot stat file \"%s\"\n", path);
-		ret = -1;
-		goto find_string_exit_0;
-	}
-
-	if (s.st_size < strlen(str))
-		goto find_string_exit_0;
+	msg_pdbg("%s: checking path \"%s\" for contents \"%s\"\n",
+		 __func__, path, str);
 
 	fd = open(path, O_RDONLY, 0);
 	if (fd < 0) {
@@ -73,39 +88,18 @@ static int find_string(const char *path, const char *str)
 		goto find_string_exit_0;
 	}
 
-	/* mmap() would be nice but it might not be implemented for some
-	 * files in sysfs and procfs */
-	for (i = 0; i <= s.st_size - strlen(str); i++) {
-		int match_found = 1;
-		off_t j;
-
-		if (lseek(fd, i, SEEK_SET) == (off_t)-1) {
-			msg_gerr("Failed to seek within \"%s\"\n", path);
-			ret = -1;
-			goto find_string_exit_1;
-		}
-
-		for (j = 0; j < strlen(str); j++) {
-			char c;
-
-			if (read(fd, &c, 1) != 1) {
-				msg_gerr("Failed to read \"%s\"\n", path);
-				ret = -1;
-				goto find_string_exit_1;
-			}
-
-			if (str[j] != c) {
-				match_found = 0;
-				break;
-			}
-		}
-
-		if (match_found) {
-			ret = 1;
-			break;
-		}
-
+	/* mmap() (or even read() with a file length) would be nice but these
+	 * might not be implemented for files in sysfs and procfs.
+	 * Let's also leave room for a terminator. */
+	len = read(fd, contents, sizeof(contents) - 1);
+	if (len == -1) {
+		msg_gerr("Cannot read file \"%s\"\n", path);
+		ret = -1;
+		goto find_string_exit_1;
 	}
+	/* Terminate the contents, in case they weren't terminated for us */
+	contents[len++] = '\0';
+	ret = __find_string(contents, len, str);
 
 find_string_exit_1:
 	close(fd);
@@ -113,7 +107,7 @@ find_string_exit_0:
 	return ret;
 }
 
- /*
+/*
  * scanft - scan filetree for file with option to search for content
  *
  * @root:	Where to begin search
@@ -124,6 +118,9 @@ find_string_exit_0:
  *
  * The caller should be specific enough with root and symdepth arguments
  * to avoid finding duplicate information (especially in sysfs).
+ *
+ * Also, note that we may only scan a bounded portion of the beginning of the
+ * file for a match.
  *
  * returns allocated string with path of matching file if successful
  * returns NULL to indicate failure
