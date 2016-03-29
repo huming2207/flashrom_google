@@ -1465,6 +1465,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 {
 	unsigned int starthere = 0, lenhere = 0;
 	int ret = 0, skip = 1, writecount = 0;
+	int block_was_erased = 0;
 	enum write_granularity gran = write_gran_256bytes; /* FIXME */
 
 	/* curcontents and newcontents are opaque to walk_eraseregions, and
@@ -1496,6 +1497,7 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 		/* Erase was successful. Adjust curcontents. */
 		memset(curcontents, flash_erase_value(flash), len);
 		skip = 0;
+		block_was_erased = 1;
 	}
 	/* get_next_write() sets starthere to a new value after the call. */
 	while ((lenhere = get_next_write(curcontents + starthere,
@@ -1512,6 +1514,20 @@ static int erase_and_write_block_helper(struct flashchip *flash,
 				msg_cdbg("D");
 			return ret;
 		}
+
+		/*
+		 * If the block needed to be erased and was erased successfully
+		 * then we can assume that we didn't run into any write-
+		 * protected areas. Otherwise, we need to verify each page to
+		 * ensure it was successfully written and abort if we encounter
+		 * any errors.
+		 */
+		if (programmer_table[programmer].paranoid && !block_was_erased) {
+			if (verify_range(flash, newcontents + starthere,
+					start + starthere, lenhere, "WRITE"))
+				return -1;
+		}
+
 		starthere += lenhere;
 		skip = 0;
 	}
