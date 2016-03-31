@@ -240,6 +240,7 @@ int main(int argc, char *argv[])
 	int i;
 	enum programmer prog = PROGRAMMER_INVALID;
 	int rc = 0;
+	int found_chip = 0;
 
 	const char *optstring = "rRwvnVEfc:m:l:i:p:Lzhbx";
 	static struct option long_options[] = {
@@ -589,10 +590,20 @@ int main(int argc, char *argv[])
 	}
 
 	if (chip_to_probe) {
-		for (flash = flashchips; flash && flash->name; flash++)
-			if (!strcmp(flash->name, chip_to_probe))
+		for (flash = flashchips; flash && flash->name; flash++) {
+			if (!strcmp(flash->name, chip_to_probe)) {
+				found_chip = 1;
 				break;
-		if (!flash || !flash->name) {
+			}
+		}
+		for (flash = flashchips_hwseq; flash && flash->name &&
+				!found_chip; flash++) {
+			if (!strcmp(flash->name, chip_to_probe)) {
+				found_chip = 1;
+				break;
+			}
+		}
+		if (!found_chip) {
 			msg_gerr("Error: Unknown chip '%s' specified.\n",
 				chip_to_probe);
 			msg_gerr("Run flashrom -L to view the hardware supported "

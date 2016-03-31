@@ -10653,10 +10653,10 @@ const struct flashchip flashchips[] = {
 const struct flashchip flashchips_hwseq[] = {
 	{
 		.vendor		= "Winbond",
-		.name		= "W25R128FV",
+		.name		= "W25Q128.V",
 		.bustype	= BUS_PROG,
 		.manufacture_id	= WINBOND_NEX_ID,
-		.model_id	= WINBOND_NEX_W25R128FV,
+		.model_id	= WINBOND_NEX_W25Q128_V,
 		.total_size	= 0,
 		.page_size	= 256,
 		/* probe is assumed to work, rest will be filled in by probe */
