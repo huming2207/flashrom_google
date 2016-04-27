@@ -506,13 +506,15 @@ static int mtd_wp_status(const struct flashchip *flash)
 		}
 
 		if (start_found && end_found) {
-			msg_pinfo("WP: write protect range: start=0x%08x, "
-				"len=0x%08x\n", start, end - start);
-			/* TODO: Replace this break with "start = end = 0" if
-			 * we want to support non-contiguous locked regions */
+			/* TODO: changes required for supporting non-contiguous locked regions */
 			break;
 		}
 	}
+
+	msg_cinfo("WP: write protect is %s.\n",
+			(start_found && end_found)? "enabled": "disabled");
+	msg_pinfo("WP: write protect range: start=0x%08x, "
+			"len=0x%08x\n", start, end - start);
 
 	return 0;
 }
