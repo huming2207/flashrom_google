@@ -63,8 +63,10 @@
 #define GOOGLE_RAIDEN_SPI_PROTOCOL 0x01
 
 enum raiden_debug_spi_request {
-	RAIDEN_DEBUG_SPI_REQ_ENABLE  = 0x0000,
-	RAIDEN_DEBUG_SPI_REQ_DISABLE = 0x0001,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE    = 0x0000,
+	RAIDEN_DEBUG_SPI_REQ_DISABLE   = 0x0001,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE_AP = 0x0002,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE_EC = 0x0003,
 };
 
 #define PACKET_HEADER_SIZE	2
@@ -239,6 +241,21 @@ static int shutdown(void * data)
 int raiden_debug_spi_init(void)
 {
 	struct usb_match match;
+	int request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE;
+	char *target_str = extract_programmer_param("target");
+
+	if (target_str) {
+		if (!strcasecmp(target_str, "ap"))
+			request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE_AP;
+		else if (!strcasecmp(target_str, "ec"))
+			request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE_EC;
+		else {
+			msg_perr("Invalid target: %s\n", target_str);
+			free(target_str);
+			return 1;
+		}
+	}
+	free(target_str);
 
 	usb_match_init(&match);
 
@@ -279,7 +296,7 @@ int raiden_debug_spi_init(void)
 			     LIBUSB_ENDPOINT_OUT |
 			     LIBUSB_REQUEST_TYPE_VENDOR |
 			     LIBUSB_RECIPIENT_INTERFACE,
-			     RAIDEN_DEBUG_SPI_REQ_ENABLE,
+			     request_enable,
 			     0,
 			     device->interface_descriptor->bInterfaceNumber,
 			     NULL,
