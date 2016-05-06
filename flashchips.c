@@ -9392,6 +9392,44 @@ const struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Winbond",
+		.name		= "W25Q40EW",
+		.bustype	= BUS_SPI,
+		.manufacture_id	= WINBOND_NEX_ID,
+		.model_id	= WINBOND_NEX_W25Q40EW,
+		.total_size	= 512,
+		.page_size	= 256,
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ,
+		.tested		= TEST_OK_PREWU,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	=
+		{
+			{
+				.eraseblocks = { {4 * 1024, 128} },
+				.block_erase = spi_block_erase_20,
+			}, {
+				.eraseblocks = { {32 * 1024, 16} },
+				.block_erase = spi_block_erase_52,
+			}, {
+				.eraseblocks = { {64 * 1024, 8} },
+				.block_erase = spi_block_erase_d8,
+			}, {
+				.eraseblocks = { {1024 * 512, 1} },
+				.block_erase = spi_block_erase_60,
+			}, {
+				.eraseblocks = { {1024 * 512, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect,
+		.write		= spi_chip_write_256,
+		.read		= spi_chip_read,
+		.voltage	= {1650, 1950},
+		/* FIXME(dhendrix): Add write-protection support */
+	},
+
+	{
+		.vendor		= "Winbond",
 		.name		= "W25Q80",
 		.bustype	= BUS_SPI,
 		.manufacture_id	= WINBOND_NEX_ID,
