@@ -196,15 +196,26 @@ static int linux_mtd_probe(struct flashchip *flash)
 static int linux_mtd_read(struct flashchip *flash, uint8_t *buf,
 			  unsigned int start, unsigned int len)
 {
+	unsigned int eb_size = flash->block_erasers[0].eraseblocks[0].size;
+	unsigned int i;
+
 	if (lseek(dev_fd, start, SEEK_SET) != start) {
 		msg_perr("Cannot seek to 0x%06x: %s\n", start, strerror(errno));
 		return 1;
 	}
 
-	if (read(dev_fd, buf, len) != len) {
-		msg_perr("Cannot read 0x%06x bytes at 0x%06x: %s\n",
-				start, len, strerror(errno));
-		return 1;
+	for (i = 0; i < len; ) {
+		/* Try to align reads to eraseblock size */
+		unsigned int step = eb_size - ((start + i) % eb_size);
+		step = min(step, len - i);
+
+		if (read(dev_fd, buf + i, step) != step) {
+			msg_perr("Cannot read 0x%06x bytes at 0x%06x: %s\n",
+					step, start + i, strerror(errno));
+			return 1;
+		}
+
+		i += step;
 	}
 
 	return 0;
@@ -274,8 +285,7 @@ static int linux_mtd_erase(struct flashchip *flash,
 }
 
 static struct opaque_programmer programmer_linux_mtd = {
-	/* FIXME: Do we need to change these (especially write) as per
-	 * page size requirements? */
+	/* max_data_{read,write} don't have any effect for this programmer */
 	.max_data_read	= MAX_DATA_UNSPECIFIED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
 	.probe		= linux_mtd_probe,
