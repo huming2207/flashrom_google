@@ -9702,7 +9702,7 @@ const struct flashchip flashchips[] = {
 		.total_size	= 16384,
 		.page_size	= 256,
 		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ,
-		.tested		= TEST_OK_PROBE,
+		.tested		= TEST_OK_PREWU,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -10735,7 +10735,7 @@ const struct flashchip flashchips_hwseq[] = {
 		.total_size	= 0,
 		.page_size	= 256,
 		/* probe is assumed to work, rest will be filled in by probe */
-		.tested		= TEST_OK_PROBE,
+		.tested		= TEST_OK_PREWU,
 		.probe		= probe_opaque,
 		/* eraseblock sizes will be set by the probing function */
 		.block_erasers	=
