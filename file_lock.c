@@ -73,9 +73,25 @@ static int lock_is_held(struct ipc_lock *lock)
 	return lock->is_held;
 }
 
-static int file_lock_open_or_create(struct ipc_lock *lock)
+static int test_dir(const char *path)
 {
 	struct stat s;
+
+	if (lstat(path, &s) < 0) {
+		msg_gerr("Cannot stat %s.\n", path);
+		return -1;
+	}
+
+	if (!S_ISDIR(s.st_mode)) {
+		msg_gerr("%s is not a directory.\n", path);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int file_lock_open_or_create(struct ipc_lock *lock)
+{
 	char path[PATH_MAX];
 
 	if (in_android()) {
@@ -90,25 +106,19 @@ static int file_lock_open_or_create(struct ipc_lock *lock)
 			return -1;
 		}
 	} else {
-		if (snprintf(path, sizeof(path), "%s", SYSTEM_LOCKFILE_DIR) < 0)
-			return -1;
+		const char *dir = SYSTEM_LOCKFILE_DIR;
+		const char fallback[] = "/tmp";
 
-		if (lstat(path, &s) < 0) {
-			msg_gerr("Cannot stat %s", path);
-			return -1;
+		if (test_dir(dir)) {
+			dir = fallback;
+			msg_gerr("Trying fallback directory: %s\n", dir);
+			if (test_dir(dir))
+				return -1;
 		}
 
-		if (!S_ISDIR(s.st_mode)) {
-			msg_gerr("%s is not a directory.\n", path);
+		if (snprintf(path, sizeof(path),
+			"%s/%s", dir, lock->filename) < 0)
 			return -1;
-		}
-
-		if (strlen(path) + strlen(lock->filename) + 2 > PATH_MAX) {
-			msg_gerr("Lockfile path too long.\n");
-			return -1;
-		}
-		strcat(path, "/");
-		strcat(path, lock->filename);
 	}
 
 	lock->fd = open(path, O_RDWR | O_CREAT, 0600);
