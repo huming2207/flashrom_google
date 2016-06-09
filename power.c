@@ -27,20 +27,26 @@
 #include <unistd.h>
 
 #include "flash.h"	/* for msg_* */
+#include "locks.h"	/* for SYSTEM_LOCKFILE_DIR */
 #include "power.h"
 
 /*
  * Path to a file containing flashrom's PID. While present, powerd avoids
  * suspending or shutting down the system.
  */
-static const char lock_file_path[] = "/var/lock/flashrom_powerd.lock";
+static const char powerd_lock_file_name[] = "flashrom_powerd.lock";
 
 int disable_power_management()
 {
 	FILE *lock_file = NULL;
 	int rc = 0;
+	char lock_file_path[PATH_MAX];
 
 	msg_pdbg("%s: Disabling power management.\n", __func__);
+
+	if (snprintf(lock_file_path, sizeof(lock_file_path), "%s/%s",
+			SYSTEM_LOCKFILE_DIR, powerd_lock_file_name) < 0)
+		return 1;
 
 	if (!(lock_file = fopen(lock_file_path, "w"))) {
 		msg_perr("%s: Failed to open %s for writing: %s\n",
@@ -65,8 +71,13 @@ int disable_power_management()
 int restore_power_management()
 {
 	int result = 0;
+	char lock_file_path[PATH_MAX];
 
 	msg_pdbg("%s: Re-enabling power management.\n", __func__);
+
+	if (snprintf(lock_file_path, sizeof(lock_file_path), "%s/%s",
+			SYSTEM_LOCKFILE_DIR, powerd_lock_file_name) < 0)
+		return 1;
 
 	result = unlink(lock_file_path);
 	if (result != 0 && errno != ENOENT)  {
