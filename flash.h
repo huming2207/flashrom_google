@@ -123,6 +123,10 @@ extern enum chipbustype target_bus;
 #define FEATURE_4BA_SUPPORT	(1 << 12)
 #define FEATURE_4BA_ONLY 	(1 << 13)
 #define FEATURE_4BA_EXTENDED_ADDR_REG	(1 << 14)
+#define FEATURE_4BA_DIRECT_READ		(1 << 15)
+#define FEATURE_4BA_DIRECT_WRITE	(1 << 16)
+#define FEATURE_4BA_ALL_ERASERS_DIRECT  (1 << 17)
+#define FEATURE_4BA_ALL_DIRECT  (FEATURE_4BA_DIRECT_READ | FEATURE_4BA_DIRECT_WRITE | FEATURE_4BA_ALL_ERASERS_DIRECT)
 
 struct voltage_range {
 	uint16_t min, max;

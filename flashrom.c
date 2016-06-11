@@ -2019,8 +2019,14 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 		else if(flash->chip->feature_bits & FEATURE_4BA_EXTENDED_ADDR_REG) {
 			msg_cdbg("Using 4-bytes addressing with extended address register.\n");
 		}
-		/* Go to 4-Bytes Addressing mode */
-		else {
+		/* Go to 4-Bytes Addressing mode if selected
+		   operation requires 4-Bytes Addressing mode
+		   (no need if functions are direct-4BA) */
+		else if(((read_it || verify_it)
+			&& (!(flash->chip->feature_bits & FEATURE_4BA_DIRECT_READ)))
+		   || ((erase_it || write_it)
+			&& ((flash->chip->feature_bits & FEATURE_4BA_ALL_DIRECT) != FEATURE_4BA_ALL_DIRECT))) {
+
 			if (!flash->chip->four_bytes_addr_funcs.enter_4ba) {
 				msg_cerr("No function for Enter 4-bytes addressing mode for this flash chip.\n"
 					"Please report to flashrom@flashrom.org\n");
@@ -2033,6 +2039,11 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 			}
 
 			msg_cdbg("Switched to 4-bytes addressing mode.\n");
+		}
+		/* Do not switch to 4-Bytes Addressing mode if all instructions are direct-4BA
+		   or if the flash chip is 4-Bytes Addressing Only and always in 4BA-mode */
+		else {
+			msg_cdbg2("No need to switch to 4-bytes addressing mode.\n");
 		}
 	}
 
