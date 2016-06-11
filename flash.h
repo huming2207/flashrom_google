@@ -122,6 +122,7 @@ extern enum chipbustype target_bus;
 /* Feature bits used for 4-bytes addressing mode */
 #define FEATURE_4BA_SUPPORT	(1 << 12)
 #define FEATURE_4BA_ONLY 	(1 << 13)
+#define FEATURE_4BA_EXTENDED_ADDR_REG	(1 << 14)
 
 struct voltage_range {
 	uint16_t min, max;
