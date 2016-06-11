@@ -28,6 +28,7 @@
 #include "chipdrivers.h"
 #include "programmer.h"
 #include "spi.h"
+#include "spi4ba.h"
 
 enum id_type {
 	RDID,
@@ -1018,7 +1019,10 @@ int spi_read_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 		for (j = 0; j < lenhere; j += chunksize) {
 			toread = min(chunksize, lenhere - j);
-			chunk_status = spi_nbyte_read(flash, starthere + j, buf + starthere - start + j, toread);
+			chunk_status = (flash->chip->feature_bits & FEATURE_4BA_SUPPORT) == 0
+				? spi_nbyte_read(flash, starthere + j, buf + starthere - start + j, toread)
+				: flash->chip->four_bytes_addr_funcs.read_nbyte(flash, starthere + j,
+					buf + starthere - start + j, toread);
 			if (chunk_status) {
 				if (ignore_error(chunk_status)) {
 					/* fill this chunk with 0xff bytes and
@@ -1104,7 +1108,10 @@ int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int s
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
 		for (j = 0; j < lenhere; j += chunksize) {
 			towrite = min(chunksize, lenhere - j);
-			rc = spi_nbyte_program(flash, starthere + j, buf + starthere - start + j, towrite);
+			rc = (flash->chip->feature_bits & FEATURE_4BA_SUPPORT) == 0
+				? spi_nbyte_program(flash, starthere + j, buf + starthere - start + j, towrite)
+				: flash->chip->four_bytes_addr_funcs.program_nbyte(flash, starthere + j,
+					buf + starthere - start + j, towrite);
 			if (rc)
 				break;
 			while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
@@ -1130,7 +1137,9 @@ int spi_chip_write_1(struct flashctx *flash, const uint8_t *buf, unsigned int st
 	int result = 0;
 
 	for (i = start; i < start + len; i++) {
-		result = spi_byte_program(flash, i, buf[i - start]);
+		result = (flash->chip->feature_bits & FEATURE_4BA_SUPPORT) == 0
+			? spi_byte_program(flash, i, buf[i - start])
+			: flash->chip->four_bytes_addr_funcs.program_byte(flash, i, buf[i - start]);
 		if (result)
 			return 1;
 		while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
