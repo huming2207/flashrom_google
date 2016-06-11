@@ -119,6 +119,9 @@ extern enum chipbustype target_bus;
 #define FEATURE_ERASE_TO_ZERO	(1 << 9)
 #define FEATURE_UNBOUND_READ	(1 << 10)
 #define FEATURE_NO_ERASE	(1 << 11)
+/* Feature bits used for 4-bytes addressing mode */
+#define FEATURE_4BA_SUPPORT	(1 << 12)
+#define FEATURE_4BA_ONLY 	(1 << 13)
 
 struct voltage_range {
 	uint16_t min, max;
