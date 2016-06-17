@@ -24,12 +24,12 @@
 
 #include "flash.h"
 
-static int check_sst_fwhub_block_lock(struct flashchip *flash, int offset)
+static int check_sst_fwhub_block_lock(struct flashctx *flash, int offset)
 {
 	chipaddr registers = flash->virtual_registers;
 	uint8_t blockstatus;
 
-	blockstatus = chip_readb(registers + offset + 2);
+	blockstatus = chip_readb(flash, registers + offset + 2);
 	msg_cdbg("Lock status for 0x%06x (size 0x%06x) is %02x, ",
 		     offset, flash->page_size, blockstatus);
 	switch (blockstatus & 0x3) {
@@ -50,7 +50,7 @@ static int check_sst_fwhub_block_lock(struct flashchip *flash, int offset)
 	return blockstatus & 0x1;
 }
 
-static int clear_sst_fwhub_block_lock(struct flashchip *flash, int offset)
+static int clear_sst_fwhub_block_lock(struct flashctx *flash, int offset)
 {
 	chipaddr registers = flash->virtual_registers;
 	uint8_t blockstatus;
@@ -59,7 +59,7 @@ static int clear_sst_fwhub_block_lock(struct flashchip *flash, int offset)
 
 	if (blockstatus) {
 		msg_cdbg("Trying to clear lock for 0x%06x... ", offset);
-		chip_writeb(0, registers + offset + 2);
+		chip_writeb(flash, 0, registers + offset + 2);
 
 		blockstatus = check_sst_fwhub_block_lock(flash, offset);
 		msg_cdbg("%s\n", (blockstatus) ? "failed" : "OK");
@@ -68,7 +68,7 @@ static int clear_sst_fwhub_block_lock(struct flashchip *flash, int offset)
 	return blockstatus;
 }
 
-int printlock_sst_fwhub(struct flashchip *flash)
+int printlock_sst_fwhub(struct flashctx *flash)
 {
 	int i;
 
@@ -78,7 +78,7 @@ int printlock_sst_fwhub(struct flashchip *flash)
 	return 0;
 }
 
-int unlock_sst_fwhub(struct flashchip *flash)
+int unlock_sst_fwhub(struct flashctx *flash)
 {
 	int i, ret=0;
 

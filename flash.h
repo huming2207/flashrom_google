@@ -36,7 +36,7 @@
 /* Are timers broken? */
 extern int broken_timer;
 
-struct flashchip;	/* forward declare */
+struct flashctx; /* forward declare */
 #define ERROR_PTR ((void*)-1)
 
 /* Error codes */
@@ -66,20 +66,12 @@ extern unsigned int required_erase_size;
 typedef unsigned long chipaddr;
 
 int register_shutdown(int (*function) (void *data), void *data);
-#define CHIP_RESTORE_CALLBACK	int (*func) (struct flashchip *flash, uint8_t status)
+#define CHIP_RESTORE_CALLBACK	int (*func) (struct flashctx *flash, uint8_t status)
 
-int register_chip_restore(CHIP_RESTORE_CALLBACK, struct flashchip *flash, uint8_t status);
+int register_chip_restore(CHIP_RESTORE_CALLBACK, struct flashctx *flash, uint8_t status);
 void *programmer_map_flash_region(const char *descr, unsigned long phys_addr,
 				  size_t len);
 void programmer_unmap_flash_region(void *virt_addr, size_t len);
-void chip_writeb(uint8_t val, chipaddr addr);
-void chip_writew(uint16_t val, chipaddr addr);
-void chip_writel(uint32_t val, chipaddr addr);
-void chip_writen(uint8_t *buf, chipaddr addr, size_t len);
-uint8_t chip_readb(const chipaddr addr);
-uint16_t chip_readw(const chipaddr addr);
-uint32_t chip_readl(const chipaddr addr);
-void chip_readn(uint8_t *buf, const chipaddr addr, size_t len);
 void programmer_delay(int usecs);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -157,7 +149,7 @@ struct flashchip {
 	 */
 	uint32_t tested;
 
-	int (*probe) (struct flashchip *flash);
+	int (*probe) (struct flashctx *flash);
 
 	/* Delay after "enter/exit ID mode" commands in microseconds.
 	 * NB: negative values have special meanings, see TIMING_* below.
@@ -178,29 +170,53 @@ struct flashchip {
 		} eraseblocks[NUM_ERASEREGIONS];
 		/* a block_erase function should try to erase one block of size
 		 * 'blocklen' at address 'blockaddr' and return 0 on success. */
-		int (*block_erase) (struct flashchip *flash, unsigned int blockaddr, unsigned int blocklen);
+		int (*block_erase) (struct flashctx *flash, unsigned int blockaddr, unsigned int blocklen);
 	} block_erasers[NUM_ERASEFUNCTIONS];
 
-	int (*printlock) (struct flashchip *flash);
-	int (*unlock) (struct flashchip *flash);
-	int (*write) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*read) (struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	uint8_t (*read_status) (const struct flashchip *flash);
-	int (*write_status) (const struct flashchip *flash, int status);
+	int (*printlock) (struct flashctx *flash);
+	int (*unlock) (struct flashctx *flash);
+	int (*write) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	uint8_t (*read_status) (const struct flashctx *flash);
+	int (*write_status) (const struct flashctx *flash, int status);
 	struct voltage_range voltage;
-
-	/* Some flash devices have an additional register space. */
-	chipaddr virtual_memory;
-	chipaddr virtual_registers;
-
 	struct wp *wp;
 };
 
+/* struct flashctx must always contain struct flashchip at the beginning. */
+struct flashctx {
+	const char *vendor;
+	const char *name;
+	enum chipbustype bustype;
+	uint32_t manufacture_id;
+	uint32_t model_id;
+	int total_size;
+	int page_size;
+	int feature_bits;
+	uint32_t tested;
+	int (*probe) (struct flashctx *flash);
+	int probe_timing;
+	struct block_eraser block_erasers[NUM_ERASEFUNCTIONS];
+	int (*printlock) (struct flashctx *flash);
+	int (*unlock) (struct flashctx *flash);
+	int (*write) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	uint8_t (*read_status) (const struct flashctx *flash);
+	int (*write_status) (const struct flashctx *flash, int status);
+	struct voltage_range voltage;
+	struct wp *wp;
+	/* struct flashchip ends here. */
+	chipaddr virtual_memory;
+	/* Some flash devices have an additional register space. */
+	chipaddr virtual_registers;
+};
+
+
 /* This is the byte value we expect to see in erased regions of the flash */
-int flash_erase_value(struct flashchip *flash);
+int flash_erase_value(struct flashctx *flash);
 
 /* This is a byte value that indicates that the region is not erased */
-int flash_unerased_value(struct flashchip *flash);
+int flash_unerased_value(struct flashctx *flash);
 
 /* Given RDID info, return pointer to entry in flashchips[] */
 const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id);
@@ -243,6 +259,15 @@ const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id);
 extern const struct flashchip flashchips[];
 extern const struct flashchip flashchips_hwseq[];
 
+void chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr);
+void chip_writew(const struct flashctx *flash, uint16_t val, chipaddr addr);
+void chip_writel(const struct flashctx *flash, uint32_t val, chipaddr addr);
+void chip_writen(const struct flashctx *flash, uint8_t *buf, chipaddr addr, size_t len);
+uint8_t chip_readb(const struct flashctx *flash, const chipaddr addr);
+uint16_t chip_readw(const struct flashctx *flash, const chipaddr addr);
+uint32_t chip_readl(const struct flashctx *flash, const chipaddr addr);
+void chip_readn(const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
+
 /* print.c */
 char *flashbuses_to_text(enum chipbustype bustype);
 void print_supported(void);
@@ -258,24 +283,24 @@ extern enum chipbustype buses_supported;
 extern int verbose;
 extern const char flashrom_version[];
 extern char *chip_to_probe;
-void map_flash_registers(struct flashchip *flash);
-int read_memmapped(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len);
-int erase_flash(struct flashchip *flash);
-int probe_flash(int startchip, struct flashchip *fill_flash, int force);
-int read_flash(struct flashchip *flash, uint8_t *buf,
+void map_flash_registers(struct flashctx *flash);
+int read_memmapped(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+int erase_flash(struct flashctx *flash);
+int probe_flash(int startchip, struct flashctx *fill_flash, int force);
+int read_flash(struct flashctx *flash, uint8_t *buf,
 			unsigned int start, unsigned int len);
-int read_flash_to_file(struct flashchip *flash, const char *filename);
+int read_flash_to_file(struct flashctx *flash, const char *filename);
 int min(int a, int b);
 int max(int a, int b);
 void tolower_string(char *str);
 char *extract_param(char **haystack, const char *needle, const char *delim);
-int verify_range(struct flashchip *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len, const char *message);
+int verify_range(struct flashctx *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len, const char *message);
 char *strcat_realloc(char *dest, const char *src);
 void print_version(void);
 void print_banner(void);
 void list_programmers_linebreak(int startcol, int cols, int paren);
 int selfcheck(void);
-int doit(struct flashchip *flash, int force, const char *filename, int read_it,
+int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 	 int write_it, int erase_it, int verify_it, int extract_it,
 	 const char *diff_file);
 int read_buf_from_file(unsigned char *buf, unsigned long size, const char *filename);
@@ -334,27 +359,27 @@ extern int set_ignore_fmap;
 int specified_partition();
 int read_romlayout(char *name);
 int find_romentry(char *name);
-int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
-int add_fmap_entries(struct flashchip *flash);
+int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents);
+int add_fmap_entries(struct flashctx *flash);
 int get_num_include_args(void);
 int register_include_arg(char *name);
 int process_include_args(void);
 int num_include_files(void);
 int included_regions_overlap(void);
-int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents);
+int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents);
 int handle_partial_read(
-    struct flashchip *flash,
+    struct flashctx *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf,
+    int (*read) (struct flashctx *flash, uint8_t *buf,
                  unsigned int start, unsigned int len),
     int write_to_file);
     /* RETURN: the number of partitions that have beenpartial read.
     *         ==0 means no partition is specified.
     *         < 0 means writing file error. */
 int handle_partial_verify(
-    struct flashchip *flash,
+    struct flashctx *flash,
     uint8_t *buf,
-    int (*verify) (struct flashchip *flash, uint8_t *buf, unsigned int start,
+    int (*verify) (struct flashctx *flash, uint8_t *buf, unsigned int start,
                    unsigned int len, const char* message));
     /* RETURN: ==0 means all identical.
                !=0 means buf and flash are different. */
@@ -366,10 +391,10 @@ struct spi_command {
 	const unsigned char *writearr;
 	unsigned char *readarr;
 };
-int spi_send_command(unsigned int writecnt, unsigned int readcnt,
+int spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr);
-int spi_send_multicommand(struct spi_command *cmds);
-uint32_t spi_get_valid_read_addr(void);
+int spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
+uint32_t spi_get_valid_read_addr(struct flashctx *flash);
 
 #define NUM_VOLTAGE_RANGES	16
 extern struct voltage_range voltage_ranges[];

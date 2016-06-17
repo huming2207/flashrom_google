@@ -182,7 +182,7 @@ static int get_mtd_info(void)
 	return 0;
 }
 
-static int linux_mtd_probe(struct flashchip *flash)
+static int linux_mtd_probe(struct flashctx *flash)
 {
 	flash->wp = &wp_mtd;
 	flash->tested = TEST_OK_PREW;
@@ -193,7 +193,7 @@ static int linux_mtd_probe(struct flashchip *flash)
 	return 1;
 }
 
-static int linux_mtd_read(struct flashchip *flash, uint8_t *buf,
+static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 			  unsigned int start, unsigned int len)
 {
 	if (lseek(dev_fd, start, SEEK_SET) != start) {
@@ -211,7 +211,7 @@ static int linux_mtd_read(struct flashchip *flash, uint8_t *buf,
 }
 
 /* this version assumes we must divide the write request into pages ourselves */
-static int linux_mtd_write(struct flashchip *flash, uint8_t *buf,
+static int linux_mtd_write(struct flashctx *flash, uint8_t *buf,
 				unsigned int start, unsigned int len)
 {
 	unsigned int page;
@@ -248,7 +248,7 @@ static int linux_mtd_write(struct flashchip *flash, uint8_t *buf,
 	return 0;
 }
 
-static int linux_mtd_erase(struct flashchip *flash,
+static int linux_mtd_erase(struct flashctx *flash,
 			unsigned int start, unsigned int len)
 {
 	uint32_t u;
@@ -385,7 +385,7 @@ linux_mtd_init_exit:
 /*
  * Write-protect functions.
  */
-static int mtd_wp_list_ranges(const struct flashchip *flash)
+static int mtd_wp_list_ranges(const struct flashctx *flash)
 {
 	/* TODO: implement this */
 	msg_perr("--wp-list is not currently implemented for MTD.\n");
@@ -405,7 +405,7 @@ static unsigned int wp_range_start;
 static unsigned int wp_range_len;
 static int wp_set_range_called = 0;
 
-static int mtd_wp_set_range(const struct flashchip *flash,
+static int mtd_wp_set_range(const struct flashctx *flash,
 			unsigned int start, unsigned int len)
 {
 	wp_range_start = start;
@@ -415,7 +415,7 @@ static int mtd_wp_set_range(const struct flashchip *flash,
 	return 0;
 }
 
-static int mtd_wp_enable_writeprotect(const struct flashchip *flash, enum wp_mode mode)
+static int mtd_wp_enable_writeprotect(const struct flashctx *flash, enum wp_mode mode)
 {
 	struct erase_info_user entire_chip = {
 		.start = 0,
@@ -454,7 +454,7 @@ static int mtd_wp_enable_writeprotect(const struct flashchip *flash, enum wp_mod
 	return 0;
 }
 
-static int mtd_wp_disable_writeprotect(const struct flashchip *flash)
+static int mtd_wp_disable_writeprotect(const struct flashctx *flash)
 {
 	struct erase_info_user erase_info;
 
@@ -474,7 +474,7 @@ static int mtd_wp_disable_writeprotect(const struct flashchip *flash)
 	return 0;
 }
 
-static int mtd_wp_status(const struct flashchip *flash)
+static int mtd_wp_status(const struct flashctx *flash)
 {
 	uint32_t start = 0, end = 0;
 	int start_found = 0, end_found = 0;

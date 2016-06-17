@@ -43,7 +43,7 @@
 #include "fmap.h"
 #include "search.h"
 
-int fmap_find(struct flashchip *flash, struct fmap *fmap, loff_t offset,
+int fmap_find(struct flashctx *flash, struct fmap *fmap, loff_t offset,
 	      uint8_t **buf)
 {
 	int fmap_size;

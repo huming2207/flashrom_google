@@ -298,7 +298,7 @@ static int it85xx_spi_common_init(struct superio s)
  *   3. read date from LPC/FWH address 0xffff_fdxxh (drive CE# low and get
  *      data from MISO)
  */
-static int it85xx_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+static int it85xx_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *writearr, unsigned char *readarr)
 {
 	int i;

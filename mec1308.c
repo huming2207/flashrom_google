@@ -334,12 +334,12 @@ static int mec1308_shutdown(void *data)
 	return 0;
 }
 
-int mec1308_spi_read(struct flashchip *flash, uint8_t * buf, int start, int len)
+int mec1308_spi_read(struct flashctx *flash, uint8_t * buf, int start, int len)
 {
 	return spi_read_chunked(flash, buf, start, len, flash->page_size);
 }
 
-int mec1308_spi_write_256(struct flashchip *flash,
+int mec1308_spi_write_256(struct flashctx *flash,
                           uint8_t *buf, int start, int len)
 {
 	return spi_write_chunked(flash, buf, start, len, flash->page_size);
@@ -360,7 +360,7 @@ static int mec1308_chip_deselect(void)
  * connected to LPC bus. This function will forward commands issued thru
  * mailbox interface to the SPI flash chip.
  */
-int mec1308_spi_send_command(unsigned int writecnt,
+int mec1308_spi_send_command(const struct flashctx *flash, unsigned int writecnt,
                              unsigned int readcnt,
                              const unsigned char *writearr,
                              unsigned char *readarr)

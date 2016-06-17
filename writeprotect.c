@@ -74,9 +74,9 @@ struct generic_wp {
 	 * flash chips did. get_modifier_bits() and set_modifier_bits() will do
 	 * any chip-specific operations necessary to get/set these bit values.
 	 */
-	int (*get_modifier_bits)(const struct flashchip *flash,
+	int (*get_modifier_bits)(const struct flashctx *flash,
 			struct generic_modifier_bits *m);
-	int (*set_modifier_bits)(const struct flashchip *flash,
+	int (*set_modifier_bits)(const struct flashctx *flash,
 			struct generic_modifier_bits *m);
 };
 
@@ -677,7 +677,7 @@ static struct w25q_range a25l040_ranges[] = {
 	{ X, X, 0x7, {0x00000, 512 * 1024} },
 };
 
-static uint8_t do_read_status(const struct flashchip *flash)
+static uint8_t do_read_status(const struct flashctx *flash)
 {
 	if (flash->read_status)
 		return flash->read_status(flash);
@@ -685,7 +685,7 @@ static uint8_t do_read_status(const struct flashchip *flash)
 		return spi_read_status_register(flash);
 }
 
-static int do_write_status(const struct flashchip *flash, int status)
+static int do_write_status(const struct flashctx *flash, int status)
 {
 	if (flash->write_status)
 		return flash->write_status(flash, status);
@@ -694,14 +694,14 @@ static int do_write_status(const struct flashchip *flash, int status)
 }
 
 /* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
-static uint8_t w25q_read_status_register_2(void)
+static uint8_t w25q_read_status_register_2(const struct flashctx *flash)
 {
 	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x35 };
 	unsigned char readarr[2];
 	int ret;
 
 	/* Read Status Register */
-	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
+	ret = spi_send_command(flash, sizeof(cmd), sizeof(readarr), cmd, readarr);
 	if (ret) {
 		/*
 		 * FIXME: make this a benign failure for now in case we are
@@ -715,7 +715,7 @@ static uint8_t w25q_read_status_register_2(void)
 }
 
 /* Given a flash chip, this function returns its range table. */
-static int w25_range_table(const struct flashchip *flash,
+static int w25_range_table(const struct flashctx *flash,
                            struct w25q_range **w25q_ranges,
                            int *num_entries)
 {
@@ -761,7 +761,7 @@ static int w25_range_table(const struct flashchip *flash,
 			break;
 		case WINBOND_NEX_W25Q128:
 		case WINBOND_NEX_W25Q128FW:
-			if (w25q_read_status_register_2() & (1 << 6)) {
+			if (w25q_read_status_register_2(flash) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
 				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
@@ -913,7 +913,7 @@ static int w25_range_table(const struct flashchip *flash,
 	return 0;
 }
 
-int w25_range_to_status(const struct flashchip *flash,
+int w25_range_to_status(const struct flashctx *flash,
                         unsigned int start, unsigned int len,
                         struct w25q_status *status)
 {
@@ -946,7 +946,7 @@ int w25_range_to_status(const struct flashchip *flash,
 	return 0;
 }
 
-int w25_status_to_range(const struct flashchip *flash,
+int w25_status_to_range(const struct flashctx *flash,
                         const struct w25q_status *status,
                         unsigned int *start, unsigned int *len)
 {
@@ -988,7 +988,7 @@ int w25_status_to_range(const struct flashchip *flash,
 /* Given a [start, len], this function calls w25_range_to_status() to convert
  * it to flash-chip-specific range bits, then sets into status register.
  */
-static int w25_set_range(const struct flashchip *flash,
+static int w25_set_range(const struct flashctx *flash,
                          unsigned int start, unsigned int len)
 {
 	struct w25q_status status;
@@ -1026,7 +1026,7 @@ static int w25_set_range(const struct flashchip *flash,
 }
 
 /* Print out the current status register value with human-readable text. */
-static int w25_wp_status(const struct flashchip *flash)
+static int w25_wp_status(const struct flashctx *flash)
 {
 	struct w25q_status status;
 	int tmp;
@@ -1053,7 +1053,7 @@ static int w25_wp_status(const struct flashchip *flash)
 }
 
 /* Set/clear the SRP0 bit in the status register. */
-static int w25_set_srp0(const struct flashchip *flash, int enable)
+static int w25_set_srp0(const struct flashctx *flash, int enable)
 {
 	struct w25q_status status;
 	int tmp = 0;
@@ -1077,7 +1077,7 @@ static int w25_set_srp0(const struct flashchip *flash, int enable)
 	return 0;
 }
 
-static int w25_enable_writeprotect(const struct flashchip *flash,
+static int w25_enable_writeprotect(const struct flashctx *flash,
 		enum wp_mode wp_mode)
 {
 	int ret;
@@ -1096,7 +1096,7 @@ static int w25_enable_writeprotect(const struct flashchip *flash,
 	return ret;
 }
 
-static int w25_disable_writeprotect(const struct flashchip *flash)
+static int w25_disable_writeprotect(const struct flashctx *flash)
 {
 	int ret;
 
@@ -1106,7 +1106,7 @@ static int w25_disable_writeprotect(const struct flashchip *flash)
 	return ret;
 }
 
-static int w25_list_ranges(const struct flashchip *flash)
+static int w25_list_ranges(const struct flashctx *flash)
 {
 	struct w25q_range *w25q_ranges;
 	int i, num_entries;
@@ -1121,7 +1121,7 @@ static int w25_list_ranges(const struct flashchip *flash)
 	return 0;
 }
 
-static int w25q_wp_status(const struct flashchip *flash)
+static int w25q_wp_status(const struct flashctx *flash)
 {
 	struct w25q_status sr1;
 	struct w25q_status_2 sr2;
@@ -1134,7 +1134,7 @@ static int w25q_wp_status(const struct flashchip *flash)
 	memcpy(&sr1, &tmp[0], 1);
 
 	memset(&sr2, 0, sizeof(sr2));
-	tmp[1] = w25q_read_status_register_2();
+	tmp[1] = w25q_read_status_register_2(flash);
 	memcpy(&sr2, &tmp[1], 1);
 
 	msg_cinfo("WP: status: 0x%02x%02x\n", tmp[1], tmp[0]);
@@ -1161,7 +1161,7 @@ static int w25q_wp_status(const struct flashchip *flash)
  * into status register 2.
  */
 #define W25Q_WRSR_OUTSIZE	0x03
-static int w25q_write_status_register_WREN(uint8_t s1, uint8_t s2)
+static int w25q_write_status_register_WREN(const struct flashctx *flash, uint8_t s1, uint8_t s2)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -1183,7 +1183,7 @@ static int w25q_write_status_register_WREN(uint8_t s1, uint8_t s2)
 		.readarr        = NULL,
 	}};
 
-	result = spi_send_multicommand(cmds);
+	result = spi_send_multicommand(flash, cmds);
 	if (result) {
 	        msg_cerr("%s failed during command execution\n",
 	                __func__);
@@ -1199,7 +1199,7 @@ static int w25q_write_status_register_WREN(uint8_t s1, uint8_t s2)
  * Set/clear the SRP1 bit in status register 2.
  * FIXME: make this more generic if other chips use the same SR2 layout
  */
-static int w25q_set_srp1(const struct flashchip *flash, int enable)
+static int w25q_set_srp1(const struct flashctx *flash, int enable)
 {
 	struct w25q_status sr1;
 	struct w25q_status_2 sr2;
@@ -1207,7 +1207,7 @@ static int w25q_set_srp1(const struct flashchip *flash, int enable)
 
 	tmp = do_read_status(flash);
 	memcpy(&sr1, &tmp, 1);
-	tmp = w25q_read_status_register_2();
+	tmp = w25q_read_status_register_2(flash);
 	memcpy(&sr2, &tmp, 1);
 
 	msg_cdbg("%s: old status 2: 0x%02x\n", __func__, tmp);
@@ -1215,9 +1215,9 @@ static int w25q_set_srp1(const struct flashchip *flash, int enable)
 	sr2.srp1 = enable ? 1 : 0;
 
 	memcpy(&expected, &sr2, 1);
-	w25q_write_status_register_WREN(*((uint8_t *)&sr1), *((uint8_t *)&sr2));
+	w25q_write_status_register_WREN(flash, *((uint8_t *)&sr1), *((uint8_t *)&sr2));
 
-	tmp = w25q_read_status_register_2();
+	tmp = w25q_read_status_register_2(flash);
 	msg_cdbg("%s: new status 2: 0x%02x\n", __func__, tmp);
 	if ((tmp & MASK_WP2_AREA) != (expected & MASK_WP2_AREA))
 		return 1;
@@ -1239,7 +1239,7 @@ enum wp_mode get_wp_mode(const char *mode_str)
 	return wp_mode;
 }
 
-static int w25q_disable_writeprotect(const struct flashchip *flash,
+static int w25q_disable_writeprotect(const struct flashctx *flash,
 		enum wp_mode wp_mode)
 {
 	int ret = 1;
@@ -1251,7 +1251,7 @@ static int w25q_disable_writeprotect(const struct flashchip *flash,
 		ret = w25_set_srp0(flash, 0);
 		break;
 	case WP_MODE_POWER_CYCLE:
-		tmp = w25q_read_status_register_2();
+		tmp = w25q_read_status_register_2(flash);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1) {
 			msg_cerr("%s(): must disconnect power to disable "
@@ -1274,12 +1274,12 @@ static int w25q_disable_writeprotect(const struct flashchip *flash,
 	return ret;
 }
 
-static int w25q_disable_writeprotect_default(const struct flashchip *flash)
+static int w25q_disable_writeprotect_default(const struct flashctx *flash)
 {
 	return w25q_disable_writeprotect(flash, WP_MODE_HARDWARE);
 }
 
-static int w25q_enable_writeprotect(const struct flashchip *flash,
+static int w25q_enable_writeprotect(const struct flashctx *flash,
 		enum wp_mode wp_mode)
 {
 	int ret = 1;
@@ -1310,7 +1310,7 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 			break;
 		}
 
-		tmp = w25q_read_status_register_2();
+		tmp = w25q_read_status_register_2(flash);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1)
 			ret = 0;
@@ -1330,7 +1330,7 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 			}
 		}
 
-		tmp = w25q_read_status_register_2();
+		tmp = w25q_read_status_register_2(flash);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1 == 0) {
 			ret = w25q_set_srp1(flash, 1);
@@ -1353,13 +1353,13 @@ static int w25q_enable_writeprotect(const struct flashchip *flash,
 }
 
 /* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
-uint8_t mx25l_read_config_register(void)
+uint8_t mx25l_read_config_register(const struct flashctx *flash)
 {
 	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x15 };
 	unsigned char readarr[2];	/* leave room for dummy byte */
 	int ret;
 
-	ret = spi_send_command(sizeof(cmd), sizeof(readarr), cmd, readarr);
+	ret = spi_send_command(flash, sizeof(cmd), sizeof(readarr), cmd, readarr);
 	if (ret) {
 		msg_cerr("RDCR failed!\n");
 		readarr[0] = 0x00;
@@ -1714,7 +1714,7 @@ static struct generic_wp s25fl256s_wp = {
 };
 
 /* Given a flash chip, this function returns its writeprotect info. */
-static int generic_range_table(const struct flashchip *flash,
+static int generic_range_table(const struct flashctx *flash,
                            struct generic_wp **wp,
                            int *num_entries)
 {
@@ -1726,7 +1726,7 @@ static int generic_range_table(const struct flashchip *flash,
 		switch(flash->model_id) {
 
 		case GIGADEVICE_GD25Q32: {
-			uint8_t sr1 = w25q_read_status_register_2();
+			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q32_wp;
 
 			if (!(sr1 & (1 << 6))) {	/* CMP == 0 */
@@ -1740,7 +1740,7 @@ static int generic_range_table(const struct flashchip *flash,
 			break;
 		}
 		case GIGADEVICE_GD25Q128: {
-			uint8_t sr1 = w25q_read_status_register_2();
+			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q128_wp;
 
 			if (!(sr1 & (1 << 6))) {	/* CMP == 0 */
@@ -1769,7 +1769,7 @@ static int generic_range_table(const struct flashchip *flash,
 			*num_entries = ARRAY_SIZE(mx25l6406e_ranges);
 			break;
 		case MACRONIX_MX25L6495F: {
-			uint8_t cr = mx25l_read_config_register();
+			uint8_t cr = mx25l_read_config_register(flash);
 
 			*wp = &mx25l6495f_wp;
 			if (!(cr & (1 << 3))) {	/* T/B == 0 */
@@ -1822,7 +1822,7 @@ static int generic_range_table(const struct flashchip *flash,
 /* Given a [start, len], this function finds a block protect bit combination
  * (if possible) and sets the corresponding bits in "status". Remaining bits
  * are preserved. */
-static int generic_range_to_status(const struct flashchip *flash,
+static int generic_range_to_status(const struct flashctx *flash,
                         unsigned int start, unsigned int len,
                         uint8_t *status)
 {
@@ -1864,7 +1864,7 @@ static int generic_range_to_status(const struct flashchip *flash,
 	return 0;
 }
 
-static int generic_status_to_range(const struct flashchip *flash,
+static int generic_status_to_range(const struct flashctx *flash,
 		const uint8_t sr1, unsigned int *start, unsigned int *len)
 {
 	struct generic_wp *wp;
@@ -1908,7 +1908,7 @@ static int generic_status_to_range(const struct flashchip *flash,
 /* Given a [start, len], this function calls generic_range_to_status() to
  * convert it to flash-chip-specific range bits, then sets into status register.
  */
-static int generic_set_range(const struct flashchip *flash,
+static int generic_set_range(const struct flashctx *flash,
                          unsigned int start, unsigned int len)
 {
 	uint8_t status, expected;
@@ -1934,7 +1934,7 @@ static int generic_set_range(const struct flashchip *flash,
 }
 
 /* Set/clear the status regsiter write protect bit in SR1. */
-static int generic_set_srp0(const struct flashchip *flash, int enable)
+static int generic_set_srp0(const struct flashctx *flash, int enable)
 {
 	uint8_t status, expected;
 	struct generic_wp *wp;
@@ -1961,7 +1961,7 @@ static int generic_set_srp0(const struct flashchip *flash, int enable)
 	return 0;
 }
 
-static int generic_enable_writeprotect(const struct flashchip *flash,
+static int generic_enable_writeprotect(const struct flashctx *flash,
 		enum wp_mode wp_mode)
 {
 	int ret;
@@ -1980,7 +1980,7 @@ static int generic_enable_writeprotect(const struct flashchip *flash,
 	return ret;
 }
 
-static int generic_disable_writeprotect(const struct flashchip *flash)
+static int generic_disable_writeprotect(const struct flashctx *flash)
 {
 	int ret;
 
@@ -1990,7 +1990,7 @@ static int generic_disable_writeprotect(const struct flashchip *flash)
 	return ret;
 }
 
-static int generic_list_ranges(const struct flashchip *flash)
+static int generic_list_ranges(const struct flashctx *flash)
 {
 	struct generic_wp *wp;
 	struct generic_range *r;
@@ -2009,7 +2009,7 @@ static int generic_list_ranges(const struct flashchip *flash)
 	return 0;
 }
 
-static int generic_wp_status(const struct flashchip *flash)
+static int generic_wp_status(const struct flashctx *flash)
 {
 	uint8_t sr1;
 	unsigned int start, len;

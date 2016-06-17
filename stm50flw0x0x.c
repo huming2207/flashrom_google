@@ -36,7 +36,7 @@
  * The ST M50FLW080B and STM50FLW080B chips have to be unlocked,
  * before you can erase them or write to them.
  */
-static int unlock_block_stm50flw0x0x(struct flashchip *flash, int offset)
+static int unlock_block_stm50flw0x0x(struct flashctx *flash, int offset)
 {
 	chipaddr wrprotect = flash->virtual_registers + 2;
 	static const uint8_t unlock_sector = 0x00;
@@ -60,8 +60,8 @@ static int unlock_block_stm50flw0x0x(struct flashchip *flash, int offset)
 		// unlock each 4k-sector
 		for (j = 0; j < 0x10000; j += 0x1000) {
 			msg_cdbg("unlocking at 0x%x\n", offset + j);
-			chip_writeb(unlock_sector, wrprotect + offset + j);
-			if (chip_readb(wrprotect + offset + j) != unlock_sector) {
+			chip_writeb(flash, unlock_sector, wrprotect + offset + j);
+			if (chip_readb(flash, wrprotect + offset + j) != unlock_sector) {
 				msg_cerr("Cannot unlock sector @ 0x%x\n",
 				       offset + j);
 				return -1;
@@ -69,8 +69,8 @@ static int unlock_block_stm50flw0x0x(struct flashchip *flash, int offset)
 		}
 	} else {
 		msg_cdbg("unlocking at 0x%x\n", offset);
-		chip_writeb(unlock_sector, wrprotect + offset);
-		if (chip_readb(wrprotect + offset) != unlock_sector) {
+		chip_writeb(flash, unlock_sector, wrprotect + offset);
+		if (chip_readb(flash, wrprotect + offset) != unlock_sector) {
 			msg_cerr("Cannot unlock sector @ 0x%x\n", offset);
 			return -1;
 		}
@@ -79,7 +79,7 @@ static int unlock_block_stm50flw0x0x(struct flashchip *flash, int offset)
 	return 0;
 }
 
-int unlock_stm50flw0x0x(struct flashchip *flash)
+int unlock_stm50flw0x0x(struct flashctx *flash)
 {
 	int i;
 
@@ -94,15 +94,15 @@ int unlock_stm50flw0x0x(struct flashchip *flash)
 }
 
 /* This function is unused. */
-int erase_sector_stm50flw0x0x(struct flashchip *flash, unsigned int sector, unsigned int sectorsize)
+int erase_sector_stm50flw0x0x(struct flashctx *flash, unsigned int sector, unsigned int sectorsize)
 {
 	chipaddr bios = flash->virtual_memory + sector;
 
 	// clear status register
-	chip_writeb(0x50, bios);
+	chip_writeb(flash, 0x50, bios);
 	// now start it
-	chip_writeb(0x32, bios);
-	chip_writeb(0xd0, bios);
+	chip_writeb(flash, 0x32, bios);
+	chip_writeb(flash, 0xd0, bios);
 	programmer_delay(10);
 
 	wait_82802ab(flash);

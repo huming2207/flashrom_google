@@ -21,12 +21,12 @@
 
 #include "flash.h"
 
-static int printlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
+static int printlock_w39_fwh_block(struct flashctx *flash, unsigned int offset)
 {
 	chipaddr wrprotect = flash->virtual_registers + offset + 2;
 	uint8_t locking;
 
-	locking = chip_readb(wrprotect);
+	locking = chip_readb(flash, wrprotect);
 	msg_cdbg("Lock status of block at 0x%08x is ", offset);
 	switch (locking & 0x7) {
 	case 0:
@@ -59,12 +59,12 @@ static int printlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
 	return (locking & ((1 << 2) | (1 << 0))) ? -1 : 0;
 }
 
-static int unlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
+static int unlock_w39_fwh_block(struct flashctx *flash, unsigned int offset)
 {
 	chipaddr wrprotect = flash->virtual_registers + offset + 2;
 	uint8_t locking;
 
-	locking = chip_readb(wrprotect);
+	locking = chip_readb(flash, wrprotect);
 	/* Read or write lock present? */
 	if (locking & ((1 << 2) | (1 << 0))) {
 		/* Lockdown active? */
@@ -73,31 +73,31 @@ static int unlock_w39_fwh_block(struct flashchip *flash, unsigned int offset)
 			return -1;
 		} else {
 			msg_cdbg("Unlocking block at 0x%08x\n", offset);
-			chip_writeb(0, wrprotect);
+			chip_writeb(flash, 0, wrprotect);
 		}
 	}
 
 	return 0;
 }
 
-static uint8_t w39_idmode_readb(struct flashchip *flash, unsigned int offset)
+static uint8_t w39_idmode_readb(struct flashctx *flash, unsigned int offset)
 {
 	chipaddr bios = flash->virtual_memory;
 	uint8_t val;
 
 	/* Product Identification Entry */
-	chip_writeb(0xAA, bios + 0x5555);
-	chip_writeb(0x55, bios + 0x2AAA);
-	chip_writeb(0x90, bios + 0x5555);
+	chip_writeb(flash, 0xAA, bios + 0x5555);
+	chip_writeb(flash, 0x55, bios + 0x2AAA);
+	chip_writeb(flash, 0x90, bios + 0x5555);
 	programmer_delay(10);
 
 	/* Read something, maybe hardware lock bits */
-	val = chip_readb(bios + offset);
+	val = chip_readb(flash, bios + offset);
 
 	/* Product Identification Exit */
-	chip_writeb(0xAA, bios + 0x5555);
-	chip_writeb(0x55, bios + 0x2AAA);
-	chip_writeb(0xF0, bios + 0x5555);
+	chip_writeb(flash, 0xAA, bios + 0x5555);
+	chip_writeb(flash, 0x55, bios + 0x2AAA);
+	chip_writeb(flash, 0xF0, bios + 0x5555);
 	programmer_delay(10);
 
 	return val;
@@ -127,7 +127,7 @@ static int printlock_w39_bootblock_64k16k(uint8_t lock)
 	return 0;
 }
 
-static int printlock_w39_common(struct flashchip *flash, unsigned int offset)
+static int printlock_w39_common(struct flashctx *flash, unsigned int offset)
 {
 	uint8_t lock;
 
@@ -136,7 +136,7 @@ static int printlock_w39_common(struct flashchip *flash, unsigned int offset)
 	return printlock_w39_tblwp(lock);
 }
 
-static int printlock_w39_fwh(struct flashchip *flash)
+static int printlock_w39_fwh(struct flashctx *flash)
 {
 	unsigned int i, total_size = flash->total_size * 1024;
 	int ret = 0;
@@ -148,7 +148,7 @@ static int printlock_w39_fwh(struct flashchip *flash)
 	return ret;
 }
 
-static int unlock_w39_fwh(struct flashchip *flash)
+static int unlock_w39_fwh(struct flashctx *flash)
 {
 	unsigned int i, total_size = flash->total_size * 1024;
 	
@@ -160,7 +160,7 @@ static int unlock_w39_fwh(struct flashchip *flash)
 	return 0;
 }
 
-int printlock_w39l040(struct flashchip * flash)
+int printlock_w39l040(struct flashctx *flash)
 {
 	uint8_t lock;
 	int ret;
@@ -176,7 +176,7 @@ int printlock_w39l040(struct flashchip * flash)
 	return ret;
 }
 
-int printlock_w39v040a(struct flashchip *flash)
+int printlock_w39v040a(struct flashctx *flash)
 {
 	uint8_t lock;
 	int ret = 0;
@@ -194,18 +194,18 @@ int printlock_w39v040a(struct flashchip *flash)
 	return ret;
 }
 
-int printlock_w39v040b(struct flashchip *flash)
+int printlock_w39v040b(struct flashctx *flash)
 {
 	return printlock_w39_common(flash, 0x7fff2);
 }
 
-int printlock_w39v040c(struct flashchip *flash)
+int printlock_w39v040c(struct flashctx *flash)
 {
 	/* Typo in the datasheet? The other chips use 0x7fff2. */
 	return printlock_w39_common(flash, 0xfff2);
 }
 
-int printlock_w39v040fa(struct flashchip *flash)
+int printlock_w39v040fa(struct flashctx *flash)
 {
 	int ret = 0;
 
@@ -215,7 +215,7 @@ int printlock_w39v040fa(struct flashchip *flash)
 	return ret;
 }
 
-int printlock_w39v040fb(struct flashchip *flash)
+int printlock_w39v040fb(struct flashctx *flash)
 {
 	int ret = 0;
 
@@ -225,7 +225,7 @@ int printlock_w39v040fb(struct flashchip *flash)
 	return ret;
 }
 
-int printlock_w39v040fc(struct flashchip *flash)
+int printlock_w39v040fc(struct flashctx *flash)
 {
 	int ret = 0;
 
@@ -236,12 +236,12 @@ int printlock_w39v040fc(struct flashchip *flash)
 	return ret;
 }
 
-int printlock_w39v080a(struct flashchip *flash)
+int printlock_w39v080a(struct flashctx *flash)
 {
 	return printlock_w39_common(flash, 0xffff2);
 }
 
-int printlock_w39v080fa(struct flashchip *flash)
+int printlock_w39v080fa(struct flashctx *flash)
 {
 	int ret = 0;
 
@@ -251,7 +251,7 @@ int printlock_w39v080fa(struct flashchip *flash)
 	return ret;
 }
 
-int printlock_w39v080fa_dual(struct flashchip *flash)
+int printlock_w39v080fa_dual(struct flashctx *flash)
 {
 	msg_cinfo("Block locking for W39V080FA in dual mode is "
 		  "undocumented.\n");
@@ -259,7 +259,7 @@ int printlock_w39v080fa_dual(struct flashchip *flash)
 	return -1;
 }
 
-int unlock_w39v040fb(struct flashchip *flash)
+int unlock_w39v040fb(struct flashctx *flash)
 {
 	if (unlock_w39_fwh(flash))
 		return -1;
@@ -269,7 +269,7 @@ int unlock_w39v040fb(struct flashchip *flash)
 	return 0;
 }
 
-int unlock_w39v080fa(struct flashchip *flash)
+int unlock_w39v080fa(struct flashctx *flash)
 {
 	if (unlock_w39_fwh(flash))
 		return -1;

@@ -172,7 +172,7 @@ int search_find_next(struct search_info *search, off_t *offsetp)
 	return -1;
 }
 
-void search_init(struct search_info *search, struct flashchip *flash,
+void search_init(struct search_info *search, struct flashctx *flash,
 		 int min_size)
 {
 	memset(search, '\0', sizeof(*search));

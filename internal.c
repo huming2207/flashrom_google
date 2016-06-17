@@ -129,6 +129,21 @@ int register_superio(struct superio s)
 int is_laptop = 0;
 int laptop_ok = 1;	/* FIXME: proper whitelisting hasn't been added yet */
 
+static void internal_chip_writeb(const struct flashctx *flash, uint8_t val,
+				 chipaddr addr);
+static void internal_chip_writew(const struct flashctx *flash, uint16_t val,
+				 chipaddr addr);
+static void internal_chip_writel(const struct flashctx *flash, uint32_t val,
+				 chipaddr addr);
+static uint8_t internal_chip_readb(const struct flashctx *flash,
+				   const chipaddr addr);
+static uint16_t internal_chip_readw(const struct flashctx *flash,
+				    const chipaddr addr);
+static uint32_t internal_chip_readl(const struct flashctx *flash,
+				    const chipaddr addr);
+static void internal_chip_readn(const struct flashctx *flash, uint8_t *buf,
+				const chipaddr addr, size_t len);
+
 #if __FLASHROM_LITTLE_ENDIAN__
 static const struct par_programmer par_programmer_internal = {
 		.chip_readb		= internal_chip_readb,
@@ -499,37 +514,37 @@ int internal_init(void)
 }
 #endif
 
-void internal_chip_writeb(uint8_t val, chipaddr addr)
+void internal_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
 	mmio_writeb(val, (void *) addr);
 }
 
-void internal_chip_writew(uint16_t val, chipaddr addr)
+void internal_chip_writew(const struct flashctx *flash, uint16_t val, chipaddr addr)
 {
 	mmio_writew(val, (void *) addr);
 }
 
-void internal_chip_writel(uint32_t val, chipaddr addr)
+void internal_chip_writel(const struct flashctx *flash, uint32_t val, chipaddr addr)
 {
 	mmio_writel(val, (void *) addr);
 }
 
-uint8_t internal_chip_readb(const chipaddr addr)
+uint8_t internal_chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
 	return mmio_readb((void *) addr);
 }
 
-uint16_t internal_chip_readw(const chipaddr addr)
+uint16_t internal_chip_readw(const struct flashctx *flash, const chipaddr addr)
 {
 	return mmio_readw((void *) addr);
 }
 
-uint32_t internal_chip_readl(const chipaddr addr)
+uint32_t internal_chip_readl(const struct flashctx *flash, const chipaddr addr)
 {
 	return mmio_readl((void *) addr);
 }
 
-void internal_chip_readn(uint8_t *buf, const chipaddr addr, size_t len)
+void internal_chip_readn(const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len)
 {
 	memcpy(buf, (void *)addr, len);
 	return;

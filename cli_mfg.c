@@ -220,8 +220,8 @@ int main(int argc, char *argv[])
 	unsigned long size;
 	/* Probe for up to three flash chips. */
 	const struct flashchip *flash;
-	struct flashchip flashes[3];
-	struct flashchip *fill_flash;
+	struct flashctx flashes[3];
+	struct flashctx *fill_flash;
 	int startchip = 0;
 	int chipcount = 0;
 	const char *name;
@@ -430,7 +430,6 @@ int main(int argc, char *argv[])
 					"for details.\n");
 				cli_mfg_abort_usage(argv[0]);
 			}
-
 			for (prog = 0; prog < PROGRAMMER_INVALID; prog++) {
 				name = programmer_table[prog].name;
 				namelen = strlen(name);

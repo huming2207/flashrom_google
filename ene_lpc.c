@@ -399,7 +399,8 @@ static int ene_enter_flash_mode(void)
 	return 0;
 }
 
-static int ene_spi_send_command(unsigned int writecnt,
+static int ene_spi_send_command(const struct flashctx *flash,
+				unsigned int writecnt,
 				unsigned int readcnt,
 				const unsigned char *writearr,
 				unsigned char *readarr)

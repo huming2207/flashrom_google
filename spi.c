@@ -42,7 +42,7 @@ const struct spi_programmer spi_programmer_none = {
 
 const struct spi_programmer *spi_programmer = &spi_programmer_none;
 
-int spi_send_command(unsigned int writecnt, unsigned int readcnt,
+int spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr)
 {
 	if (!spi_programmer->command) {
@@ -52,11 +52,11 @@ int spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		return 1;
 	}
 
-	return spi_programmer->command(writecnt, readcnt,
+	return spi_programmer->command(flash, writecnt, readcnt,
 						      writearr, readarr);
 }
 
-int spi_send_multicommand(struct spi_command *cmds)
+int spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds)
 {
 	if (!spi_programmer->multicommand) {
 		msg_perr("%s called, but SPI is unsupported on this "
@@ -65,10 +65,10 @@ int spi_send_multicommand(struct spi_command *cmds)
 		return 1;
 	}
 
-	return spi_programmer->multicommand(cmds);
+	return spi_programmer->multicommand(flash, cmds);
 }
 
-int default_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr, unsigned char *readarr)
 {
 	struct spi_command cmd[] = {
@@ -84,20 +84,20 @@ int default_spi_send_command(unsigned int writecnt, unsigned int readcnt,
 		.readarr = NULL,
 	}};
 
-	return spi_send_multicommand(cmd);
+	return spi_send_multicommand(flash, cmd);
 }
 
-int default_spi_send_multicommand(struct spi_command *cmds)
+int default_spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds)
 {
 	int result = 0;
 	for (; (cmds->writecnt || cmds->readcnt) && !result; cmds++) {
-		result = spi_send_command(cmds->writecnt, cmds->readcnt,
+		result = spi_send_command(flash, cmds->writecnt, cmds->readcnt,
 					  cmds->writearr, cmds->readarr);
 	}
 	return result;
 }
 
-int default_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int max_data = spi_programmer->max_data_read;
 	int rc;
@@ -117,7 +117,7 @@ int default_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, 
 	return rc;
 }
 
-int default_spi_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int max_data = spi_programmer->max_data_write;
 	int rc;
@@ -134,7 +134,7 @@ int default_spi_write_256(struct flashchip *flash, uint8_t *buf, unsigned int st
 	return rc;
 }
 
-int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int addrbase = 0;
 	if (!spi_programmer->read) {
@@ -148,7 +148,7 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, uns
 	 * address. Highest possible address with the current SPI implementation
 	 * means 0xffffff, the highest unsigned 24bit number.
 	 */
-	addrbase = spi_get_valid_read_addr();
+	addrbase = spi_get_valid_read_addr(flash);
 	if (addrbase + flash->total_size * 1024 > (1 << 24)) {
 		msg_perr("Flash chip size exceeds the allowed access window. ");
 		msg_perr("Read will probably fail.\n");
@@ -173,7 +173,7 @@ int spi_chip_read(struct flashchip *flash, uint8_t *buf, unsigned int start, uns
  * .write_256 = spi_chip_write_1
  */
 /* real chunksize is up to 256, logical chunksize is 256 */
-int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_chip_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	if (!spi_programmer->write_256) {
 		msg_perr("%s called, but SPI page write is unsupported on this "
@@ -190,7 +190,7 @@ int spi_chip_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start
  * be the lowest allowed address for all commands which take an address.
  * This is a programmer limitation.
  */
-uint32_t spi_get_valid_read_addr(void)
+uint32_t spi_get_valid_read_addr(struct flashctx *flash)
 {
 	switch (spi_programmer->type) {
 #if CONFIG_INTERNAL == 1

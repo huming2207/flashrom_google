@@ -24,7 +24,7 @@
 /* According to the Winbond W29EE011, W29EE012, W29C010M, W29C011A
  * datasheets this is the only valid probe function for those chips.
  */
-int probe_w29ee011(struct flashchip *flash)
+int probe_w29ee011(struct flashctx *flash)
 {
 	chipaddr bios = flash->virtual_memory;
 	uint8_t id1, id2;
@@ -38,29 +38,29 @@ int probe_w29ee011(struct flashchip *flash)
 	}
 
 	/* Issue JEDEC Product ID Entry command */
-	chip_writeb(0xAA, bios + 0x5555);
+	chip_writeb(flash, 0xAA, bios + 0x5555);
 	programmer_delay(10);
-	chip_writeb(0x55, bios + 0x2AAA);
+	chip_writeb(flash, 0x55, bios + 0x2AAA);
 	programmer_delay(10);
-	chip_writeb(0x80, bios + 0x5555);
+	chip_writeb(flash, 0x80, bios + 0x5555);
 	programmer_delay(10);
-	chip_writeb(0xAA, bios + 0x5555);
+	chip_writeb(flash, 0xAA, bios + 0x5555);
 	programmer_delay(10);
-	chip_writeb(0x55, bios + 0x2AAA);
+	chip_writeb(flash, 0x55, bios + 0x2AAA);
 	programmer_delay(10);
-	chip_writeb(0x60, bios + 0x5555);
+	chip_writeb(flash, 0x60, bios + 0x5555);
 	programmer_delay(10);
 
 	/* Read product ID */
-	id1 = chip_readb(bios);
-	id2 = chip_readb(bios + 0x01);
+	id1 = chip_readb(flash, bios);
+	id2 = chip_readb(flash, bios + 0x01);
 
 	/* Issue JEDEC Product ID Exit command */
-	chip_writeb(0xAA, bios + 0x5555);
+	chip_writeb(flash, 0xAA, bios + 0x5555);
 	programmer_delay(10);
-	chip_writeb(0x55, bios + 0x2AAA);
+	chip_writeb(flash, 0x55, bios + 0x2AAA);
 	programmer_delay(10);
-	chip_writeb(0xF0, bios + 0x5555);
+	chip_writeb(flash, 0xF0, bios + 0x5555);
 	programmer_delay(10);
 
 	msg_cdbg("%s: id1 0x%02x, id2 0x%02x\n", __func__, id1, id2);
