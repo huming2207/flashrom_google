@@ -59,12 +59,12 @@ int cros_ec_test(struct cros_ec_priv *priv);
 void cros_ec_set_max_size(struct cros_ec_priv *priv,
 			  struct opaque_programmer *op);
 int cros_ec_parse_param(struct cros_ec_priv *priv);
-int cros_ec_probe_size(struct flashchip *flash);
-int cros_ec_block_erase(struct flashchip *flash,
+int cros_ec_probe_size(struct flashctx *flash);
+int cros_ec_block_erase(struct flashctx *flash,
                     unsigned int blockaddr, unsigned int len);
-int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
+int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt);
-int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes);
 
 #endif	/* __CROS_EC_H_ */

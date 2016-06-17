@@ -82,7 +82,7 @@
 #define S25FS_T_SE	145 * 1000	/* Sector Erase Time (145ms) */
 #define S25FL_T_SE	130 * 1000	/* Sector Erase Time (130ms) */
 
-static int s25f_legacy_software_reset(const struct flashchip *flash)
+static int s25f_legacy_software_reset(const struct flashctx *flash)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -103,7 +103,7 @@ static int s25f_legacy_software_reset(const struct flashchip *flash)
 		.readarr	= NULL,
 	}};
 
-	result = spi_send_multicommand(cmds);
+	result = spi_send_multicommand(flash, cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution\n", __func__);
 		return result;
@@ -117,7 +117,7 @@ static int s25f_legacy_software_reset(const struct flashchip *flash)
 }
 
 /* "Legacy software reset" is disabled by default on S25FS, use this instead. */
-static int s25fs_software_reset(struct flashchip *flash)
+static int s25fs_software_reset(struct flashctx *flash)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -138,7 +138,7 @@ static int s25fs_software_reset(struct flashchip *flash)
 		.readarr	= NULL,
 	}};
 
-	result = spi_send_multicommand(cmds);
+	result = spi_send_multicommand(flash, cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution\n", __func__);
 		return result;
@@ -150,7 +150,7 @@ static int s25fs_software_reset(struct flashchip *flash)
 	return 0;
 }
 
-static int s25f_poll_status(const struct flashchip *flash)
+static int s25f_poll_status(const struct flashctx *flash)
 {
 	uint8_t tmp = spi_read_status_register(flash);
 
@@ -182,7 +182,7 @@ static int s25f_poll_status(const struct flashchip *flash)
 }
 
 /* "Read Any Register" instruction only supported on S25FS */
-static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
+static int s25fs_read_cr(const struct flashctx *flash, uint32_t addr)
 {
 	int result;
 	uint8_t cfg;
@@ -197,7 +197,7 @@ static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 					0x00, 0x00, 0x00, 0x00,
 	};
 
-	result = spi_send_command(sizeof(read_cr_cmd), 1, read_cr_cmd, &cfg);
+	result = spi_send_command(flash, sizeof(read_cr_cmd), 1, read_cr_cmd, &cfg);
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
@@ -207,13 +207,13 @@ static int s25fs_read_cr(const struct flashchip *flash, uint32_t addr)
 	return cfg;
 }
 
-static int s25f_read_cr1(const struct flashchip *flash)
+static int s25f_read_cr1(const struct flashctx *flash)
 {
 	int result;
 	uint8_t cfg;
 	unsigned char read_cr_cmd[] = { CMD_RDCR };
 
-	result = spi_send_command(sizeof(read_cr_cmd), 1, read_cr_cmd, &cfg);
+	result = spi_send_command(flash, sizeof(read_cr_cmd), 1, read_cr_cmd, &cfg);
 	if (result) {
 		msg_cerr("%s failed during command execution\n", __func__);
 		return -1;
@@ -223,7 +223,7 @@ static int s25f_read_cr1(const struct flashchip *flash)
 }
 
 /* "Write Any Register" instruction only supported on S25FS */
-static int s25fs_write_cr(const struct flashchip *flash,
+static int s25fs_write_cr(const struct flashctx *flash,
 				uint32_t addr, uint8_t data)
 {
 	int result;
@@ -251,7 +251,7 @@ static int s25fs_write_cr(const struct flashchip *flash,
 		.readarr	= NULL,
 	}};
 
-	result = spi_send_multicommand(cmds);
+	result = spi_send_multicommand(flash, cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
@@ -262,7 +262,7 @@ static int s25fs_write_cr(const struct flashchip *flash,
 	return s25f_poll_status(flash);
 }
 
-static int s25f_write_cr1(const struct flashchip *flash, uint8_t data)
+static int s25f_write_cr1(const struct flashctx *flash, uint8_t data)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -287,7 +287,7 @@ static int s25f_write_cr1(const struct flashchip *flash, uint8_t data)
 		.readarr	= NULL,
 	}};
 
-	result = spi_send_multicommand(cmds);
+	result = spi_send_multicommand(flash, cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution\n", __func__);
 		return -1;
@@ -297,7 +297,7 @@ static int s25f_write_cr1(const struct flashchip *flash, uint8_t data)
 	return s25f_poll_status(flash);
 }
 
-static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
+static int s25fs_restore_cr3nv(struct flashctx *flash, uint8_t cfg)
 {
 	int ret = 0;
 
@@ -308,7 +308,7 @@ static int s25fs_restore_cr3nv(struct flashchip *flash, uint8_t cfg)
 }
 
 /* returns state of top/bottom block protection, or <0 to indicate error */
-static int s25f_get_tbprot_o(const struct flashchip *flash)
+static int s25f_get_tbprot_o(const struct flashctx *flash)
 {
 	int cr1 = s25f_read_cr1(flash);
 
@@ -323,7 +323,7 @@ static int s25f_get_tbprot_o(const struct flashchip *flash)
 }
 
 /* fills modifier_bits struct, returns 0 to indicate success */
-int s25f_get_modifier_bits(const struct flashchip *flash,
+int s25f_get_modifier_bits(const struct flashctx *flash,
 					struct generic_modifier_bits *m)
 {
 	int tmp;
@@ -338,7 +338,7 @@ int s25f_get_modifier_bits(const struct flashchip *flash,
 	return 0;
 }
 
-int s25f_set_modifier_bits(const struct flashchip *flash,
+int s25f_set_modifier_bits(const struct flashctx *flash,
 					struct generic_modifier_bits *m)
 {
 	int cr1, cr1_orig;
@@ -374,7 +374,7 @@ int s25f_set_modifier_bits(const struct flashchip *flash,
 	return 0;
 }
 
-int s25fs_block_erase_d8(struct flashchip *flash,
+int s25fs_block_erase_d8(struct flashctx *flash,
 		unsigned int addr, unsigned int blocklen)
 {
 	unsigned char cfg;
@@ -429,7 +429,7 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 		cr3nv_checked = 1;
 	}
 
-	result = spi_send_multicommand(erase_cmds);
+	result = spi_send_multicommand(flash, erase_cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
@@ -440,7 +440,7 @@ int s25fs_block_erase_d8(struct flashchip *flash,
 	return s25f_poll_status(flash);
 }
 
-int s25fl_block_erase(struct flashchip *flash,
+int s25fl_block_erase(struct flashctx *flash,
 		      unsigned int addr, unsigned int blocklen)
 {
 	int result;
@@ -470,7 +470,7 @@ int s25fl_block_erase(struct flashchip *flash,
 		}
 	};
 
-	result = spi_send_multicommand(erase_cmds);
+	result = spi_send_multicommand(flash, erase_cmds);
 	if (result) {
 		msg_cerr("%s failed during command execution at address 0x%x\n",
 			__func__, addr);
@@ -482,13 +482,13 @@ int s25fl_block_erase(struct flashchip *flash,
 }
 
 
-int probe_spi_big_spansion(struct flashchip *flash)
+int probe_spi_big_spansion(struct flashctx *flash)
 {
 	static const unsigned char cmd = JEDEC_RDID;
 	int ret;
 	unsigned char dev_id[6]; /* We care only about 6 first bytes */
 
-	ret = spi_send_command(sizeof(cmd), sizeof(dev_id), &cmd, dev_id);
+	ret = spi_send_command(flash, sizeof(cmd), sizeof(dev_id), &cmd, dev_id);
 
 	if (!ret) {
 		int i;

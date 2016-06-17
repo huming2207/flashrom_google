@@ -365,7 +365,7 @@ static int dediprog_set_spi_speed(unsigned int spispeed_idx)
  * @len		length
  * @return	0 on success, 1 on failure
  */
-static int dediprog_spi_bulk_read(struct flashchip *flash, uint8_t *buf,
+static int dediprog_spi_bulk_read(struct flashctx *flash, uint8_t *buf,
 				  unsigned int start, unsigned int len)
 {
 	int ret, err = 1;
@@ -468,7 +468,7 @@ _err_free:
 	return err;
 }
 
-static int dediprog_spi_read(struct flashchip *flash, uint8_t *buf,
+static int dediprog_spi_read(struct flashctx *flash, uint8_t *buf,
 			     unsigned int start, unsigned int len)
 {
 	int ret;
@@ -518,7 +518,7 @@ err:
  * @dedi_spi_cmd    dediprog specific write command for spi bus
  * @return          0 on success, 1 on failure
  */
-static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, unsigned int chunksize,
+static int dediprog_spi_bulk_write(struct flashctx *flash, const uint8_t *buf, unsigned int chunksize,
 				   unsigned int start, unsigned int len, uint8_t dedi_spi_cmd)
 {
 	int ret, transferred;
@@ -602,7 +602,7 @@ static int dediprog_spi_bulk_write(struct flashchip *flash, const uint8_t *buf, 
 	return 0;
 }
 
-static int dediprog_spi_write(struct flashchip *flash, const uint8_t *buf,
+static int dediprog_spi_write(struct flashctx *flash, const uint8_t *buf,
 			      unsigned int start, unsigned int len, uint8_t dedi_spi_cmd)
 {
 	int ret;
@@ -654,21 +654,21 @@ static int dediprog_spi_write(struct flashchip *flash, const uint8_t *buf,
 	return 0;
 }
 
-//static int dediprog_spi_write_256(struct flashchip *flash, const uint8_t *buf, unsigned int start, unsigned int len)
-static int dediprog_spi_write_256(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+//static int dediprog_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
+static int dediprog_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	return dediprog_spi_write(flash, buf, start, len, WRITE_MODE_PAGE_PGM);
 }
 
 #if 0
-static int dediprog_spi_write_aai(struct flashchip *flash, const uint8_t *buf, unsigned int start, unsigned int len)
+static int dediprog_spi_write_aai(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	return dediprog_spi_write(flash, buf, start, len, WRITE_MODE_2B_AAI);
 }
 #endif
 
-//static int dediprog_spi_send_command(struct flashchip *flash,
-static int dediprog_spi_send_command(unsigned int writecnt,
+//static int dediprog_spi_send_command(struct flashctx *flash,
+static int dediprog_spi_send_command(const struct flashctx *flash, unsigned int writecnt,
 				     unsigned int readcnt,
 				     const unsigned char *writearr,
 				     unsigned char *readarr)
@@ -809,7 +809,7 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 		for (j = 0; j < spi_flash_ranges; j++) {
 			/* Dediprog can supply a voltage in this range. */
 			if ((v >= voltage_ranges[j].min) && (v <= voltage_ranges[j].max)) {
-				struct flashchip dummy;
+				struct flashctx dummy;
 
 				msg_cdbg("%s: trying %d\n", __func__, v);
 				if (dediprog_set_spi_flash_voltage_manual(v)) {

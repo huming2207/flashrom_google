@@ -299,10 +299,10 @@ static int sp_stream_buffer_op(uint8_t cmd, uint32_t parmlen, uint8_t * parms)
 	return 0;
 }
 
-static int serprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+static int serprog_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 				    const unsigned char *writearr,
 				    unsigned char *readarr);
-static int serprog_spi_read(struct flashchip *flash, uint8_t *buf,
+static int serprog_spi_read(struct flashctx *flash, uint8_t *buf,
 			    unsigned int start, unsigned int len);
 static struct spi_programmer spi_programmer_serprog = {
 	.type		= SPI_CONTROLLER_SERPROG,
@@ -313,6 +313,13 @@ static struct spi_programmer spi_programmer_serprog = {
 	.read		= serprog_spi_read,
 	.write_256	= default_spi_write_256,
 };
+
+static void serprog_chip_writeb(const struct flashctx *flash, uint8_t val,
+				chipaddr addr);
+static uint8_t serprog_chip_readb(const struct flashctx *flash,
+				  const chipaddr addr);
+static void serprog_chip_readn(const struct flashctx *flash, uint8_t *buf,
+			       const chipaddr addr, size_t len);
 
 static const struct par_programmer par_programmer_serprog = {
 		.chip_readb		= serprog_chip_readb,
@@ -680,7 +687,7 @@ static void sp_check_opbuf_usage(int bytes_to_be_added)
 	}
 }
 
-void serprog_chip_writeb(uint8_t val, chipaddr addr)
+void serprog_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
 	msg_pspew("%s\n", __func__);
 	if (sp_max_write_n) {
@@ -711,7 +718,7 @@ void serprog_chip_writeb(uint8_t val, chipaddr addr)
 	}
 }
 
-uint8_t serprog_chip_readb(const chipaddr addr)
+uint8_t serprog_chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
 	unsigned char c;
 	unsigned char buf[3];
@@ -757,7 +764,7 @@ static void sp_do_read_n(uint8_t * buf, const chipaddr addr, size_t len)
 }
 
 /* The externally called version that makes sure that max_read_n is obeyed. */
-void serprog_chip_readn(uint8_t * buf, const chipaddr addr, size_t len)
+void serprog_chip_readn(const struct flashctx *flash, uint8_t * buf, const chipaddr addr, size_t len)
 {
 	size_t lenm = len;
 	chipaddr addrm = addr;
@@ -792,7 +799,7 @@ void serprog_delay(int usecs)
 	sp_prev_was_write = 0;
 }
 
-static int serprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+static int serprog_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr,
 			     unsigned char *readarr)
 {
@@ -822,14 +829,14 @@ static int serprog_spi_send_command(unsigned int writecnt, unsigned int readcnt,
  * the advantage that it is much faster for most chips, but breaks those with
  * non-contiguous address space (like AT45DB161D). When spi_read_chunked is
  * fixed this method can be removed. */
-static int serprog_spi_read(struct flashchip *flash, uint8_t *buf, unsigned int start, unsigned int len)
+static int serprog_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int i, cur_len;
 	const unsigned int max_read = spi_programmer_serprog.max_data_read;
 	for (i = 0; i < len; i += cur_len) {
 		int ret;
 		cur_len = min(max_read, (len - i));
-		ret = spi_nbyte_read(start + i, buf + i, cur_len);
+		ret = spi_nbyte_read(flash, start + i, buf + i, cur_len);
 		if (ret)
 			return ret;
 	}

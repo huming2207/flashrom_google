@@ -217,7 +217,7 @@ int fdtmap_add_entries_from_buf(const void *blob, romlayout_t *rom_entries,
 	return count;
 }
 
-int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr, loff_t offset,
+int fdtmap_find(struct flashctx *flash, struct fdtmap_hdr *hdr, loff_t offset,
 		uint8_t **buf)
 {
 	int fmap_size;

@@ -81,7 +81,8 @@ struct usb_device *device       = NULL;
 uint8_t            in_endpoint  = 0;
 uint8_t            out_endpoint = 0;
 
-static int send_command(unsigned int write_count,
+static int send_command(const struct flashctx *flash,
+			unsigned int write_count,
 			unsigned int read_count,
 			const unsigned char *write_buffer,
 			unsigned char *read_buffer)

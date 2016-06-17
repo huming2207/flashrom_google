@@ -288,7 +288,7 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 	return 0;
 }
 
-static int add_fmap_entries_from_buf(struct flashchip *flash,
+static int add_fmap_entries_from_buf(struct flashctx *flash,
 				     const uint8_t *buf)
 {
 	struct fmap *fmap;
@@ -342,7 +342,7 @@ enum found_t {
 };
 
 /* returns the number of entries added, or <0 to indicate error */
-int add_fmap_entries(struct flashchip *flash)
+int add_fmap_entries(struct flashctx *flash)
 {
 	enum found_t found = FOUND_NONE;
 	int ret = -1;
@@ -612,7 +612,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 	return 0;
 }
 
-int handle_romentries(struct flashchip *flash, uint8_t *oldcontents, uint8_t *newcontents)
+int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
 	unsigned int start = 0;
 	int entry;
@@ -692,7 +692,7 @@ static int write_content_to_file(int entry, uint8_t *buf) {
 }
 
 /* sets required_erase_size (global variable), returns 0 if successful */
-static int set_required_erase_size(struct flashchip *flash)
+static int set_required_erase_size(struct flashctx *flash)
 {
 	int i, erase_size_found = 0;
 
@@ -727,9 +727,9 @@ static int set_required_erase_size(struct flashchip *flash)
 
 /*  Reads flash content specified with -i argument into *buf. */
 int handle_partial_read(
-    struct flashchip *flash,
+    struct flashctx *flash,
     uint8_t *buf,
-    int (*read) (struct flashchip *flash, uint8_t *buf,
+    int (*read) (struct flashctx *flash, uint8_t *buf,
                  unsigned int start, unsigned int len),
     int write_to_file) {
 	int i, count = 0;
@@ -789,9 +789,9 @@ int handle_partial_read(
  * content in specified partitions (-i).
  */
 int handle_partial_verify(
-    struct flashchip *flash,
+    struct flashctx *flash,
     uint8_t *buf,
-    int (*verify) (struct flashchip *flash, uint8_t *buf,
+    int (*verify) (struct flashctx *flash, uint8_t *buf,
                    unsigned int start, unsigned int len, const char *message)) {
 	int i;
 
@@ -843,7 +843,7 @@ int handle_partial_verify(
 	return 0;
 }
 
-int extract_regions(struct flashchip *flash)
+int extract_regions(struct flashctx *flash)
 {
 	unsigned long size = flash->total_size * 1024;
 	unsigned char *buf = calloc(size, sizeof(char));

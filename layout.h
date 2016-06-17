@@ -34,6 +34,6 @@ typedef struct romlayout {
  * @flash: Information about flash chip to access
  * @return 0 if OK, non-zero on error
  */
-int extract_regions(struct flashchip *flash);
+int extract_regions(struct flashctx *flash);
 
 #endif

@@ -400,7 +400,7 @@ int cros_ec_finish(void) {
 }
 
 
-int cros_ec_read(struct flashchip *flash, uint8_t *readarr,
+int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
 	int rc = 0;
 	struct ec_params_flash_read p;
@@ -454,7 +454,7 @@ static int in_current_image(struct cros_ec_priv *priv,
 }
 
 
-int cros_ec_block_erase(struct flashchip *flash,
+int cros_ec_block_erase(struct flashctx *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
 	struct ec_params_flash_erase erase;
@@ -492,7 +492,7 @@ int cros_ec_block_erase(struct flashchip *flash,
 }
 
 
-int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0, real_write_size;
@@ -545,7 +545,7 @@ int cros_ec_write(struct flashchip *flash, uint8_t *buf, unsigned int addr,
 }
 
 
-static int cros_ec_list_ranges(const struct flashchip *flash) {
+static int cros_ec_list_ranges(const struct flashctx *flash) {
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
 	int rc;
@@ -715,7 +715,7 @@ exit:
 	return 0;
 }
 
-static int cros_ec_set_range(const struct flashchip *flash,
+static int cros_ec_set_range(const struct flashctx *flash,
                          unsigned int start, unsigned int len) {
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
@@ -744,7 +744,7 @@ static int cros_ec_set_range(const struct flashchip *flash,
 }
 
 
-static int cros_ec_enable_writeprotect(const struct flashchip *flash,
+static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 		enum wp_mode wp_mode) {
 	int ret;
 
@@ -763,12 +763,12 @@ static int cros_ec_enable_writeprotect(const struct flashchip *flash,
 }
 
 
-static int cros_ec_disable_writeprotect(const struct flashchip *flash) {
+static int cros_ec_disable_writeprotect(const struct flashctx *flash) {
 	return set_wp(0);
 }
 
 
-static int cros_ec_wp_status(const struct flashchip *flash) {
+static int cros_ec_wp_status(const struct flashctx *flash) {
 	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
@@ -948,7 +948,7 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 	return 0;
 }
 
-int cros_ec_probe_size(struct flashchip *flash) {
+int cros_ec_probe_size(struct flashctx *flash) {
 	int rc;
 	struct ec_response_flash_info info;
 	struct ec_response_get_chip_info chip_info;

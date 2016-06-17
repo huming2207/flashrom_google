@@ -71,7 +71,7 @@ int fdtmap_add_entries_from_buf(const void *blob,
  *
  * returns 1 if found, 0 if not found, <0 to indicate failure
  */
-int fdtmap_find(struct flashchip *flash, struct fdtmap_hdr *hdr,
+int fdtmap_find(struct flashctx *flash, struct fdtmap_hdr *hdr,
 		loff_t offset, uint8_t **buf);
 
 #endif

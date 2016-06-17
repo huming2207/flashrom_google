@@ -132,7 +132,7 @@ struct wpce775x_initflash_cfg {
  */
 static struct wpce775x_initflash_cfg *initflash_cfg;
 
-static struct flashchip *flash_internal;
+static struct flashctx *flash_internal;
 
 
 /* Indicate the flash chip attached to the WPCE7xxx chip.
@@ -399,7 +399,7 @@ static int logbase2(int x)
 }
 
 /* initialize initflash_cfg struct */
-int initflash_cfg_setup(struct flashchip *flash)
+int initflash_cfg_setup(struct flashctx *flash)
 {
 	if (!initflash_cfg)
 		initflash_cfg = malloc(sizeof(*initflash_cfg));
@@ -708,7 +708,7 @@ wpce775x_nbyte_program_exit:
 	return ret;
 }
 
-int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf,
+int wpce775x_spi_read(struct flashctx *flash, uint8_t * buf,
                       unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {
@@ -718,7 +718,7 @@ int wpce775x_spi_read(struct flashchip *flash, uint8_t * buf,
 	return spi_read_chunked(flash, buf, start, len, flash->page_size);
 }
 
-int wpce775x_spi_write_256(struct flashchip *flash, uint8_t *buf,
+int wpce775x_spi_write_256(struct flashctx *flash, uint8_t *buf,
                            unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {
@@ -803,7 +803,7 @@ int wpce775x_spi_write_status_register(uint8_t val)
  * WPCE775x does not allow direct access to SPI chip from host. This function
  * will translate SPI commands to valid WPCE775x WCB commands.
  */
-int wpce775x_spi_send_command(unsigned int writecnt, unsigned int readcnt,
+int wpce775x_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *writearr, unsigned char *readarr)
 {
 	int rc = 0;

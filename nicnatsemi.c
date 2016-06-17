@@ -35,6 +35,11 @@ const struct pcidev_status nics_natsemi[] = {
 	{},
 };
 
+static void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val,
+				   chipaddr addr);
+static uint8_t nicnatsemi_chip_readb(const struct flashctx *flash,
+				     const chipaddr addr);
+
 static const struct par_programmer par_programmer_nicnatsemi = {
 		.chip_readb		= nicnatsemi_chip_readb,
 		.chip_readw		= fallback_chip_readw,
@@ -74,7 +79,7 @@ int nicnatsemi_init(void)
 	return 0;
 }
 
-void nicnatsemi_chip_writeb(uint8_t val, chipaddr addr)
+void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
 	OUTL((uint32_t)addr & 0x0001FFFF, io_base_addr + BOOT_ROM_ADDR);
 	/*
@@ -88,7 +93,7 @@ void nicnatsemi_chip_writeb(uint8_t val, chipaddr addr)
 	OUTB(val, io_base_addr + BOOT_ROM_DATA);
 }
 
-uint8_t nicnatsemi_chip_readb(const chipaddr addr)
+uint8_t nicnatsemi_chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
 	OUTL(((uint32_t)addr & 0x0001FFFF), io_base_addr + BOOT_ROM_ADDR);
 	/*

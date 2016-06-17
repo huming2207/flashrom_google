@@ -49,7 +49,7 @@ enum search_state_t {
 
 /* Keeps track of the state of our search */
 struct search_info {
-	struct flashchip *flash;	/* Flash information */
+	struct flashctx *flash;	/* Flash information */
 	enum search_state_t state;	/* Current state */
 	long int ceiling_size;		/* Lowest power of 2 >= flash size */
 	long int stride;		/* Current binary search stride */
@@ -85,7 +85,7 @@ int search_find_next(struct search_info *search, off_t *offsetp);
  * @flash: Information about the flash chip
  * @min_size: Minimum size of region that we want to find
  */
-void search_init(struct search_info *search, struct flashchip *flash,
+void search_init(struct search_info *search, struct flashctx *flash,
 		 int min_size);
 
 /** search_free() - Free memory allocated by search
