@@ -52,7 +52,7 @@ static unsigned long int mtd_erasesize;	/* only valid if numeraseregions is 0 */
 
 static struct wp wp_mtd;	/* forward declaration */
 
-static int stat_mtd_files(char *dev_path, char *sysfs_path)
+static int stat_mtd_files(char *dev_path)
 {
 	struct stat s;
 
@@ -329,7 +329,7 @@ static int linux_mtd_setup(int dev_num)
 	msg_pdbg("%s: sysfs_path: \"%s\", dev_path: \"%s\"\n",
 			__func__, sysfs_path, dev_path);
 
-	if (stat_mtd_files(dev_path, sysfs_path))
+	if (stat_mtd_files(dev_path))
 		goto linux_mtd_setup_exit;
 
 	if (get_mtd_info())

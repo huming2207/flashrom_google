@@ -182,7 +182,7 @@ static int match_endpoint(struct libusb_endpoint_descriptor const *descriptor,
 		 LIBUSB_TRANSFER_TYPE_BULK));
 }
 
-static int find_endpoints(struct usb_device *device)
+static int find_endpoints(void)
 {
 	int i;
 	int in_count  = 0;
@@ -285,7 +285,7 @@ int raiden_debug_spi_init(void)
 		return 1;
 	}
 
-	CHECK(find_endpoints(device),
+	CHECK(find_endpoints(),
 	      "Raiden: Failed to find valid endpoints\n");
 
 	CHECK(usb_device_claim(device),
