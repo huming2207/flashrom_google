@@ -210,7 +210,7 @@ pci_debug(char *msg, ...)
 }
 #endif
 
-int internal_init(void)
+int internal_init(struct flashctx *flash)
 {
 #if __FLASHROM_LITTLE_ENDIAN__
 	int ret = 0;
@@ -337,13 +337,13 @@ int internal_init(void)
 		 * Give preference to the cros_ec dev interface if it exists
 		 * and passes the "hello" test, otherwise fall back on raw I2C.
 		 */
-		if (!cros_ec_probe_dev() || !cros_ec_probe_i2c(NULL))
+		if (!cros_ec_probe_dev(flash) || !cros_ec_probe_i2c(flash, NULL))
 			return 0;
 	}
 #endif
 
 #if CONFIG_LINUX_MTD == 1
-	if (!linux_mtd_init())
+	if (!linux_mtd_init(flash))
 		return 0;
 #endif
 
@@ -360,7 +360,7 @@ int internal_init(void)
 	 * The -p linux_spi still works because the programmer_init() would
 	 * call the linux_spi_init() in flashrom.c.
 	 */
-	if (!programmer_init(PROGRAMMER_LINUX_SPI, NULL)) {
+	if (!programmer_init(flash, PROGRAMMER_LINUX_SPI, NULL)) {
 		return 0;
 	} else /* if failed, fall through */
 #endif
@@ -461,15 +461,15 @@ int internal_init(void)
 	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
 	    (alias && alias->type == ALIAS_EC)) {
 		/* Try to probe via kernel device first */
-		if (!cros_ec_probe_dev()) {
-			buses_supported &= ~(BUS_LPC|BUS_SPI);
+		if (!cros_ec_probe_dev(flash)) {
+			flash->pgm->buses_supported &= ~(BUS_LPC|BUS_SPI);
 			return 0;
 		}
-		if (cros_ec_probe_lpc(NULL) &&
-			wpce775x_probe_spi_flash(NULL) &&
-			mec1308_probe_spi_flash(NULL) &&
-			ene_probe_spi_flash(NULL) &&
-			init_superio_ite())
+		if (cros_ec_probe_lpc(flash, NULL) &&
+			wpce775x_probe_spi_flash(flash, NULL) &&
+			mec1308_probe_spi_flash(flash, NULL) &&
+			ene_probe_spi_flash(flash, NULL) &&
+			init_superio_ite(flash))
 			return 1;	/* EC not found */
 		else
 			return 0;
@@ -479,7 +479,7 @@ int internal_init(void)
 
 	board_flash_enable(lb_vendor, lb_part);
 
-	if (!(buses_supported & target_bus) &&
+	if (!(flash->pgm->buses_supported & target_bus) &&
 		(!alias || (alias && alias->type == ALIAS_NONE))) {
 		/* User specified a target bus which is not supported on the
 		 * platform or specified an alias which does not enable it.

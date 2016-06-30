@@ -199,7 +199,7 @@ static uint16_t it87spi_probe(uint16_t port)
 	return 0;
 }
 
-int init_superio_ite(void)
+int init_superio_ite(struct flashctx *flash)
 {
 	int i, ret, chips_found = 0;
 
@@ -218,11 +218,11 @@ int init_superio_ite(void)
 			 * which can go wrong if the EC firmware does not
 			 * implement the interface we want.
 			 */
-			if (!it85xx_spi_init(superios[i]))
+			if (!it85xx_spi_init(flash, superios[i]))
 				chips_found++;
 			break;
 		case 0x8518:
-			if (!it8518_spi_init(superios[i]))
+			if (!it8518_spi_init(flash, superios[i]))
 				chips_found++;
 			break;
 		case 0x8705:

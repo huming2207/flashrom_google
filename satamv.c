@@ -81,7 +81,7 @@ static int satamv_shutdown(void *data)
  * 0xc08	PCI BAR2 (Flash/NVRAM) Control
  * 0x1046c	Flash Parameters
  */
-int satamv_init(void)
+int satamv_init(struct flashctx *flash)
 {
 	uintptr_t addr;
 	uint32_t tmp;

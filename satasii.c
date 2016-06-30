@@ -66,7 +66,7 @@ static int satasii_shutdown(void *data)
 	return 0;
 }
 
-int satasii_init(void)
+int satasii_init(struct flashctx *flash)
 {
 	uint32_t addr;
 	uint16_t reg_offset;

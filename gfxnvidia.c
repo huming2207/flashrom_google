@@ -88,7 +88,7 @@ static int gfxnvidia_shutdown(void *data)
 	return 0;
 }
 
-int gfxnvidia_init(void)
+int gfxnvidia_init(struct flashctx *flash)
 {
 	uint32_t reg32;
 

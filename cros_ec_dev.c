@@ -347,7 +347,7 @@ static int cros_ec_dev_shutdown(void *data)
 	return 0;
 }
 
-int cros_ec_probe_dev(void)
+int cros_ec_probe_dev(struct flashctx *flash)
 {
 	char dev_name[strlen(CROS_EC_DEV_NAME)];
 
@@ -379,6 +379,7 @@ int cros_ec_probe_dev(void)
 	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
 	register_shutdown(cros_ec_dev_shutdown, NULL);
 	cros_ec_dev_priv.detected = 1;
+	flash->pgm->opaque = opaque_programmer_cros_ec_dev;
 
 	return 0;
 }

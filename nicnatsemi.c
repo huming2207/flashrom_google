@@ -58,7 +58,7 @@ static int nicnatsemi_shutdown(void *data)
 	return 0;
 }
 
-int nicnatsemi_init(void)
+int nicnatsemi_init(struct flashctx *flash)
 {
 	get_io_perms();
 

@@ -514,7 +514,7 @@ static int cros_ec_lpc_shutdown(void *data)
 	return 0;
 }
 
-int cros_ec_probe_lpc(const char *name) {
+int cros_ec_probe_lpc(struct flashctx *flash, const char *name) {
 	msg_pdbg("%s():%d ...\n", __func__, __LINE__);
 
 	if (alias && alias->type != ALIAS_EC)
@@ -529,13 +529,14 @@ int cros_ec_probe_lpc(const char *name) {
 	msg_pdbg("CROS_EC detected on LPC bus\n");
 	cros_ec_lpc_priv.detected = 1;
 
-	if (buses_supported & BUS_SPI) {
+	if (flash->pgm->buses_supported & BUS_SPI) {
 		msg_pdbg("%s():%d remove BUS_SPI from buses_supported.\n",
 			__func__, __LINE__);
-		buses_supported &= ~BUS_SPI;
+		flash->pgm->buses_supported &= ~BUS_SPI;
 	}
 	register_opaque_programmer(&cros_ec);
-	buses_supported |= BUS_LPC;
+	flash->pgm->buses_supported |= BUS_LPC;
+	flash->pgm->opaque = cros_ec;
 
 	if (register_shutdown(cros_ec_lpc_shutdown, NULL)) {
 		msg_perr("Cannot register LPC shutdown function.\n");

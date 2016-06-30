@@ -102,6 +102,7 @@ enum alias_type {
 struct programmer_alias {
 	const char *name;
 	enum alias_type type;
+	enum programmer prog;
 };
 
 extern struct programmer_alias *alias;
@@ -111,7 +112,7 @@ struct programmer_entry {
 	const char *vendor;
 	const char *name;
 
-	int (*init) (void);
+	int (*init) (struct flashctx *flash);
 
 	void *(*map_flash_region) (const char *descr, unsigned long phys_addr,
 				   size_t len);
@@ -129,7 +130,7 @@ struct programmer_entry {
 
 extern const struct programmer_entry programmer_table[];
 
-int programmer_init(enum programmer prog, char *param);
+int programmer_init(struct flashctx *flash, enum programmer prog, char *param);
 int programmer_shutdown(void);
 
 enum bitbang_spi_master_type {
@@ -160,6 +161,8 @@ struct bitbang_spi_master {
 	int (*get_miso) (void);
 	void (*request_bus) (void);
 	void (*release_bus) (void);
+	/* Length of half a clock period in usecs. */
+	unsigned int half_period;
 };
 
 #if CONFIG_INTERNAL == 1
@@ -235,6 +238,7 @@ void internal_delay(int usecs);
 
 #if NEED_PCI == 1
 /* pcidev.c */
+// FIXME: These need to be local, not global
 extern uint32_t io_base_addr;
 extern struct pci_access *pacc;
 extern struct pci_dev *pcidev_dev;
@@ -328,7 +332,7 @@ extern int force_boardmismatch;
 void probe_superio(void);
 int register_superio(struct superio s);
 extern enum chipbustype internal_buses_supported;
-int internal_init(void);
+int internal_init(struct flashctx *flash);
 #endif
 
 /* hwaccess.c */
@@ -365,7 +369,7 @@ void rmmio_vall(void *addr);
 
 /* dummyflasher.c */
 #if CONFIG_DUMMY == 1
-int dummy_init(void);
+int dummy_init(struct flashctx *flash);
 void *dummy_map(const char *descr, unsigned long phys_addr, size_t len);
 void dummy_unmap(void *virt_addr, size_t len);
 
@@ -373,67 +377,67 @@ void dummy_unmap(void *virt_addr, size_t len);
 
 /* nic3com.c */
 #if CONFIG_NIC3COM == 1
-int nic3com_init(void);
+int nic3com_init(struct flashctx *flash);
 extern const struct pcidev_status nics_3com[];
 #endif
 
 /* gfxnvidia.c */
 #if CONFIG_GFXNVIDIA == 1
-int gfxnvidia_init(void);
+int gfxnvidia_init(struct flashctx *flash);
 extern const struct pcidev_status gfx_nvidia[];
 #endif
 
 /* drkaiser.c */
 #if CONFIG_DRKAISER == 1
-int drkaiser_init(void);
+int drkaiser_init(struct flashctx *flash);
 extern const struct pcidev_status drkaiser_pcidev[];
 #endif
 
 /* nicrealtek.c */
 #if CONFIG_NICREALTEK == 1
-int nicrealtek_init(void);
+int nicrealtek_init(struct flashctx *flash);
 extern const struct pcidev_status nics_realtek[];
 #endif
 
 /* nicnatsemi.c */
 #if CONFIG_NICNATSEMI == 1
-int nicnatsemi_init(void);
+int nicnatsemi_init(struct flashctx *flash);
 extern const struct pcidev_status nics_natsemi[];
 #endif
 
 /* nicintel.c */
 #if CONFIG_NICINTEL == 1
-int nicintel_init(void);
+int nicintel_init(struct flashctx *flash);
 extern const struct pcidev_status nics_intel[];
 #endif
 
 /* nicintel_spi.c */
 #if CONFIG_NICINTEL_SPI == 1
-int nicintel_spi_init(void);
+int nicintel_spi_init(struct flashctx *flash);
 extern const struct pcidev_status nics_intel_spi[];
 #endif
 
 /* ogp_spi.c */
 #if CONFIG_OGP_SPI == 1
-int ogp_spi_init(void);
+int ogp_spi_init(struct flashctx *flash);
 extern const struct pcidev_status ogp_spi[];
 #endif
 
 /* satamv.c */
 #if CONFIG_SATAMV == 1
-int satamv_init(void);
+int satamv_init(struct flashctx *flash);
 extern const struct pcidev_status satas_mv[];
 #endif
 
 /* satasii.c */
 #if CONFIG_SATASII == 1
-int satasii_init(void);
+int satasii_init(struct flashctx *flash);
 extern const struct pcidev_status satas_sii[];
 #endif
 
 /* atahpt.c */
 #if CONFIG_ATAHPT == 1
-int atahpt_init(void);
+int atahpt_init(struct flashctx *flash);
 extern const struct pcidev_status ata_hpt[];
 #endif
 
@@ -446,34 +450,33 @@ struct usbdev_status {
 	const char *vendor_name;
 	const char *device_name;
 };
-int ft2232_spi_init(void);
+int ft2232_spi_init(struct flashctx *flash);
 extern const struct usbdev_status devs_ft2232spi[];
 void print_supported_usbdevs(const struct usbdev_status *devs);
 #endif
 
 /* rayer_spi.c */
 #if CONFIG_RAYER_SPI == 1
-int rayer_spi_init(void);
+int rayer_spi_init(struct flashctx *flash);
 #endif
 
 /* bitbang_spi.c */
-int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod);
-int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
+int bitbang_spi_init(const struct bitbang_spi_master *master);
 
 /* buspirate_spi.c */
 #if CONFIG_BUSPIRATE_SPI == 1
-int buspirate_spi_init(void);
+int buspirate_spi_init(struct flashctx *flash);
 #endif
 
 /* raiden_debug_spi.c */
 #if CONFIG_RAIDEN_DEBUG_SPI == 1
-int raiden_debug_spi_init(void);
+int raiden_debug_spi_init(struct flashctx *flash);
 #endif
 
 /* linux_i2c.c */
 #if CONFIG_LINUX_I2C == 1
 int linux_i2c_shutdown(void *data);
-int linux_i2c_init(void);
+int linux_i2c_init(struct flashctx *flash);
 int linux_i2c_open(int bus, int addr, int force);
 void linux_i2c_close(void);
 int linux_i2c_xfer(int bus, int addr, const void *inbuf,
@@ -482,17 +485,17 @@ int linux_i2c_xfer(int bus, int addr, const void *inbuf,
 
 /* linux_mtd.c */
 #if CONFIG_LINUX_MTD == 1
-int linux_mtd_init(void);
+int linux_mtd_init(struct flashctx *flash);
 #endif
 
 /* linux_spi.c */
 #if CONFIG_LINUX_SPI == 1
-int linux_spi_init(void);
+int linux_spi_init(struct flashctx *flash);
 #endif
 
 /* dediprog.c */
 #if CONFIG_DEDIPROG == 1
-int dediprog_init(void);
+int dediprog_init(struct flashctx *flash);
 #endif
 
 /* flashrom.c */
@@ -502,6 +505,7 @@ struct decode_sizes {
 	uint32_t fwh;
 	uint32_t spi;
 };
+// FIXME: These need to be local, not global
 extern struct decode_sizes max_rom_decode;
 extern int programmer_may_write;
 extern unsigned long flashbase;
@@ -558,7 +562,6 @@ enum spi_controller {
 	SPI_CONTROLLER_SERPROG,
 #endif
 };
-extern const int spi_programmer_count;
 
 #define MAX_DATA_UNSPECIFIED 0
 #define MAX_DATA_READ_UNLIMITED 64 * 1024
@@ -574,15 +577,15 @@ struct spi_programmer {
 	/* Optimized functions for this programmer */
 	int (*read)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*write_256)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	const void *data;
 };
 
-extern const struct spi_programmer *spi_programmer;
 int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr, unsigned char *readarr);
 int default_spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
 int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-void register_spi_programmer(const struct spi_programmer *programmer);
+int register_spi_programmer(const struct spi_programmer *programmer);
 
 /* ichspi.c */
 #if CONFIG_INTERNAL == 1
@@ -609,23 +612,23 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 int via_init_spi(struct pci_dev *dev);
 
 /* ene_lpc.c */
-int ene_probe_spi_flash(const char *name);
+int ene_probe_spi_flash(struct flashctx *flash, const char *name);
 
 /* it85spi.c */
-int it85xx_spi_init(struct superio s);
-int it8518_spi_init(struct superio s);
+int it85xx_spi_init(struct flashctx *flash, struct superio s);
+int it8518_spi_init(struct flashctx *flash, struct superio s);
 
 /* it87spi.c */
 void enter_conf_mode_ite(uint16_t port);
 void exit_conf_mode_ite(uint16_t port);
 void probe_superio_ite(void);
-int init_superio_ite(void);
+int init_superio_ite(struct flashctx *flash);
 
 /* mcp6x_spi.c */
 int mcp6x_spi_init(int want_spi);
 
 /* mec1308.c */
-int mec1308_probe_spi_flash(const char *name);
+int mec1308_probe_spi_flash(struct flashctx *flash, const char *name);
 
 /* sb600spi.c */
 int sb600_probe_spi(struct pci_dev *dev);
@@ -647,14 +650,12 @@ struct opaque_programmer {
 	int (*write_status) (const struct flashctx *flash, int status);
 	const void *data;
 };
-extern struct opaque_programmer *opaque_programmer;
-void register_opaque_programmer(struct opaque_programmer *pgm);
+int register_opaque_programmer(const struct opaque_programmer *pgm);
 
 /* programmer.c */
 int noop_shutdown(void);
 void *fallback_map(const char *descr, unsigned long phys_addr, size_t len);
 void fallback_unmap(void *virt_addr, size_t len);
-uint8_t noop_chip_readb(const struct flashctx *flash, const chipaddr addr);
 void noop_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr);
 void fallback_chip_writew(const struct flashctx *flash, uint16_t val, chipaddr addr);
 void fallback_chip_writel(const struct flashctx *flash, uint32_t val, chipaddr addr);
@@ -671,13 +672,24 @@ struct par_programmer {
 	uint16_t (*chip_readw) (const struct flashctx *flash, const chipaddr addr);
 	uint32_t (*chip_readl) (const struct flashctx *flash, const chipaddr addr);
 	void (*chip_readn) (const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
+	const void *data;
 };
-extern const struct par_programmer *par_programmer;
-void register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses);
+int register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses);
+struct registered_programmer {
+	enum chipbustype buses_supported;
+	union {
+		struct par_programmer par;
+		struct spi_programmer spi;
+		struct opaque_programmer opaque;
+	};
+};
+extern struct registered_programmer registered_programmers[];
+extern int registered_programmer_count;
+int register_programmer(struct registered_programmer *pgm);
 
 /* serprog.c */
 #if CONFIG_SERPROG == 1
-int serprog_init(void);
+int serprog_init(struct flashctx *flash);
 void serprog_delay(int usecs);
 #endif
 
@@ -689,22 +701,22 @@ typedef int fdtype;
 #endif
 
 /* wpce775x.c */
-int wpce775x_probe_spi_flash(const char *name);
+int wpce775x_probe_spi_flash(struct flashctx *flash, const char *name);
 
 /* cros_ec.c */
-int cros_ec_probe_i2c(const char *name);
+int cros_ec_probe_i2c(struct flashctx *flash, const char *name);
 
 /**
  * Probe the Google Chrome OS EC device
  *
  * @return 0 if found correct, non-zero if not found or error
  */
-int cros_ec_probe_dev(void);
+int cros_ec_probe_dev(struct flashctx *flash);
 
-int cros_ec_probe_lpc(const char *name);
-int cros_ec_need_2nd_pass(void);
-int cros_ec_finish(void);
-int cros_ec_prepare(uint8_t *image, int size);
+int cros_ec_probe_lpc(struct flashctx *flash, const char *name);
+int cros_ec_need_2nd_pass(struct flashctx *flash);
+int cros_ec_finish(struct flashctx *flash);
+int cros_ec_prepare(struct flashctx *flash, uint8_t *image, int size);
 
 void sp_flush_incoming(void);
 fdtype sp_openserport(char *dev, unsigned int baud);

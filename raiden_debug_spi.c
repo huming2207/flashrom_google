@@ -239,7 +239,7 @@ static int shutdown(void * data)
 	return 0;
 }
 
-int raiden_debug_spi_init(void)
+int raiden_debug_spi_init(struct flashctx *flash)
 {
 	struct usb_match match;
 	int request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE;

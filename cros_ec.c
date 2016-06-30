@@ -119,7 +119,6 @@ static int cros_ec_get_current_image(struct cros_ec_priv *priv)
 {
 	struct ec_response_get_version resp;
 	int rc;
-
 	rc = priv->ec_command(EC_CMD_GET_VERSION,
 				0, NULL, 0, &resp, sizeof(resp));
 	if (rc < 0) {
@@ -165,9 +164,8 @@ static int cros_ec_get_region_info(struct cros_ec_priv *priv,
  *			error.
  * @return 0 if success, <0 if error
  */
-static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
+static int ec_get_cmd_versions(struct cros_ec_priv *priv, int cmd, uint32_t *pmask)
 {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_get_cmd_versions pver;
 	struct ec_response_get_cmd_versions rver;
 	int rc;
@@ -192,12 +190,12 @@ static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
  * @param ver		Version to check
  * @return non-zero if command version supported; 0 if not.
  */
-static int ec_cmd_version_supported(int cmd, int ver)
+static int ec_cmd_version_supported(struct cros_ec_priv *priv, int cmd, int ver)
 {
 	uint32_t mask = 0;
 	int rc;
 
-	rc = ec_get_cmd_versions(cmd, &mask);
+	rc = ec_get_cmd_versions(priv, cmd, &mask);
 	if (rc < 0)
 		return rc;
 
@@ -209,7 +207,7 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
 {
 	int cmd_version, ret;
 
-	cmd_version = ec_cmd_version_supported(EC_CMD_FLASH_WRITE,
+	cmd_version = ec_cmd_version_supported(priv, EC_CMD_FLASH_WRITE,
 						EC_VER_FLASH_WRITE);
 	if (cmd_version < 0) {
 		msg_perr("Cannot determine write command version\n");
@@ -247,9 +245,9 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
  *
  * Returns 0 for success.
  */
-static int cros_ec_jump_copy(enum ec_current_image target) {
+static int cros_ec_jump_copy(struct flashctx *flash, enum ec_current_image target) {
 	struct ec_params_reboot_ec p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	int rc;
 	int current_image;
 
@@ -326,8 +324,8 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 /* Given an image, this function parses FMAP and recognize the firmware
  * ranges.
  */
-int cros_ec_prepare(uint8_t *image, int size) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+int cros_ec_prepare(struct flashctx *flash, uint8_t *image, int size) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct fmap *fmap;
 	int i, j;
 
@@ -352,7 +350,7 @@ int cros_ec_prepare(uint8_t *image, int size) {
 	/* Warning: before update, we jump the EC to RO copy. If you want to
 	 *          change this behavior, please also check the cros_ec_finish().
 	 */
-	return cros_ec_jump_copy(EC_IMAGE_RO);
+	return cros_ec_jump_copy(flash, EC_IMAGE_RO);
 }
 
 
@@ -362,13 +360,13 @@ int cros_ec_prepare(uint8_t *image, int size) {
  *
  * This function also jumps to new-updated firmware copy before return >0.
  */
-int cros_ec_need_2nd_pass(void) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+int cros_ec_need_2nd_pass(struct flashctx *flash) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 
 	if (!(priv && priv->detected)) return 0;
 
 	if (need_2nd_pass) {
-		if (cros_ec_jump_copy(EC_IMAGE_UNKNOWN)) {
+		if (cros_ec_jump_copy(flash, EC_IMAGE_UNKNOWN)) {
 			return -1;
 		}
 	}
@@ -385,15 +383,15 @@ int cros_ec_need_2nd_pass(void) {
  * the fwcopy[RO].flags is old (0) and A/B are new. Please also refine
  * this code logic if you change the cros_ec_prepare() behavior.
  */
-int cros_ec_finish(void) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+int cros_ec_finish(struct flashctx *flash) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 
 	if (!(priv && priv->detected)) return 0;
 
 	if (try_latest_firmware) {
 		if (fwcopy[EC_IMAGE_RW].flags &&
-		    cros_ec_jump_copy(EC_IMAGE_RW) == 0) return 0;
-		return cros_ec_jump_copy(EC_IMAGE_RO);
+		    cros_ec_jump_copy(flash, EC_IMAGE_RW) == 0) return 0;
+		return cros_ec_jump_copy(flash, EC_IMAGE_RO);
 	}
 
 	return 0;
@@ -404,8 +402,8 @@ int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
 	int rc = 0;
 	struct ec_params_flash_read p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
-	int maxlen = opaque_programmer->max_data_read;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
+	int maxlen = flash->pgm->opaque.max_data_read;
 	uint8_t buf[maxlen];
 	int offset = 0, count;
 
@@ -458,7 +456,7 @@ int cros_ec_block_erase(struct flashctx *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
 	struct ec_params_flash_erase erase;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	int rc;
 
 	if (in_current_image(priv, blockaddr, len)) {
@@ -497,14 +495,14 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	int i, rc = 0;
 	unsigned int written = 0, real_write_size;
 	struct ec_params_flash_write p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	uint8_t *packet;
 
 	/*
 	 * For chrome-os-partner:33035, to workaround the undersized
 	 * outdata buffer issue in kernel.
 	 */
-	real_write_size = min(opaque_programmer->max_data_write,
+	real_write_size = min(flash->pgm->opaque.max_data_write,
 		priv->ideal_write_size);
 	packet = malloc(sizeof(p) + real_write_size);
 	if (!packet)
@@ -546,7 +544,7 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 
 
 static int cros_ec_list_ranges(const struct flashctx *flash) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
@@ -585,8 +583,8 @@ static int cros_ec_list_ranges(const struct flashctx *flash) {
  *  try to set EC_FLASH_PROTECT_RO_NOW at the same time. However, not
  *  every EC supports RO_NOW, thus we then try to protect the entire chip.
  */
-static int set_wp(int enable) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+static int set_wp(const struct flashctx *flash, int enable) {
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	const int ro_at_boot_flag = EC_FLASH_PROTECT_RO_AT_BOOT;
@@ -717,7 +715,7 @@ exit:
 
 static int cros_ec_set_range(const struct flashctx *flash,
                          unsigned int start, unsigned int len) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
@@ -740,7 +738,7 @@ static int cros_ec_set_range(const struct flashctx *flash,
 		return 1;
 	}
 
-	return set_wp(!!len);
+	return set_wp(flash, !!len);
 }
 
 
@@ -750,7 +748,7 @@ static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 
 	switch (wp_mode) {
 	case WP_MODE_HARDWARE:
-		ret = set_wp(1);
+		ret = set_wp(flash, 1);
 		break;
 	default:
 		msg_perr("%s():%d Unsupported write-protection mode\n",
@@ -764,12 +762,12 @@ static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 
 
 static int cros_ec_disable_writeprotect(const struct flashctx *flash) {
-	return set_wp(0);
+	return set_wp(flash, 0);
 }
 
 
 static int cros_ec_wp_status(const struct flashctx *flash) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	int start, len;  /* wp range */
@@ -952,7 +950,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	int rc;
 	struct ec_response_flash_info info;
 	struct ec_response_get_chip_info chip_info;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	struct cros_ec_priv *priv = (struct cros_ec_priv *)flash->pgm->opaque.data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
 		.list_ranges    = cros_ec_list_ranges,
@@ -978,7 +976,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	priv->region = &regions[0];
 
 	flash->total_size = info.flash_size / 1024;
-	flash->page_size = opaque_programmer->max_data_read;
+	flash->page_size = flash->pgm->opaque.max_data_read;
 	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
 

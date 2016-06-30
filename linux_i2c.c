@@ -58,7 +58,7 @@ int linux_i2c_shutdown(void *data)
 	return 0;
 }
 
-int linux_i2c_init(void)
+int linux_i2c_init(struct flashctx *flash)
 {
 	/* TODO: Eventually this should contain things like
 	   command-line parsing similar to linux_spi. */

@@ -60,7 +60,7 @@ static int nicrealtek_shutdown(void *data)
 	return 0;
 }
 
-int nicrealtek_init(void)
+int nicrealtek_init(struct flashctx *flash)
 {
 	get_io_perms();
 

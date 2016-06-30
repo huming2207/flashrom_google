@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 	/* Probe for up to three flash chips. */
 	const struct flashchip *flash;
 	struct flashctx flashes[3];
-	struct flashctx *fill_flash;
+	struct flashctx *fill_flash = NULL;
 	int startchip = 0;
 	int chipcount = 0;
 	const char *name;
@@ -662,7 +662,12 @@ int main(int argc, char *argv[])
 	/* FIXME: Delay calibration should happen in programmer code. */
 	myusec_calibrate_delay();
 
-	if (programmer_init(prog, pparam)) {
+	/* FIXME: This statement below is arbitrary and only for the case that
+	 * internal_init is called from programmer_init. Find a better
+	 * solution for this. */
+	flashes[0].pgm = &registered_programmers[0];
+
+	if (programmer_init(&flashes[0], prog, pparam)) {
 		msg_gerr("Error: Programmer initialization failed.\n");
 		rc = 1;
 		goto cli_mfg_silent_exit;
@@ -670,7 +675,11 @@ int main(int argc, char *argv[])
 
 	/* FIXME: Delay calibration should happen in programmer code. */
 	for (i = 0; i < ARRAY_SIZE(flashes); i++) {
-		startchip = probe_flash(startchip, &flashes[i], 0);
+		/* FIXME: Instead of always probing with the first registered
+		 * programmer, we should determine which one(s) is correct
+		 * or appropriate to probe with */
+		startchip = probe_flash(&registered_programmers[0],
+					startchip, &flashes[i], 0);
 		if (startchip == -1)
 			break;
 		chipcount++;
@@ -691,7 +700,7 @@ int main(int argc, char *argv[])
 		}
 		if (force && read_it && chip_to_probe) {
 			msg_ginfo("Force read (-f -r -c) requested, pretending the chip is there:\n");
-			startchip = probe_flash(0, &flashes[0], 1);
+			startchip = probe_flash(flashes[0].pgm, 0, &flashes[0], 1);
 			if (startchip == -1) {
 				msg_gerr("Probing for flash chip '%s' failed.\n", chip_to_probe);
 				rc = 1;
@@ -706,11 +715,10 @@ int main(int argc, char *argv[])
 	}
 
 	fill_flash = &flashes[0];
-
 	check_chip_supported(fill_flash);
 
 	size = fill_flash->total_size * 1024;
-	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
+	if (check_max_decode((fill_flash->pgm->buses_supported & fill_flash->bustype), size) &&
 	    (!force)) {
 		msg_gerr("Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");

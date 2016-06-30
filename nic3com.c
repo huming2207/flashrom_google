@@ -86,7 +86,7 @@ static int nic3com_shutdown(void *data)
 	return 0;
 }
 
-int nic3com_init(void)
+int nic3com_init(struct flashctx *flash)
 {
 	get_io_perms();
 

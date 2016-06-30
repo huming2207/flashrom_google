@@ -137,6 +137,7 @@ static const struct bitbang_spi_master bitbang_spi_master_nicintel = {
 	.get_miso = nicintel_bitbang_get_miso,
 	.request_bus = nicintel_request_spibus,
 	.release_bus = nicintel_release_spibus,
+	.half_period = 1,
 };
 
 static int nicintel_spi_shutdown(void *data)
@@ -158,7 +159,7 @@ static int nicintel_spi_shutdown(void *data)
 	return 0;
 }
 
-int nicintel_spi_init(void)
+int nicintel_spi_init(struct flashctx *flash)
 {
 	uint32_t tmp;
 
@@ -181,8 +182,7 @@ int nicintel_spi_init(void)
 	if (register_shutdown(nicintel_spi_shutdown, NULL))
 		return 1;
 
-	/* 1 usec halfperiod delay for now. */
-	if (bitbang_spi_init(&bitbang_spi_master_nicintel, 1))
+	if (bitbang_spi_init(&bitbang_spi_master_nicintel))
 		return 1;
 
 	return 0;

@@ -334,7 +334,7 @@ static const struct par_programmer par_programmer_serprog = {
 
 static enum chipbustype serprog_buses_supported = BUS_NONE;
 
-int serprog_init(void)
+int serprog_init(struct flashctx *flash)
 {
 	uint16_t iface;
 	unsigned char pgmname[17];
