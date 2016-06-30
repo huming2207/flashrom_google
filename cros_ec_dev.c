@@ -338,7 +338,6 @@ static struct opaque_programmer opaque_programmer_cros_ec_dev = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
-	.data		= &cros_ec_dev_priv,
 };
 
 static int cros_ec_dev_shutdown(void *data)
@@ -377,9 +376,10 @@ int cros_ec_probe_dev(struct flashctx *flash)
 
 	msg_pdbg("CROS_EC detected at %s\n", dev_name);
 	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
+	flash->pgm->opaque = opaque_programmer_cros_ec_dev;
 	register_shutdown(cros_ec_dev_shutdown, NULL);
 	cros_ec_dev_priv.detected = 1;
-	flash->pgm->opaque = opaque_programmer_cros_ec_dev;
+	cros_ec_priv = &cros_ec_dev_priv;
 
 	return 0;
 }
