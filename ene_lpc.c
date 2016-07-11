@@ -456,7 +456,7 @@ static int ene_spi_send_command(const struct flashctx *flash,
 	return 0;
 }
 
-static int ene_leave_flash_mode(void *data)
+static int ene_leave_flash_mode(struct flashctx *flash, void *data)
 {
 	int rv = 0;
 	uint8_t reg;

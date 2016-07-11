@@ -793,25 +793,15 @@ static int dediprog_set_spi_flash_voltage_manual(int millivolt)
 	return 0;
 }
 
-static int dediprog_set_spi_flash_voltage_auto(void)
+static int dediprog_set_spi_flash_voltage_auto(struct flashctx *flash)
 {
 	int i, k;
 	int spi_flash_ranges;
-	struct registered_programmer *pgm;
 
 	spi_flash_ranges = flash_supported_voltage_ranges(BUS_SPI);
 	if (spi_flash_ranges < 0)
 		return -1;
 
-	/* FIXME: This first for loop might be logically incorrect (and even if it's not, it's
-		quite hacky and inefficient). Might be able to bypass this by passing in
-		an argument to this function */
-	for (k = 0; k < registered_programmer_count; k++){
-		pgm = &registered_programmers[k];
-		if(pgm->spi.type == SPI_CONTROLLER_DEDIPROG){
-			break;
-		}
-	}
 	if( k == registered_programmer_count )
 		return 1; /* we couldn't find the dediprog registered controller so we're
 				exiting with an error */
@@ -823,8 +813,6 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 		for (j = 0; j < spi_flash_ranges; j++) {
 			/* Dediprog can supply a voltage in this range. */
 			if ((v >= voltage_ranges[j].min) && (v <= voltage_ranges[j].max)) {
-				struct flashctx dummy;
-
 				msg_cdbg("%s: trying %d\n", __func__, v);
 				if (dediprog_set_spi_flash_voltage_manual(v)) {
 					msg_cerr("%s: Failed to set SPI voltage\n", __func__);
@@ -832,13 +820,20 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 				}
 
 				clear_spi_id_cache();
-				if (probe_flash(pgm, 0, &dummy, 0) < 0) {
+				/* FIXME: The call to probe_flash below is redundant because probe flash
+				 * will again set flash->pgm to the supplied pgm, which we are providing
+				 * as flash->pgm. We are doing this so we only have to pass the flashctx
+				 * through to this function (and we cannot change probe_flash to match
+				 * since it is called in other places). We will want to reorganize this
+				 * codepath in the future.
+				 */
+				if (probe_flash(flash->pgm, 0, flash, 0) < 0) {
 					/* No dice, try next voltage supported by Dediprog. */
 					break;
 				}
 
-				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
-					(dummy.model_id == GENERIC_DEVICE_ID)) {
+				if ((flash->manufacture_id == GENERIC_MANUF_ID) ||
+					(flash->model_id == GENERIC_DEVICE_ID)) {
 					break;
 				}
 
@@ -851,10 +846,10 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 }
 
 /* FIXME: ugly function signature */
-static int dediprog_set_spi_voltage(int millivolt, int probe)
+static int dediprog_set_spi_voltage(struct flashctx *flash, int millivolt, int probe)
 {
 	if (probe)
-		return dediprog_set_spi_flash_voltage_auto();
+		return dediprog_set_spi_flash_voltage_auto(flash);
 	else
 		return dediprog_set_spi_flash_voltage_manual(millivolt);
 }
@@ -994,7 +989,7 @@ static const struct spi_programmer spi_programmer_dediprog = {
 	.write_256	= dediprog_spi_write_256,
 };
 
-static int dediprog_shutdown(void *data)
+static int dediprog_shutdown(struct flashctx *flash, void *data)
 {
 	msg_pspew("%s\n", __func__);
 
@@ -1002,7 +997,7 @@ static int dediprog_shutdown(void *data)
 	dediprog_devicetype = DEV_UNKNOWN;
 
 	/* URB 28. Command Set SPI Voltage to 0. */
-	if (dediprog_set_spi_voltage(0x0, 0))
+	if (dediprog_set_spi_voltage(flash, 0x0, 0))
 		return 1;
 
 	if (libusb_release_interface(dediprog_handle, 0)) {
@@ -1148,7 +1143,6 @@ int dediprog_init(struct flashctx *flash)
 	else
 		dediprog_out_endpoint = 1;
 
-
 	/* Set some LEDs as soon as possible to indicate activity.
 	 * Because knowing the firmware version is required to set the LEDs correctly we need to this after
 	 * dediprog_setup() has queried the device and set dediprog_firmwareversion. */
@@ -1156,18 +1150,17 @@ int dediprog_init(struct flashctx *flash)
 
 	/* FIXME: need to do this so buses_supported gets SPI */
 	register_spi_programmer(&spi_programmer_dediprog);
-
+	flash->pgm->spi = spi_programmer_dediprog;
 	/* Select target/socket, frequency and VCC. */
 	if (set_target_flash(FLASH_TYPE_APPLICATION_FLASH_1) ||
 	    dediprog_set_spi_speed(spispeed_idx) ||
-	    dediprog_set_spi_voltage(millivolt, voltage ? 0 : 1)) {
+	    dediprog_set_spi_voltage(flash, millivolt, voltage ? 0 : 1)) {
 		dediprog_set_leds(LED_ERROR);
 		return 1;
 	}
 
 	if (dediprog_leave_standalone_mode())
 		return 1;
-
 
 	dediprog_set_leds(LED_NONE);
 

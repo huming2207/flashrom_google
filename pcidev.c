@@ -270,7 +270,7 @@ struct undo_pci_write_data {
 	};
 };
 
-int undo_pci_write(void *p)
+int undo_pci_write(struct flashctx *flash, void *p)
 {
 	struct undo_pci_write_data *data = p;
 	msg_pdbg("Restoring PCI config space for %02x:%02x:%01x reg 0x%02x\n",

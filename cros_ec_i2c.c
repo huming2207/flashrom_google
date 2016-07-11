@@ -73,13 +73,13 @@ static int ec_timeout_usec = 1000000;
 
 static unsigned int bus;
 
-static int cros_ec_i2c_shutdown(void *data)
+static int cros_ec_i2c_shutdown(struct flashctx *flash, void *data)
 {
 #if USE_CROS_EC_LOCK == 1
 	release_cros_ec_lock();
 #endif
 
-	return linux_i2c_shutdown(data);
+	return linux_i2c_shutdown(flash, data);
 }
 
 void delay_for_command(int command)

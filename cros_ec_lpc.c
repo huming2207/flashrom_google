@@ -505,7 +505,7 @@ static int detect_ec(struct cros_ec_priv *priv) {
 	return 0;
 }
 
-static int cros_ec_lpc_shutdown(void *data)
+static int cros_ec_lpc_shutdown(struct flashctx *flash, void *data)
 {
 #if USE_CROS_EC_LOCK == 1
 	release_cros_ec_lock();

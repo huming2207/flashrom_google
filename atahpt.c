@@ -56,7 +56,7 @@ static const struct par_programmer par_programmer_atahpt = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int atahpt_shutdown(void *data)
+static int atahpt_shutdown(struct flashctx *flash, void *data)
 {
 	/* Flash access is disabled automatically by PCI restore. */
 	pci_cleanup(pacc);

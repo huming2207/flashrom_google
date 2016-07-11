@@ -700,7 +700,7 @@ int main(int argc, char *argv[])
 		for (i = 0; i < chipcount; i++)
 			msg_gerr(" %s", flashes[i].name);
 		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
-		programmer_shutdown();
+		programmer_shutdown(&flashes[0]);
 		exit(1);
 	} else if (!chipcount) {
 		msg_gerr("No EEPROM/flash device found.\n");
@@ -949,7 +949,7 @@ int main(int argc, char *argv[])
 
 	msg_ginfo("%s\n", rc ? "FAILED" : "SUCCESS");
 cli_mfg_silent_exit:
-	programmer_shutdown();  /* must be done after chip_restore() */
+	programmer_shutdown(fill_flash);  /* must be done after chip_restore() */
 #if USE_BIG_LOCK == 1
 	if (!set_ignore_lock)
 		release_big_lock();

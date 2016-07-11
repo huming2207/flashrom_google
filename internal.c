@@ -159,7 +159,7 @@ static const struct par_programmer par_programmer_internal = {
 
 enum chipbustype internal_buses_supported = BUS_NONE;
 
-static int internal_shutdown(void *data)
+static int internal_shutdown(struct flashctx *flash, void *data)
 {
 	release_io_perms();
 	return 0;

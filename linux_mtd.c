@@ -346,7 +346,7 @@ linux_mtd_setup_exit:
 	return ret;
 }
 
-static int linux_mtd_shutdown(void *data)
+static int linux_mtd_shutdown(struct flashctx *flash, void *data)
 {
 	if (dev_fd != -1) {
 		close(dev_fd);

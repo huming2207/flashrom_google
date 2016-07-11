@@ -58,7 +58,7 @@ static const struct par_programmer par_programmer_satasii = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int satasii_shutdown(void *data)
+static int satasii_shutdown(struct flashctx *flash, void *data)
 {
 	physunmap(sii_bar, SATASII_MEMMAP_SIZE);
 	pci_cleanup(pacc);

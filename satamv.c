@@ -57,7 +57,7 @@ static const struct par_programmer par_programmer_satamv = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int satamv_shutdown(void *data)
+static int satamv_shutdown(struct flashctx *flash, void *data)
 {
 	physunmap(mv_bar, 0x20000);
 	pci_cleanup(pacc);

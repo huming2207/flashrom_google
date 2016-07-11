@@ -77,7 +77,7 @@ static const struct par_programmer par_programmer_gfxnvidia = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int gfxnvidia_shutdown(void *data)
+static int gfxnvidia_shutdown(struct flashctx *flash, void *data)
 {
 	physunmap(nvidia_bar, GFXNVIDIA_MEMMAP_SIZE);
 	/* Flash interface access is disabled (and screen enabled) automatically
