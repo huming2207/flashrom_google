@@ -1124,6 +1124,12 @@ static int check_fd_permissions_hwseq(int op_type, uint32_t addr, int count)
 		break;
 	}
 
+	if (i == num_fd_regions) {
+		msg_pspew("%s: Address not covered by any descriptor 0x%06x\n",
+			  __func__, addr);
+		ret = SPI_ACCESS_DENIED;
+	}
+
 	return ret;
 }
 
