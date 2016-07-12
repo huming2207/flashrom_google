@@ -1610,7 +1610,7 @@ static int pch_hwseq_wait_for_cycle_complete(unsigned int timeout,
 	if (hsfs & HSFSC_FCERR) {
 		addr = REGREAD32(PCH100_REG_FADDR) & 0x07FFFFFF;
 		msg_perr("Transaction error between offset 0x%08x and "
-			 "0x%08x (= 0x%08x + %d)!\n",
+			 "0x%08x (= 0x%08x + %d)\n",
 			 addr, addr + len - 1, addr, len - 1);
 		return 1;
 	}
@@ -1968,6 +1968,7 @@ static void prettyprint_ich9_reg_pr(int i, int chipset)
 	uint8_t off;
 	switch (chipset) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		off = PCH100_REG_FPR0 + (i * 4);
 		break;
 	default:
@@ -1992,6 +1993,7 @@ static void ich9_set_pr(int i, int read_prot, int write_prot, int chipset)
 	void *addr;
 	switch (chipset) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		addr = ich_spibar + PCH100_REG_FPR0 + (i * 4);
 		break;
 	default:
@@ -2085,6 +2087,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		spibar_offset = 0x3020;
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		spibar_offset = 0x0;
 		break;
 	case CHIPSET_ICH9:
@@ -2141,6 +2144,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		register_spi_programmer(&spi_programmer_ich7);
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		arg = extract_programmer_param("ich_spi_mode");
 		if (arg && !strcmp(arg, "hwseq")) {
 			ich_spi_mode = ich_hwseq;
@@ -2383,7 +2387,10 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	case CHIPSET_BAYTRAIL:
 		break;
 	default:
-		old = pci_read_byte(dev, 0xdc);
+		if (ich_generation == CHIPSET_APL)
+			old = mmio_readb((void *)dev + 0xdc);
+		else
+			old = pci_read_byte(dev, 0xdc);
 		msg_pdbg("SPI Read Configuration: ");
 		new = (old >> 2) & 0x3;
 		switch (new) {

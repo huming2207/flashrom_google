@@ -247,7 +247,8 @@ static uint32_t read_descriptor_reg(uint8_t section, uint16_t offset,
 	uint32_t control = 0;
 	control |= (section << FDOC_FDSS_OFF) & FDOC_FDSS;
 	control |= (offset << FDOC_FDSI_OFF) & FDOC_FDSI;
-	if (chipset == CHIPSET_100_SERIES_SUNRISE_POINT) {
+	if ((chipset == CHIPSET_100_SERIES_SUNRISE_POINT) ||
+	    (chipset == CHIPSET_APL)) {
 		mmio_le_writel(control, spibar + PCH100_REG_FDOC);
 		return mmio_le_readl(spibar + PCH100_REG_FDOD);
 	} else {

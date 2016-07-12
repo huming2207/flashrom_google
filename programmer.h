@@ -600,6 +600,7 @@ enum ich_chipset {
 	CHIPSET_9_SERIES_WILDCAT_POINT,
 	CHIPSET_100_SERIES_SUNRISE_POINT,
 	CHIPSET_BAYTRAIL,
+	CHIPSET_APL,
 };
 
 extern uint32_t ichspi_bbar;

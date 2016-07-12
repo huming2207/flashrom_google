@@ -1084,6 +1084,7 @@ int probe_flash(int startchip, struct flashctx *fill_flash, int force)
 	 */
 	switch (ich_generation) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		flash_list = flashchips_hwseq;
 		break;
 	default:
