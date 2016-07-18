@@ -1742,7 +1742,8 @@ static int generic_range_table(const struct flashctx *flash,
 
 			break;
 		}
-		case GIGADEVICE_GD25Q128: {
+		case GIGADEVICE_GD25Q128:
+		case GIGADEVICE_GD25LQ128C: {
 			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q128_wp;
 
