@@ -121,7 +121,7 @@ void cli_mfg_usage(const char *name)
 	         "-z|"
 #endif
 	         "-E|-r <file>|-w <file>|-v <file>]\n"
-	       "       [-i <image>[:<file>]] [-c <chipname>] "
+	       "       [-i <image>[:<file>]] [-c <chipname>] [-o <file>]\n"
 	               "[-m [<vendor>:]<part>] [-l <file>]\n"
 	       "       [-p <programmer>[:<parameters>]]\n\n");
 
@@ -157,6 +157,7 @@ void cli_mfg_usage(const char *name)
 	         "<file>\n"
 	       "   -i | --image <name>[:<file>]      only access image <name> "
 	         "from flash layout\n"
+	       "   -o | --output <name>	             log to file <name>\n"
 	       "   -L | --list-supported             print supported devices\n"
 	       "   -x | --extract                    extract regions to files\n"
 #if CONFIG_PRINT_WIKI == 1
@@ -198,6 +199,18 @@ void cli_mfg_abort_usage(const char *name)
 {
 	msg_gerr("Please run \"%s --help\" for usage info.\n", name);
 	exit(1);
+}
+
+static int check_filename(char *filename, char *type)
+{
+        if (!filename || (filename[0] == '\0')) {
+		fprintf(stderr, "Error: No %s file specified.\n", type);
+		return 1;
+	}
+	/* Not an error, but maybe the user intended to specify a CLI option instead of a file name. */
+	if (filename[0] == '-')
+		fprintf(stderr, "Warning: Supplied %s file name starts with -\n", type);
+	return 0;
 }
 
 enum LONGOPT_RETURN_VALUES {
@@ -242,43 +255,44 @@ int main(int argc, char *argv[])
 	int rc = 0;
 	int found_chip = 0;
 
-	const char *optstring = "rRwvnVEfc:m:l:i:p:Lzhbx";
+	const char *optstring = "rRwvnVEfc:m:l:i:p:o:Lzhbx";
 	static struct option long_options[] = {
-		{"read", 0, 0, 'r'},
-		{"write", 0, 0, 'w'},
-		{"erase", 0, 0, 'E'},
-		{"verify", 0, 0, 'v'},
-		{"noverify", 0, 0, 'n'},
-		{"chip", 1, 0, 'c'},
-		{"mainboard", 1, 0, 'm'},
-		{"verbose", 0, 0, 'V'},
-		{"force", 0, 0, 'f'},
-		{"layout", 1, 0, 'l'},
-		{"image", 1, 0, 'i'},
-		{"list-supported", 0, 0, 'L'},
+		{"read",		0, 0, 'r'},
+		{"write",		0, 0, 'w'},
+		{"erase",		0, 0, 'E'},
+		{"verify",		0, 0, 'v'},
+		{"noverify",		0, 0, 'n'},
+		{"chip",		1, 0, 'c'},
+		{"mainboard",		1, 0, 'm'},
+		{"verbose",		0, 0, 'V'},
+		{"force",		0, 0, 'f'},
+		{"layout",		1, 0, 'l'},
+		{"image",		1, 0, 'i'},
+		{"list-supported",	0, 0, 'L'},
 		{"list-supported-wiki", 0, 0, 'z'},
-		{"extract", 0, 0, 'x'},
-		{"programmer", 1, 0, 'p'},
-		{"help", 0, 0, 'h'},
-		{"version", 0, 0, 'R'},
-		{"get-size", 0, 0, LONGOPT_GET_SIZE},
-		{"flash-name", 0, 0, LONGOPT_FLASH_NAME},
-		{"diff", 1, 0, LONGOPT_DIFF},
-		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
-		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
-		{"wp-enable", optional_argument, 0, LONGOPT_WP_ENABLE},
-		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
-		{"wp-list", 0, 0, LONGOPT_WP_LIST},
-		{"broken-timers", 0, 0, 'b' },
-		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
-		{"fast-verify", 0, 0, LONGOPT_FAST_VERIFY},
-		{"ignore-lock", 0, 0, LONGOPT_IGNORE_LOCK},
+		{"extract", 		0, 0, 'x'},
+		{"programmer", 		1, 0, 'p'},
+		{"help", 		0, 0, 'h'},
+		{"version", 		0, 0, 'R'},
+		{"output", 		1, 0, 'o'},
+		{"get-size", 		0, 0, LONGOPT_GET_SIZE},
+		{"flash-name", 		0, 0, LONGOPT_FLASH_NAME},
+		{"diff", 		1, 0, LONGOPT_DIFF},
+		{"wp-status", 		0, 0, LONGOPT_WP_STATUS},
+		{"wp-range", 		0, 0, LONGOPT_WP_SET_RANGE},
+		{"wp-enable", 		optional_argument, 0, LONGOPT_WP_ENABLE},
+		{"wp-disable", 		0, 0, LONGOPT_WP_DISABLE},
+		{"wp-list", 		0, 0, LONGOPT_WP_LIST},
+		{"broken-timers", 	0, 0, 'b' },
+		{"ignore-fmap", 	0, 0, LONGOPT_IGNORE_FMAP},
+		{"fast-verify",		0, 0, LONGOPT_FAST_VERIFY},
+		{"ignore-lock",		0, 0, LONGOPT_IGNORE_LOCK},
 		{0, 0, 0, 0}
 	};
 
 	char *filename = NULL;
 	char *diff_file = NULL;
-
+	char *logfile = NULL;
 	char *tempstr = NULL;
 	char *pparam = NULL;
 	char *wp_mode_opt = NULL;
@@ -352,7 +366,9 @@ int main(int argc, char *argv[])
 			chip_to_probe = strdup(optarg);
 			break;
 		case 'V':
-			verbose++;
+			verbose_screen++;
+			if(verbose_screen > MSG_DEBUG2)
+				verbose_logfile = verbose_screen;
 			break;
 		case 'E':
 			if (++operation_specified > 1) {
@@ -518,6 +534,18 @@ int main(int argc, char *argv[])
 			cli_mfg_usage(argv[0]);
 			exit(0);
 			break;
+		case 'o':
+#ifdef STANDALONE
+			fprintf(stderr, "Log file not supported in standalone mode. Aborting.\n");
+			cli_mfg_abort_usage(argv[0]);
+#else /* STANDALONE */
+			logfile = strdup(optarg);
+			if (logfile[0] == '\0') {
+				fprintf(stderr, "No log filename specified.\n");
+				cli_mfg_abort_usage(argv[0]);
+			}
+#endif /* STANDALONE */
+			break;
 		case LONGOPT_GET_SIZE:
 			get_size = 1;
 			break;
@@ -583,10 +611,23 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+#ifndef STANDALONE
+	if (logfile && check_filename(logfile, "log"))
+		cli_mfg_abort_usage(argv[0]);
+	if (logfile && open_logfile(logfile))
+		return 1;
+#endif /* !STANDALONE */
+
 	if (read_it || write_it || verify_it) {
 		if (argv[optind])
 			filename = argv[optind];
 	}
+
+#ifndef STANDALONE
+	start_logging();
+#endif /* !STANDALONE */
+
+	print_buildinfo();
 
 	if (chip_to_probe) {
 		for (flash = flashchips; flash && flash->name; flash++) {
@@ -958,6 +999,9 @@ cli_mfg_silent_exit:
 		msg_gerr("Unable to re-enable power management\n");
 		rc |= 1;
 	}
+#ifndef STANDALONE
+	rc |= close_logfile();
+#endif /* !STANDALONE */
 
 	return rc;
 }

@@ -279,7 +279,8 @@ enum write_granularity {
 	write_gran_256bytes,
 };
 extern enum chipbustype buses_supported;
-extern int verbose;
+extern int verbose_screen;
+extern int verbose_logfile;
 extern const char flashrom_version[];
 extern char *chip_to_probe;
 void map_flash_registers(struct flashctx *flash);
@@ -296,6 +297,7 @@ char *extract_param(char **haystack, const char *needle, const char *delim);
 int verify_range(struct flashctx *flash, uint8_t *cmpbuf, unsigned int start, unsigned int len, const char *message);
 char *strcat_realloc(char *dest, const char *src);
 void print_version(void);
+void print_buildinfo(void);
 void print_banner(void);
 void list_programmers_linebreak(int startcol, int cols, int paren);
 int selfcheck(void);
@@ -335,6 +337,11 @@ extern enum error_action access_denied_action;
 extern int ignore_error(int x);
 
 /* cli_output.c */
+#ifndef STANDALONE
+int open_logfile(const char * const filename);
+int close_logfile(void);
+void start_logging(void);
+#endif
 /* Let gcc and clang check for correct printf-style format strings. */
 int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 #define MSG_ERROR	0
