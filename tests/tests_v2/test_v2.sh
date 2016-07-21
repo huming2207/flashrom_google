@@ -44,6 +44,9 @@ LOCAL_FLASHROM=""
 PRIMARY_OPTS=""
 SECONDARY_OPTS=""
 
+# Calls preflash_hook() and postflash_hook() before and after doing a command.
+CUSTOM_HOOKS_FILENAME=""
+
 # Region modes
 REGION_MODE_UNKNOWN=0
 REGION_MODE_CLOBBER=1
@@ -105,6 +108,8 @@ General options:
         Upload results to flashrom.org.
 
 Long options:
+    --custom-hooks <filename>
+        Supply a script with custom hooks to run before and after commands.
     --descriptor-region <name>
         Specify region to use in descriptor mode (default: $DESCRIPTOR_REGION)
     --flashmap-region <name>
@@ -138,7 +143,7 @@ fi
 
 LONGOPTS="backup-image:,help,,new:,old:,remote-host:,upload-results:"
 LONGOPTS="${LONGOPTS},primary-programmer:,secondary-programmer:,local-flashrom:"
-LONGOPTS="${LONGOPTS},mode:,skip-consistency-check,small-region"
+LONGOPTS="${LONGOPTS},custom-hooks:,mode:,skip-consistency-check,small-region"
 LONGOPTS="${LONGOPTS},layout-file:,descriptor-region:,flashmap-region:,layout-region:"
 LONGOPTS="${LONGOPTS},no-clean"
 LONGOPTS="${LONGOPTS},ssh-port:"
@@ -202,6 +207,10 @@ while true ; do
 			;;
 
 		# Longopts only
+		--custom-hooks)
+			shift
+			CUSTOM_HOOKS_FILENAME="$1"
+			;;
 		--descriptor-region)
 			shift
 			DESCRIPTOR_REGION="$1"
@@ -258,7 +267,7 @@ fi
 #
 export REMOTE_HOST REMOTE_PORT_OPTION
 export LOCAL REMOTE FATAL NONFATAL EXIT_SUCCESS EXIT_FAILURE
-export SUDO_CMD
+export CUSTOM_HOOKS_FILENAME SUDO_CMD
 . "$(pwd)/tests/tests_v2/cmd.sh"
 
 #

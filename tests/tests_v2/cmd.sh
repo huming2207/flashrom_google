@@ -6,6 +6,16 @@
 # Copyright (C) 2016 Google Inc.
 # Copyright (C) 2014 Sage Electronic Engineering, LLC.
 
+USE_CUSTOM_HOOKS=0
+if [ -n "$CUSTOM_HOOKS_FILENAME" ]; then
+	USE_CUSTOM_HOOKS=1
+	. "$CUSTOM_HOOKS_FILENAME"
+	if [ $? -ne 0 ]; then
+		echo "Failed to source custom hooks file."
+		exit $EXIT_FAILURE
+	fi
+fi
+
 # test a command
 #
 # $1: 0 ($LOCAL) to run command locally,
@@ -65,12 +75,20 @@ _cmd()
 			rc=$?
 		fi
 	else
+		if [ $USE_CUSTOM_HOOKS -eq 1 ]; then
+			preflash_hook $1 "$2" "$3" $4
+		fi
+
 		if [ $silent -eq 0 ]; then
 			$SUDO_CMD $2 > "$pipe_location" 2>/dev/null
 			rc=$?
 		else
 			$SUDO_CMD $2 >/dev/null 2>&1
 			rc=$?
+		fi
+
+		if [ $USE_CUSTOM_HOOKS -eq 1 ]; then
+			postflash_hook $1 "$2" "$3" $4
 		fi
 	fi
 
