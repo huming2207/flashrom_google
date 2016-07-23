@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
 	int list_supported_wiki = 0;
 #endif
 	int operation_specified = 0;
-	int i;
+	int i, j;
 	enum programmer prog = PROGRAMMER_INVALID;
 	int rc = 0;
 	int found_chip = 0;
@@ -674,16 +674,25 @@ int main(int argc, char *argv[])
 	}
 
 	/* FIXME: Delay calibration should happen in programmer code. */
-	for (i = 0; i < ARRAY_SIZE(flashes); i++) {
-		/* FIXME: Instead of always probing with the first registered
-		 * programmer, we should determine which one(s) is correct
-		 * or appropriate to probe with */
-		startchip = probe_flash(&registered_programmers[0],
-					startchip, &flashes[i], 0);
-		if (startchip == -1)
+	for (j = 0; j < registered_programmer_count; j++) {
+		startchip = 0;
+		for (i = 0; i < ARRAY_SIZE(flashes); i++) {
+			startchip = probe_flash(&registered_programmers[j],
+						startchip, &flashes[i], 0);
+			/* FIXME: this if-else code can obviously be simplified, but we are leaving it as
+			 * is to retain the condition structure; we may want to look for a better solution
+			 * of how to probe, which flash/programmer to select, and when to exit.
+			 */
+			if (startchip == -1){
+				break; /* We may want to continue here instead of breaking (see above) */
+			} else {
+				chipcount++;
+				startchip++;
+				break;
+			}
+		}
+		if(chipcount)
 			break;
-		chipcount++;
-		startchip++;
 	}
 
 	if (chipcount > 1) {
