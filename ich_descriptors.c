@@ -127,8 +127,8 @@ void prettyprint_ich_descriptor_component(const struct ich_descriptors *desc)
 		"  4 MB",	/* 011 */
 		"  8 MB",	/* 100 */
 		" 16 MB",	/* 101 */
-		"reserved",	/* 110 */
-		"reserved",	/* 111 */
+		" 32 MB",	/* 110 */
+		" 64 MB",	/* 111 */
 	};
 
 	msg_pdbg2("=== Component Section ===\n");
@@ -759,7 +759,7 @@ int getFCBA_component_density(const struct ich_descriptors *desc, uint8_t idx)
 			 "yet.\n");
 		return 0;
 	}
-	if (size_enc > 5) {
+	if (size_enc > 7) {
 		msg_perr("Density of ICH SPI component with index %d is "
 			 "invalid. Encoded density is 0x%x.\n", idx, size_enc);
 		return 0;

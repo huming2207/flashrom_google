@@ -1794,6 +1794,7 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
 	{0x8086, 0x229c, OK, "Intel", "Braswell", enable_flash_baytrail},
 	{0x8086, 0x9d24, OK, "Intel", "Skylake", enable_flash_sunrisepoint},
+	{0x8086, 0xa224, OK, "Intel", "Lewisburg", enable_flash_sunrisepoint},
 	/*
 	 * Currently, on Apollolake platform, the SPI PCI device is hidden in
 	 * the OS. Thus, flashrom is not able to find the SPI device while
