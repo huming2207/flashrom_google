@@ -452,6 +452,7 @@ static int mtd_wp_enable_writeprotect(const struct flashctx *flash, enum wp_mode
 	if (ioctl(dev_fd, MEMUNLOCK, &entire_chip) == -1) {
 		msg_perr("%s: Failed to disable write-protection, ioctl: %s\n",
 				__func__, strerror(errno));
+		msg_perr("Did you disable WP#?\n");
 		return 1;
 	}
 
@@ -478,6 +479,7 @@ static int mtd_wp_disable_writeprotect(const struct flashctx *flash)
 
 	if (ioctl(dev_fd, MEMUNLOCK, &erase_info) == -1) {
 		msg_perr("%s: ioctl: %s\n", __func__, strerror(errno));
+		msg_perr("Did you disable WP#?\n");
 		return 1;
 	}
 
