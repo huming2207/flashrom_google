@@ -9,10 +9,10 @@ SHAREDSRCDIR = ../..
 
 SRC = $(wildcard *.c)
 
-CFLAGS=-Wall
+CFLAGS += -Wall
 CFLAGS += -MMD -MP -MF $(DEPPATH)/$(@F).d
-# enables functions that populate the descriptor structs from plain dump arrays
-CFLAGS += -D ICH_DESCRIPTORS_FROM_MMAP_DUMP
+# enables functions that populate the descriptor structs from plain binary dumps
+CFLAGS += -D ICH_DESCRIPTORS_FROM_DUMP
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 
 OBJ = $(OBJATH)/$(SRC:%.c=%.o)
@@ -24,8 +24,8 @@ all:$(PROGRAM)
 $(OBJ): $(OBJATH)/%.o : %.c
 	$(CC) $(CFLAGS) -o $@ -c $<
 
-# this enables us to NOT share object files with flashrom,
-# which would lead to unexpected results otherwise (w/o running make clean)
+# this enables us to share source files without simultaneously sharing .o files
+# with flashrom, which would lead to unexpected results (w/o running make clean)
 $(SHAREDOBJ): $(OBJATH)/%.o : $(SHAREDSRCDIR)/%.c
 	$(CC) $(CFLAGS) -o $@ -c $<
 

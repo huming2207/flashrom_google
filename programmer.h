@@ -585,7 +585,6 @@ int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int sta
 void register_spi_programmer(const struct spi_programmer *programmer);
 
 /* ichspi.c */
-#if CONFIG_INTERNAL == 1
 enum ich_chipset {
 	CHIPSET_ICH_UNKNOWN,
 	CHIPSET_ICH7 = 7,
@@ -603,6 +602,7 @@ enum ich_chipset {
 	CHIPSET_APL,
 };
 
+#if CONFIG_INTERNAL == 1
 extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
