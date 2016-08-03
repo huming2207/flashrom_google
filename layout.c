@@ -507,26 +507,28 @@ int process_include_args() {
 	return 0;
 }
 
-int find_next_included_romentry(unsigned int start)
+romlayout_t *get_next_included_romentry(unsigned int start)
 {
 	int i;
 	unsigned int best_start = UINT_MAX;
-	int best_entry = -1;
+	romlayout_t *best_entry = NULL;
+	romlayout_t *cur;
 
 	/* First come, first serve for overlapping regions. */
 	for (i = 0; i < romimages; i++) {
-		if (!rom_entries[i].included)
+		cur = &rom_entries[i];
+		if (!cur->included)
 			continue;
 		/* Already past the current entry? */
-		if (start > rom_entries[i].end)
+		if (start > cur->end)
 			continue;
 		/* Inside the current entry? */
-		if (start >= rom_entries[i].start)
-			return i;
+		if (start >= cur->start)
+			return cur;
 		/* Entry begins after start. */
-		if (best_start > rom_entries[i].start) {
-			best_start = rom_entries[i].start;
-			best_entry = i;
+		if (best_start > cur->start) {
+			best_start = cur->start;
+			best_entry = cur;
 		}
 	}
 	return best_entry;
@@ -571,15 +573,15 @@ out:
 	return overlap_detected;
 }
 
-static int read_content_from_file(int entry, uint8_t *newcontents) {
+static int read_content_from_file(romlayout_t *entry, uint8_t *newcontents) {
 	char *file;
 	FILE *fp;
 	int len;
 
 	/* If file name is specified for this partition, read file
 	 * content to overwrite. */
-	file = rom_entries[entry].file;
-	len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	file = entry->file;
+	len = entry->end - entry->start + 1;
 	if (file[0]) {
 		int numbytes;
 		struct stat s;
@@ -593,7 +595,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 		if (s.st_size > len) {
 			msg_gerr("File %s is %d bytes, region %s is %d bytes.\n"
 				 , file, (int)s.st_size,
-				 rom_entries[entry].name, len);
+				 entry->name, len);
 			return -1;
 		}
 
@@ -601,7 +603,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 			perror(file);
 			return -1;
 		}
-		numbytes = fread(newcontents + rom_entries[entry].start,
+		numbytes = fread(newcontents + entry->start,
 		                 1, s.st_size, fp);
 		fclose(fp);
 		if (numbytes == -1) {
@@ -615,7 +617,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
 	unsigned int start = 0;
-	int entry;
+	romlayout_t *entry;
 	unsigned int size = flash->total_size * 1024;
 
 	/* If no regions were specified for inclusion, assume
@@ -629,59 +631,59 @@ int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *new
 	 */
 	while (start < size) {
 
-		entry = find_next_included_romentry(start);
+		entry = get_next_included_romentry(start);
 		/* No more romentries for remaining region? */
-		if (entry < 0) {
+		if (!entry) {
 			memcpy(newcontents + start, oldcontents + start,
 			       size - start);
 			break;
 		}
 
-		if (rom_entries[entry].start > size) {
+		if (entry->start > size) {
 			msg_gerr("Layout entry \"%s\" begins beyond ROM size.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
-		} else if (rom_entries[entry].end > (size - 1)) {
+		} else if (entry->end > (size - 1)) {
 			msg_gerr("Layout entry \"%s\" ends beyond ROM size.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
 		}
 
-		if (rom_entries[entry].start > rom_entries[entry].end) {
+		if (entry->start > entry->end) {
 			msg_gerr("Layout entry \"%s\" has an invalid range.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
 		}
 
 		/* For non-included region, copy from old content. */
-		if (rom_entries[entry].start > start)
+		if (entry->start > start)
 			memcpy(newcontents + start, oldcontents + start,
-			       rom_entries[entry].start - start);
+			       entry->start - start);
 		/* For included region, copy from file if specified. */
 		if (read_content_from_file(entry, newcontents) < 0) return -1;
 
 		/* Skip to location after current romentry. */
-		start = rom_entries[entry].end + 1;
+		start = entry->end + 1;
 		/* Catch overflow. */
 		if (!start)
 			break;
 	}
-			
+
 	return 0;
 }
-static int write_content_to_file(int entry, uint8_t *buf) {
+static int write_content_to_file(romlayout_t *entry, uint8_t *buf) {
 	char *file;
 	FILE *fp;
-	int len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	int len = entry->end - entry->start + 1;
 
-	file = rom_entries[entry].file;
+	file = entry->file;
 	if (file[0]) {  /* save to file if name is specified. */
 		int numbytes;
 		if ((fp = fopen(file, "wb")) == NULL) {
 			perror(file);
 			return -1;
 		}
-		numbytes = fwrite(buf + rom_entries[entry].start, 1, len, fp);
+		numbytes = fwrite(buf + entry->start, 1, len, fp);
 		fclose(fp);
 		if (numbytes != len) {
 			perror(file);
@@ -776,7 +778,7 @@ int handle_partial_read(
 
 		/* If file is specified, write this partition to file. */
 		if (write_to_file) {
-			if (write_content_to_file(i, buf) < 0)
+			if (write_content_to_file(&rom_entries[i], buf) < 0)
 				return -1;
 		}
 
