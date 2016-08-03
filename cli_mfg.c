@@ -121,8 +121,8 @@ void cli_mfg_usage(const char *name)
 	         "-z|"
 #endif
 	         "-E|-r <file>|-w <file>|-v <file>]\n"
-	       "       [-i <image>[:<file>]] [-c <chipname>] [-o <file>]\n"
-	               "[-m [<vendor>:]<part>] [-l <file>]\n"
+	       "       [-i <image>[:<file>]] [-c <chipname>]\n"
+	               "[-o <file>] [-l <file>]\n"
 	       "       [-p <programmer>[:<parameters>]]\n\n");
 
 	msg_ginfo("Please note that the command line interface for flashrom has "
@@ -145,11 +145,6 @@ void cli_mfg_usage(const char *name)
 	       "   -V | --verbose                    more verbose output\n"
 	       "   -c | --chip <chipname>            probe only for specified "
 	         "flash chip\n"
-#if CONFIG_INTERNAL == 1
-	       /* FIXME: --mainboard should be a programmer parameter */
-	       "   -m | --mainboard <[vendor:]part>  override mainboard "
-	         "detection\n"
-#endif
 	       "   -f | --force                      force specific operations "
 	         "(see man page)\n"
 	       "   -n | --noverify                   don't auto-verify\n"
@@ -255,7 +250,7 @@ int main(int argc, char *argv[])
 	int rc = 0;
 	int found_chip = 0;
 
-	const char *optstring = "rRwvnVEfc:m:l:i:p:o:Lzhbx";
+	const char *optstring = "rRwvnVEfc:l:i:p:o:Lzhbx";
 	static struct option long_options[] = {
 		{"read",		0, 0, 'r'},
 		{"write",		0, 0, 'w'},
@@ -263,7 +258,6 @@ int main(int argc, char *argv[])
 		{"verify",		0, 0, 'v'},
 		{"noverify",		0, 0, 'n'},
 		{"chip",		1, 0, 'c'},
-		{"mainboard",		1, 0, 'm'},
 		{"verbose",		0, 0, 'V'},
 		{"force",		0, 0, 'f'},
 		{"layout",		1, 0, 'l'},
@@ -381,17 +375,6 @@ int main(int argc, char *argv[])
 			/* horrible workaround for excess time spent in
 			 * ichspi.c code: */
 			broken_timer = 1;
-#endif
-			break;
-		case 'm':
-#if CONFIG_INTERNAL == 1
-			tempstr = strdup(optarg);
-			lb_vendor_dev_from_string(tempstr);
-#else
-			msg_gerr("Error: Internal programmer support "
-				"was not compiled in and --mainboard only\n"
-				"applies to the internal programmer. Aborting.\n");
-			cli_mfg_abort_usage(argv[0]);
 #endif
 			break;
 		case 'f':
@@ -657,13 +640,6 @@ int main(int argc, char *argv[])
 	if (prog == PROGRAMMER_INVALID)
 		prog = default_programmer;
 
-#if CONFIG_INTERNAL == 1
-	if ((prog != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
-		msg_gerr("Error: --mainboard requires the internal "
-				"programmer. Aborting.\n");
-		cli_mfg_abort_usage(argv[0]);
-	}
-#endif
 
 #if USE_BIG_LOCK == 1
 	/* get lock before doing any work that touches hardware */
