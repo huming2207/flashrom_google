@@ -285,6 +285,7 @@ int main(int argc, char *argv[])
 	};
 
 	char *filename = NULL;
+	char *layoutfile = NULL;
 	char *diff_file = NULL;
 	char *logfile = NULL;
 	char *tempstr = NULL;
@@ -381,9 +382,11 @@ int main(int argc, char *argv[])
 			force = 1;
 			break;
 		case 'l':
-			tempstr = strdup(optarg);
-			if (read_romlayout(tempstr))
+			if (layoutfile) {
+				fprintf(stderr, "Error: --layout specified more than once. Aborting\n");
 				cli_mfg_abort_usage(argv[0]);
+			}
+			layoutfile = strdup(optarg);
 			break;
 		case 'i':
 			tempstr = strdup(optarg);
@@ -594,6 +597,11 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+	if (layoutfile && check_filename(layoutfile, "layout")) {
+		cli_mfg_abort_usage(argv[0]);
+	}
+
+
 #ifndef STANDALONE
 	if (logfile && check_filename(logfile, "log"))
 		cli_mfg_abort_usage(argv[0]);
@@ -611,6 +619,16 @@ int main(int argc, char *argv[])
 #endif /* !STANDALONE */
 
 	print_buildinfo();
+
+        msg_gdbg("Command line (%i args):", argc - 1);
+	for (i = 0; i < argc; i++) {
+		msg_gdbg(" %s", argv[i]);
+	}
+	msg_gdbg("\n");
+
+	if (layoutfile && read_romlayout(layoutfile)) {
+		cli_mfg_abort_usage(argv[0]);
+	}
 
 	if (chip_to_probe) {
 		for (flash = flashchips; flash && flash->name; flash++) {
