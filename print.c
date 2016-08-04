@@ -573,6 +573,7 @@ const struct board_info boards_known[] = {
 	B("Advantech",	"PCM-5820",		1, "http://www.emacinc.com/sbc_pc_compatible/pcm_5820.htm", NULL),
 	B("agami",	"Aruma",		1, "http://web.archive.org/web/20080212111524/http://www.agami.com/site/ais-6000-series", NULL),
 	B("Albatron",	"PM266A Pro",		1, "http://www.albatron.com.tw/English/Product/MB/pro_detail.asp?rlink=Overview&no=56", NULL), /* FIXME */
+	B("AOpen",	"i945GMx-VFX",		1, NULL, "This is (also?) an OEM board from FCS (used in e.g. ESPRIMO Q5010 with designation D2544-B1)."),
 	B("AOpen",	"vKM400Am-S",		1, "http://usa.aopen.com/products_detail.aspx?Auno=824", NULL),
 	B("Artec Group","DBE61",		1, "http://wiki.thincan.org/DBE61", NULL),
 	B("Artec Group","DBE62",		1, "http://wiki.thincan.org/DBE62", NULL),
@@ -809,6 +810,7 @@ const struct board_info boards_known[] = {
 	B("Lanner",	"EM-8510C",		1, NULL, NULL),
 	B("Lex",	"CV700A",		1, "http://www.lex.com.tw/product/CV700A-spec.htm", NULL),
 	B("Mitac",	"6513WU",		1, "http://web.archive.org/web/20050313054828/http://www.mitac.com/micweb/products/tyan/6513wu/6513wu.htm", NULL),
+	B("MSC",	"Q7-TCTC",		1, "http://www.msc-ge.com/en/produkte/com/moduls/overview/5779-www.html", NULL),
 	B("MSI",	"MS-6153",		1, "http://www.msi.com/product/mb/MS-6153.html", NULL),
 	B("MSI",	"MS-6156",		1, "http://uk.ts.fujitsu.com/rl/servicesupport/techsupport/boards/Motherboards/MicroStar/Ms6156/MS6156.htm", NULL),
 	B("MSI",	"MS-6163 (MS-6163 Pro)",1, "http://www.msi.com/product/mb/MS-6163-Pro.html", NULL),

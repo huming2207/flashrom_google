@@ -1560,6 +1560,16 @@ static int intel_ich_gpio34_raise(void)
 
 /*
  * Suited for:
+ *  - AOpen i945GMx-VFX: Intel 945GM + ICH7-M used in ...
+ *    - FCS ESPRIMO Q5010 (SMBIOS: D2544-B1)
+ */
+static int intel_ich_gpio38_raise(void)
+{
+	return intel_ich_gpio_set(38, 1);
+}
+
+/*
+ * Suited for:
  *  - ASUS M6Ne (laptop): socket 479M (guessed) + Intel 855PM + ICH4-M
  */
 static int intel_ich_gpio43_raise(void)
@@ -2035,6 +2045,19 @@ static int it8718f_gpio63_raise(void)
 	return it87_gpio_set(63, 1);
 }
 
+/*
+ * Suited for all boards with ambiguous DMI chassis information, which should be
+ * whitelisted because they are known to work:
+ * - MSC Q7 Tunnel Creek Module (Q7-TCTC)
+ */
+static int p2_not_a_laptop(void)
+{
+	/* label this board as not a laptop */
+	is_laptop = 0;
+	msg_pdbg("Laptop detection overridden by P2 board enable.\n");
+	return 0;
+}
+
 #endif
 
 /*
@@ -2098,6 +2121,7 @@ const struct board_match board_matches[] = {
 	{0x1106, 0x3177, 0x17F2, 0x3177,  0x1106, 0x3148, 0x17F2, 0x3148, NULL,         NULL, NULL,           P3, "Albatron",    "PM266A Pro",            0,   OK, w836xx_memw_enable_2e},
 	{0x1022, 0x2090,      0,      0,  0x1022, 0x2080,      0,      0, NULL,        "artecgroup", "dbe61", P3, "Artec Group", "DBE61",                 0,   OK, board_artecgroup_dbe6x},
 	{0x1022, 0x2090,      0,      0,  0x1022, 0x2080,      0,      0, NULL,        "artecgroup", "dbe62", P3, "Artec Group", "DBE62",                 0,   OK, board_artecgroup_dbe6x},
+	{0x8086, 0x27b9, 0xa0a0, 0x0632,  0x8086, 0x27da, 0xa0a0, 0x0632, NULL,         NULL, NULL,           P3, "AOpen",       "i945GMx-VFX",           0,   OK, intel_ich_gpio38_raise},
 	{0x8086, 0x277c, 0xa0a0, 0x060b,  0x8086, 0x27da, 0xa0a0, 0x060b, NULL,         NULL, NULL,           P3, "AOpen",       "i975Xa-YDG",            0,   OK, board_aopen_i975xa_ydg},
 	{0x8086, 0x27b8, 0x1849, 0x27b8,  0x8086, 0x27da, 0x1849, 0x27da, "^ConRoeXFire-eSATA2", NULL, NULL,  P3, "ASRock",      "ConRoeXFire-eSATA2",    0,   OK, intel_ich_gpio16_raise},
 	{0x1039, 0x0741, 0x1849, 0x0741,  0x1039, 0x5513, 0x1849, 0x5513, "^K7S41 $",   NULL, NULL,           P3, "ASRock",      "K7S41",                 0,   OK, w836xx_memw_enable_2e},
@@ -2180,6 +2204,7 @@ const struct board_match board_matches[] = {
 	{0x1022, 0x7468,      0,      0,       0,      0,      0,      0, NULL,         "iwill", "dk8_htx",   P3, "IWILL",       "DK8-HTX",               0,   OK, w83627hf_gpio24_raise_2e},
 	{0x8086, 0x27A0, 0x8086, 0x27a0,  0x8086, 0x27b8, 0x8086, 0x27b8, NULL,        "kontron", "986lcd-m", P3, "Kontron",     "986LCD-M",              0,   OK, board_kontron_986lcd_m},
 	{0x8086, 0x2411, 0x8086, 0x2411,  0x8086, 0x7125, 0x0e11, 0xb165, NULL,         NULL, NULL,           P3, "Mitac",       "6513WU",                0,   OK, board_mitac_6513wu},
+	{0x8086, 0x8186, 0x8086, 0x8186,  0x8086, 0x8800, 0x0000, 0x0000, "^MSC Vertriebs GmbH$", NULL, NULL, P2, "MSC",         "Q7-TCTC",               0,   OK, p2_not_a_laptop},
 	{0x10DE, 0x005E, 0x1462, 0x7125,  0x10DE, 0x0052, 0x1462, 0x7125, NULL,         NULL, NULL,           P3, "MSI",         "K8N Neo4-F",            0,   OK, nvidia_mcp_gpio2_raise}, /* TODO: Should probably be K8N Neo4 Platinum, see http://www.coreboot.org/pipermail/flashrom/2010-August/004362.html. */
 	{0x8086, 0x7190,      0,      0,  0x8086, 0x7110,      0,      0, "^MS-6163 (i440BX)$", NULL, NULL,   P3, "MSI",         "MS-6163 (MS-6163 Pro)", 0,   OK, intel_piix4_gpo14_raise},
 	{0x1039, 0x0745,      0,      0,  0x1039, 0x0018,      0,      0, "^MS-6561",   NULL, NULL,           P3, "MSI",         "MS-6561 (745 Ultra)",   0,   OK, w836xx_memw_enable_2e},
