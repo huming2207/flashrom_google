@@ -206,6 +206,8 @@ or Xilinx DLC5 compatible cable)
 .sp
 .BR "* ogp_spi" " (for SPI flash ROMs on Open Graphics Project graphics card)"
 .sp
+.BR "* linux_spi" " (for SPI flash ROMs accessible via /dev/spidevX.Y on Linux)"
+.sp
 Some programmers have optional or mandatory parameters which are described
 in detail in the
 .B PROGRAMMER SPECIFIC INFO
@@ -600,6 +602,17 @@ section above.
 .sp
 More information about the hardware is available at
 .BR http://wiki.opengraphics.org .
+.SS
+.BR "linux_spi " programmer
+You have to specify the SPI controller to use with the
+.sp
+.B "  flashrom \-p linux_spi:dev=/dev/spidevX.Y"
+.sp
+syntax where
+.B /dev/spidevX.Y
+is the Linux device node for your SPI controller.
+.sp
+Please note that the linux_spi driver only works on Linux.
 .SH EXAMPLES
 To back up and update your BIOS, run
 .sp
