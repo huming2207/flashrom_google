@@ -82,8 +82,10 @@ static void print_supported_chips(int host_controller)
 	}
 	/* calculate maximum column widths and by iterating over all chips */
 	for (f = flash; f->name != NULL; f++) {
-		/* Ignore "unknown XXXX SPI chip" entries. */
-		if (!strncmp(f->name, "unknown", 7))
+		/* Ignore generic entries. */
+		if (!strncmp(f->vendor, "Unknown", 7) ||
+		    !strncmp(f->vendor, "Programmer", 10) ||
+		    !strncmp(f->name, "unknown", 7))
 			continue;
 		chipcount++;
 
@@ -169,8 +171,10 @@ static void print_supported_chips(int host_controller)
 	msg_ginfo("(P = PROBE, R = READ, E = ERASE, W = WRITE)\n\n");
 
 	for (f = flash; f->name != NULL; f++) {
-		/* Don't print "unknown XXXX SPI chip" entries. */
-		if (!strncmp(f->name, "unknown", 7))
+		/* Don't print generic entries. */
+		if (!strncmp(f->vendor, "Unknown", 7) ||
+		    !strncmp(f->vendor, "Programmer", 10) ||
+		    !strncmp(f->name, "unknown", 7))
 			continue;
 
 		/* support for multiline vendor names:
