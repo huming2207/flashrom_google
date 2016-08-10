@@ -356,7 +356,7 @@ static int linux_mtd_shutdown(void *data)
 	return 0;
 }
 
-int linux_mtd_init(struct flashctx *flash)
+int linux_mtd_init(void)
 {
 	char *param;
 	int dev_num = -1;	/* linux_mtd_setup will search if dev_num < 0 */

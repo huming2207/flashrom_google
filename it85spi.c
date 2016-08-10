@@ -415,7 +415,7 @@ void setup_it8518_io_base()
 	OUTB(0x01, 0x2f);
 }
 
-int it8518_spi_init(struct flashctx *flash, struct superio s)
+int it8518_spi_init(struct superio s)
 {
 	int ret;
 	if (!(internal_buses_supported & BUS_FWH)) {
@@ -446,13 +446,13 @@ int it8518_spi_init(struct flashctx *flash, struct superio s)
 		 */
 		/* Set this as SPI controller and add FWH | LPC to
 		 * supported buses. */
-		flash->pgm->buses_supported |= BUS_LPC | BUS_FWH;
+		buses_supported |= BUS_LPC | BUS_FWH;
 		register_spi_programmer(&spi_programmer_it8518);
 	}
 	return ret;
 }
 
-int it85xx_spi_init(struct flashctx *flash, struct superio s)
+int it85xx_spi_init(struct superio s)
 {
 	int ret;
 
@@ -490,7 +490,7 @@ int it85xx_spi_init(struct flashctx *flash, struct superio s)
 		 */
 		/* Set this as SPI controller and add FWH | LPC to
 		 * supported buses. */
-		flash->pgm->buses_supported |= BUS_LPC | BUS_FWH;
+		buses_supported |= BUS_LPC | BUS_FWH;
 		register_spi_programmer(&spi_programmer_it85xx);
 	}
 	return ret;

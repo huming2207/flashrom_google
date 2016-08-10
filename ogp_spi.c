@@ -91,7 +91,6 @@ static const struct bitbang_spi_master bitbang_spi_master_ogp = {
 	.get_miso = ogp_bitbang_get_miso,
 	.request_bus = ogp_request_spibus,
 	.release_bus = ogp_release_spibus,
-	.half_period = 0,
 };
 
 static int ogp_spi_shutdown(void *data)
@@ -103,7 +102,7 @@ static int ogp_spi_shutdown(void *data)
 	return 0;
 }
 
-int ogp_spi_init(struct flashctx *flash)
+int ogp_spi_init(void)
 {
 	char *type;
 
@@ -137,7 +136,8 @@ int ogp_spi_init(struct flashctx *flash)
 	if (register_shutdown(ogp_spi_shutdown, NULL))
 		return 1;
 
-	if (bitbang_spi_init(&bitbang_spi_master_ogp))
+	/* no delay for now. */
+	if (bitbang_spi_init(&bitbang_spi_master_ogp, 0))
 		return 1;
 
 	return 0;

@@ -210,7 +210,6 @@ struct flashctx {
 	chipaddr virtual_memory;
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_registers;
-	struct registered_programmer *pgm;
 };
 
 
@@ -286,7 +285,7 @@ extern char *chip_to_probe;
 void map_flash_registers(struct flashctx *flash);
 int read_memmapped(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int erase_flash(struct flashctx *flash);
-int probe_flash(struct registered_programmer *pgm, int startchip, struct flashctx *fill_flash, int force);
+int probe_flash(int startchip, struct flashctx *fill_flash, int force);
 int read_flash(struct flashctx *flash, uint8_t *buf,
 			unsigned int start, unsigned int len);
 int read_flash_to_file(struct flashctx *flash, const char *filename);
@@ -321,13 +320,6 @@ enum error_action {
 
 /* Something happened that shouldn't happen, we'll abort. */
 #define ERROR_FATAL -0xee
-#define ERROR_FLASHROM_BUG -200
-/* We reached one of the hardcoded limits of flashrom. This can be fixed by
- * increasing the limit of a compile-time allocation or by switching to dynamic
- * allocation.
- * Note: If this warning is triggered, check first for runaway registrations.
- */
-#define ERROR_FLASHROM_LIMIT -201
 
 /* Operation failed due to access restriction set in programmer or flash chip */
 #define ACCESS_DENIED -7
@@ -414,5 +406,4 @@ extern struct voltage_range voltage_ranges[];
 /* returns number of unique voltage ranges, or <0 to indicate failure */
 extern int flash_supported_voltage_ranges(enum chipbustype bus);
 
-enum chipbustype get_buses_supported(void);
 #endif				/* !__FLASH_H__ */

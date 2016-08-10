@@ -68,7 +68,7 @@ static int nicintel_shutdown(void *data)
 	return 0;
 }
 
-int nicintel_init(struct flashctx *flash)
+int nicintel_init(void)
 {
 	uintptr_t addr;
 

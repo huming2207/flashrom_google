@@ -795,26 +795,12 @@ static int dediprog_set_spi_flash_voltage_manual(int millivolt)
 
 static int dediprog_set_spi_flash_voltage_auto(void)
 {
-	int i, k;
+	int i;
 	int spi_flash_ranges;
-	struct registered_programmer *pgm;
 
 	spi_flash_ranges = flash_supported_voltage_ranges(BUS_SPI);
 	if (spi_flash_ranges < 0)
 		return -1;
-
-	/* FIXME: This first for loop might be logically incorrect (and even if it's not, it's
-		quite hacky and inefficient). Might be able to bypass this by passing in
-		an argument to this function */
-	for (k = 0; k < registered_programmer_count; k++){
-		pgm = &registered_programmers[k];
-		if(pgm->spi.type == SPI_CONTROLLER_DEDIPROG){
-			break;
-		}
-	}
-	if( k == registered_programmer_count )
-		return 1; /* we couldn't find the dediprog registered controller so we're
-				exiting with an error */
 
 	for (i = 0; i < ARRAY_SIZE(dediprog_supply_voltages); i++) {
 		int j;
@@ -832,7 +818,7 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 				}
 
 				clear_spi_id_cache();
-				if (probe_flash(pgm, 0, &dummy, 0) < 0) {
+				if (probe_flash(0, &dummy, 0) < 0) {
 					/* No dice, try next voltage supported by Dediprog. */
 					break;
 				}
@@ -1016,7 +1002,7 @@ static int dediprog_shutdown(void *data)
 }
 
 /* URB numbers refer to the first log ever captured. */
-int dediprog_init(struct flashctx *flash)
+int dediprog_init(void)
 {
 	char *voltage, *device, *spispeed, *target_str;
 	int spispeed_idx = 1;

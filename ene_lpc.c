@@ -509,7 +509,7 @@ static const struct spi_programmer spi_programmer_ene = {
 	.write_256 = default_spi_write_256,
 };
 
-int ene_probe_spi_flash(struct flashctx *flash, const char *name)
+int ene_probe_spi_flash(const char *name)
 {
 	uint8_t hwver, ediid, i;
 
@@ -546,7 +546,7 @@ int ene_probe_spi_flash(struct flashctx *flash, const char *name)
 
 	ene_enter_flash_mode();
 
-	flash->pgm->buses_supported |= BUS_LPC;
+	buses_supported |= BUS_LPC;
 	register_spi_programmer(&spi_programmer_ene);
 	msg_pdbg("%s: successfully initialized ene\n", __func__);
 	return 0;

@@ -142,7 +142,7 @@ enum {
 	SIZE_AUTO	= -2,
 };
 
-int dummy_init(struct flashctx *flash)
+int dummy_init(void)
 {
 	char *bustext = NULL;
 	char *tmp = NULL;

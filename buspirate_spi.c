@@ -149,7 +149,7 @@ static int buspirate_spi_shutdown(void *data)
 	return 0;
 }
 
-int buspirate_spi_init(struct flashctx *flash)
+int buspirate_spi_init(void)
 {
 	unsigned char buf[512];
 	char *dev = NULL;

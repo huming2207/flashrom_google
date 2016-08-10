@@ -686,7 +686,7 @@ static void ich_set_bbar(uint32_t min_addr)
 
 /* Read len bytes from the fdata/spid register into the data array.
  *
- * Note that using len > flash->pgm->spi.max_data_read will return garbage or
+ * Note that using len > spi_programmer->max_data_read will return garbage or
  * may even crash.
  */
  static void ich_read_data(uint8_t *data, int len, int reg0_off)
@@ -1017,9 +1017,9 @@ static int run_opcode(const struct flashctx *flash, OPCODE op, uint32_t offset,
 		      uint8_t datalength, uint8_t * data)
 {
 	/* max_data_read == max_data_write for all Intel/VIA SPI masters */
-	uint8_t maxlength = flash->pgm->spi.max_data_read;
+	uint8_t maxlength = spi_programmer->max_data_read;
 
-	if (ich_generation == CHIPSET_ICH_UNKNOWN) {
+	if (spi_programmer->type == SPI_CONTROLLER_NONE) {
 		msg_perr("%s: unsupported chipset\n", __func__);
 		return -1;
 	}
@@ -1495,7 +1495,7 @@ int ich_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
 
 	while (len > 0) {
-		block_len = min(len, flash->pgm->opaque.max_data_read);
+		block_len = min(len, opaque_programmer->max_data_read);
 		ich_hwseq_set_addr(addr);
 		hsfc = REGREAD16(ICH9_REG_HSFC);
 		hsfc &= ~HSFC_FCYCLE; /* set read operation */
@@ -1534,7 +1534,7 @@ static int ich_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int ad
 
 	while (len > 0) {
 		ich_hwseq_set_addr(addr);
-		block_len = min(len, flash->pgm->opaque.max_data_write);
+		block_len = min(len, opaque_programmer->max_data_write);
 		ich_fill_data(buf, block_len, ICH9_REG_FDATA0);
 		hsfc = REGREAD16(ICH9_REG_HSFC);
 		hsfc &= ~HSFC_FCYCLE; /* clear operation */
@@ -1722,7 +1722,7 @@ int pch_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
 
 	while (len > 0) {
-		block_len = min(len, flash->pgm->opaque.max_data_read);
+		block_len = min(len, opaque_programmer->max_data_read);
 		/* Check flash region permissions before reading */
 		op_type = HWSEQ_READ;
 		chunk_status = check_fd_permissions_hwseq(op_type,
@@ -1809,7 +1809,7 @@ int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 
 	while (len > 0) {
 		pch_hwseq_set_addr(addr);
-		block_len = min(len, flash->pgm->opaque.max_data_write);
+		block_len = min(len, opaque_programmer->max_data_write);
 		/* Check flash region permissions before writing */
 		op_type = HWSEQ_WRITE;
 		result = check_fd_permissions_hwseq(op_type, addr, block_len);

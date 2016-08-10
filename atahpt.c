@@ -64,7 +64,7 @@ static int atahpt_shutdown(void *data)
 	return 0;
 }
 
-int atahpt_init(struct flashctx *flash)
+int atahpt_init(void)
 {
 	uint32_t reg32;
 

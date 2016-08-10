@@ -30,47 +30,94 @@
 #include "chipdrivers.h"
 #include "programmer.h"
 
+struct opaque_programmer opaque_programmer_none = {
+	.max_data_read = MAX_DATA_UNSPECIFIED,
+	.max_data_write = MAX_DATA_UNSPECIFIED,
+	.probe = NULL,
+	.read = NULL,
+	.write = NULL,
+	.read_status = NULL,
+	.write_status = NULL,
+	.erase = NULL,
+};
+
+struct opaque_programmer *opaque_programmer = &opaque_programmer_none;
+
 int probe_opaque(struct flashctx *flash)
 {
-	return flash->pgm->opaque.probe(flash);
+	if (!opaque_programmer->probe) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 0;
+	}
+
+	return opaque_programmer->probe(flash);
 }
 
 int read_opaque(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
-	return flash->pgm->opaque.read(flash, buf, start, len);
+	if (!opaque_programmer->read) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->read(flash, buf, start, len);
 }
 
 int write_opaque(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
-	return flash->pgm->opaque.write(flash, buf, start, len);
+	if (!opaque_programmer->write) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->write(flash, buf, start, len);
 }
 
 int erase_opaque(struct flashctx *flash, unsigned int blockaddr, unsigned int blocklen)
 {
-	return flash->pgm->opaque.erase(flash, blockaddr, blocklen);
+	if (!opaque_programmer->erase) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->erase(flash, blockaddr, blocklen);
 }
 
 uint8_t read_status_opaque(const struct flashctx *flash)
 {
-	return flash->pgm->opaque.read_status(flash);
+	if (!opaque_programmer->read_status) {
+		msg_perr("%s called before register_opaque_programmer. "
+			 "Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return 1;
+	}
+	return opaque_programmer->read_status(flash);
 }
 
 int write_status_opaque(const struct flashctx *flash, int status)
 {
-	return flash->pgm->opaque.write_status(flash, status);
-}
-
-int register_opaque_programmer(const struct opaque_programmer *pgm)
-{
-	struct registered_programmer rpgm;
-
-	if (!pgm->probe || !pgm->read || !pgm->write || !pgm->erase) {
-		msg_perr("%s called with incomplete programmer definition. "
+	if (!opaque_programmer->write_status) {
+		msg_perr("%s called before register_opaque_programmer. "
 			 "Please report a bug at flashrom@flashrom.org\n",
 			 __func__);
-		return ERROR_FLASHROM_BUG;
+		return 1;
 	}
-	rpgm.buses_supported = BUS_PROG;
-	rpgm.opaque = *pgm;
-	return register_programmer(&rpgm);
+	return opaque_programmer->write_status(flash, status);
+}
+
+void register_opaque_programmer(struct opaque_programmer *pgm)
+{
+	if (!pgm->probe || !pgm->read || !pgm->write || !pgm->erase) {
+		msg_perr("%s called with one of probe/read/write/erase being "
+			 "NULL. Please report a bug at flashrom@flashrom.org\n",
+			 __func__);
+		return;
+	}
+	opaque_programmer = pgm;
+	buses_supported |= BUS_PROG;
 }

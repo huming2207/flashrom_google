@@ -267,7 +267,7 @@ static struct opaque_programmer opaque_programmer_cros_ec_i2c = {
 	.data		= &cros_ec_i2c_priv,
 };
 
-int cros_ec_probe_i2c(struct flashctx *flash, const char *name)
+int cros_ec_probe_i2c(const char *name)
 {
 	const char *path, *s;
 	int ret = 1;
@@ -337,7 +337,6 @@ int cros_ec_probe_i2c(struct flashctx *flash, const char *name)
 	register_opaque_programmer(&opaque_programmer_cros_ec_i2c);
 	cros_ec_i2c_priv.detected = 1;
 	ret = 0;
-	flash->pgm->opaque = opaque_programmer_cros_ec_i2c;
 
 cros_ec_probe_i2c_done:
 	ec_timeout_usec = old_timeout;
