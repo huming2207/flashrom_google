@@ -907,7 +907,7 @@ static const struct spi_programmer spi_programmer_wpce775x = {
 	.write_256 = wpce775x_spi_write_256,
 };
 
-int wpce775x_spi_common_init(struct flashctx *flash)
+int wpce775x_spi_common_init(void)
 {
 	uint8_t fwh_id;
 
@@ -960,7 +960,7 @@ int wpce775x_spi_common_init(struct flashctx *flash)
 
 	/* Add FWH | LPC to list of buses supported if they are not
 	 * both there already. */
-	flash->pgm->buses_supported |= BUS_FWH | BUS_LPC;
+	buses_supported |= BUS_FWH | BUS_LPC;
 	register_spi_programmer(&spi_programmer_wpce775x);
 	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
 	return 0;
@@ -993,7 +993,7 @@ int wpce775x_probe_superio()
 }
 
 /* Called by internal_init() */
-int wpce775x_probe_spi_flash(struct flashctx *flash, const char *name)
+int wpce775x_probe_spi_flash(const char *name)
 {
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
@@ -1001,7 +1001,7 @@ int wpce775x_probe_spi_flash(struct flashctx *flash, const char *name)
 	if (wpce775x_probe_superio())
 		return 1;
 
-	if (wpce775x_spi_common_init(flash))
+	if (wpce775x_spi_common_init())
 		return 1;
 
 	return 0;

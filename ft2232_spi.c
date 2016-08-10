@@ -166,7 +166,7 @@ static const struct spi_programmer spi_programmer_ft2232 = {
 };
 
 /* Returns 0 upon success, a negative number upon errors. */
-int ft2232_spi_init(struct flashctx *flash)
+int ft2232_spi_init(void)
 {
 	int f, ret = 0;
 	struct ftdi_context *ftdic = &ftdic_context;

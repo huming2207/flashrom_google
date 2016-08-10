@@ -64,7 +64,7 @@ static int drkaiser_shutdown(void *data)
 	return 0;
 };
 
-int drkaiser_init(struct flashctx *flash)
+int drkaiser_init(void)
 {
 	uint32_t addr;
 

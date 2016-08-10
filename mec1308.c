@@ -404,7 +404,7 @@ static const struct spi_programmer spi_programmer_mec1308 = {
 };
 
 /* Called by internal_init() */
-int mec1308_probe_spi_flash(struct flashctx *flash, const char *name)
+int mec1308_probe_spi_flash(const char *name)
 {
 	uint16_t sio_port;
 	uint8_t device_id;
@@ -485,7 +485,7 @@ int mec1308_probe_spi_flash(struct flashctx *flash, const char *name)
 	if (enter_passthru_mode())
 		return 1;
 
-	flash->pgm->buses_supported |= BUS_LPC;	/* for LPC <--> SPI bridging */
+	buses_supported |= BUS_LPC;	/* for LPC <--> SPI bridging */
 	register_spi_programmer(&spi_programmer_mec1308);
 	msg_pdbg("%s(): successfully initialized mec1308\n", __func__);
 	return 0;

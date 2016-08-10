@@ -165,7 +165,7 @@ static int manual_mknod(const char *dev)
 }
 
 
-int linux_spi_init(struct flashctx *flash)
+int linux_spi_init(void)
 {
 	char *p, *endp, *dev;
 	uint32_t speed = 0;
