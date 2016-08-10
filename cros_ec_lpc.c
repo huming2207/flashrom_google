@@ -397,6 +397,7 @@ static struct opaque_programmer cros_ec = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
+	.data		= &cros_ec_lpc_priv,
 };
 
 /*
@@ -527,7 +528,6 @@ int cros_ec_probe_lpc(struct flashctx *flash, const char *name) {
 
 	msg_pdbg("CROS_EC detected on LPC bus\n");
 	cros_ec_lpc_priv.detected = 1;
-	cros_ec_priv = &cros_ec_lpc_priv;
 
 	if (flash->pgm->buses_supported & BUS_SPI) {
 		msg_pdbg("%s():%d remove BUS_SPI from buses_supported.\n",
