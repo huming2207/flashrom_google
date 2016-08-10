@@ -320,7 +320,7 @@ struct chip_restore_func_data {
 #define SHUTDOWN_MAXFN 32
 static int shutdown_fn_count = 0;
 struct shutdown_func_data {
-	int (*func) (struct flashctx *flash, void *data);
+	int (*func) (void *data);
 	void *data;
 } static shutdown_fn[SHUTDOWN_MAXFN];
 /* Initialize to 0 to make sure nobody registers a shutdown function before
@@ -338,7 +338,7 @@ static int check_block_eraser(const struct flashctx *flash, int k, int log);
  * Please note that the first (void *data) belongs to the function signature of
  * the function passed as first parameter.
  */
-int register_shutdown(int (*function) (struct flashctx *flash, void *data), void *data)
+int register_shutdown(int (*function) (void *data), void *data)
 {
 	if (shutdown_fn_count >= SHUTDOWN_MAXFN) {
 		msg_perr("Tried to register more than %i shutdown functions.\n",
@@ -423,7 +423,7 @@ int chip_restore()
 	return rc;
 }
 
-int programmer_shutdown(struct flashctx *flash)
+int programmer_shutdown(void)
 {
 	int ret = 0;
 
@@ -431,7 +431,7 @@ int programmer_shutdown(struct flashctx *flash)
 	may_register_shutdown = 0;
 	while (shutdown_fn_count > 0) {
 		int i = --shutdown_fn_count;
-		ret |= shutdown_fn[i].func(flash, shutdown_fn[i].data);
+		ret |= shutdown_fn[i].func(shutdown_fn[i].data);
 	}
 	return ret;
 }

@@ -49,7 +49,7 @@
 
 static int fd = -1;
 
-int linux_i2c_shutdown(struct flashctx *flash, void *data)
+int linux_i2c_shutdown(void *data)
 {
 	if (fd != -1) {
 		close(fd);

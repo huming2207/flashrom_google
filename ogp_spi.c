@@ -94,7 +94,7 @@ static const struct bitbang_spi_master bitbang_spi_master_ogp = {
 	.half_period = 0,
 };
 
-static int ogp_spi_shutdown(struct flashctx *flash, void *data)
+static int ogp_spi_shutdown(void *data)
 {
 	physunmap(ogp_spibar, 4096);
 	pci_cleanup(pacc);

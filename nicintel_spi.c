@@ -140,7 +140,7 @@ static const struct bitbang_spi_master bitbang_spi_master_nicintel = {
 	.half_period = 1,
 };
 
-static int nicintel_spi_shutdown(struct flashctx *flash, void *data)
+static int nicintel_spi_shutdown(void *data)
 {
 	uint32_t tmp;
 

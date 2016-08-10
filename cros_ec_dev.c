@@ -340,7 +340,7 @@ static struct opaque_programmer opaque_programmer_cros_ec_dev = {
 	.erase		= cros_ec_block_erase,
 };
 
-static int cros_ec_dev_shutdown(struct flashctx *flash, void *data)
+static int cros_ec_dev_shutdown(void *data)
 {
 	close(cros_ec_fd);
 	return 0;

@@ -874,7 +874,7 @@ int wpce775x_spi_send_command(const struct flashctx *flash, unsigned int writecn
 	return rc;
 }
 
-static int wpce775x_shutdown(struct flashctx *flash, void *data)
+static int wpce775x_shutdown(void *data)
 {
 	msg_pdbg("%s(): firmware %s\n", __func__,
 		 firmware_changed ? "changed" : "not changed");

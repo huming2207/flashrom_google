@@ -239,7 +239,7 @@ void it85xx_exit_scratch_rom(void)
 	programmer_delay(found_chip->exit_sram_delay);
 }
 
-static int it85xx_shutdown(struct flashctx *flash, void *data)
+static int it85xx_shutdown(void *data)
 {
 	msg_pdbg("%s():%d\n", __func__, __LINE__);
 	it85xx_exit_scratch_rom();

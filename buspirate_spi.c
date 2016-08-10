@@ -114,7 +114,7 @@ static const struct buspirate_spispeeds spispeeds[] = {
 	{NULL,		0x0},
 };
 
-static int buspirate_spi_shutdown(struct flashctx *flash, void *data)
+static int buspirate_spi_shutdown(void *data)
 {
 	unsigned char buf[5];
 	int ret = 0;

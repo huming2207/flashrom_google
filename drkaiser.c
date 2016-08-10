@@ -55,7 +55,7 @@ static const struct par_programmer par_programmer_drkaiser = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int drkaiser_shutdown(struct flashctx *flash, void *data)
+static int drkaiser_shutdown(void *data)
 {
 	physunmap(drkaiser_bar, DRKAISER_MEMMAP_SIZE);
 	/* Flash write is disabled automatically by PCI restore. */

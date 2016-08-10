@@ -45,7 +45,7 @@
  * registration patch, which shifted many lines of code to place
  * serprog_shutdown() before serprog_init(). It should be removed soon.
  */
-static int serprog_shutdown(struct flashctx *flash, void *data);
+static int serprog_shutdown(void *data);
 
 #define S_ACK 0x06
 #define S_NAK 0x15
@@ -666,7 +666,7 @@ static void sp_execute_opbuf(void)
 	sp_flush_stream();
 }
 
-static int serprog_shutdown(struct flashctx *flash, void *data)
+static int serprog_shutdown(void *data)
 {
 	msg_pspew("%s\n", __func__);
 	if ((sp_opbuf_usage) || (sp_max_write_n && sp_write_n_bytes))
