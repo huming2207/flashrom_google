@@ -264,6 +264,7 @@ static struct opaque_programmer opaque_programmer_cros_ec_i2c = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
+	.data		= &cros_ec_i2c_priv,
 };
 
 int cros_ec_probe_i2c(struct flashctx *flash, const char *name)
@@ -334,10 +335,9 @@ int cros_ec_probe_i2c(struct flashctx *flash, const char *name)
 
 	msg_pdbg("CROS_EC detected on I2C bus\n");
 	register_opaque_programmer(&opaque_programmer_cros_ec_i2c);
-	flash->pgm->opaque = opaque_programmer_cros_ec_i2c;
 	cros_ec_i2c_priv.detected = 1;
-	cros_ec_priv = &cros_ec_i2c_priv;
 	ret = 0;
+	flash->pgm->opaque = opaque_programmer_cros_ec_i2c;
 
 cros_ec_probe_i2c_done:
 	ec_timeout_usec = old_timeout;
