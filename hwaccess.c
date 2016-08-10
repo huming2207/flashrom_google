@@ -216,7 +216,7 @@ struct undo_mmio_write_data {
 	};
 };
 
-int undo_mmio_write(struct flashctx *flash, void *p)
+int undo_mmio_write(void *p)
 {
 	struct undo_mmio_write_data *data = p;
 	msg_pdbg("Restoring MMIO space at %p\n", data->addr);

@@ -65,7 +65,7 @@ extern unsigned int required_erase_size;
 
 typedef unsigned long chipaddr;
 
-int register_shutdown(int (*function) (struct flashctx *flash, void *data), void *data);
+int register_shutdown(int (*function) (void *data), void *data);
 #define CHIP_RESTORE_CALLBACK	int (*func) (struct flashctx *flash, uint8_t status)
 
 int register_chip_restore(CHIP_RESTORE_CALLBACK, struct flashctx *flash, uint8_t status);

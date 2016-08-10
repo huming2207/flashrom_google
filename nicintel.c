@@ -59,7 +59,7 @@ static const struct par_programmer par_programmer_nicintel = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int nicintel_shutdown(struct flashctx *flash, void *data)
+static int nicintel_shutdown(void *data)
 {
 	physunmap(nicintel_control_bar, NICINTEL_CONTROL_MEMMAP_SIZE);
 	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);

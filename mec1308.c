@@ -318,7 +318,7 @@ static int enter_passthru_mode(void)
 	return 0;
 }
 
-static int mec1308_shutdown(struct flashctx *flash, void *data)
+static int mec1308_shutdown(void *data)
 {
 	/* Exit passthru mode before performing commands which do not affect
 	   the SPI ROM */

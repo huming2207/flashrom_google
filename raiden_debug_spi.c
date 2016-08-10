@@ -216,7 +216,7 @@ static int find_endpoints(void)
 	return 0;
 }
 
-static int shutdown(struct flashctx *flash, void * data)
+static int shutdown(void * data)
 {
 	CHECK(LIBUSB(libusb_control_transfer(
 			     device->handle,

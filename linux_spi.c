@@ -48,7 +48,7 @@
 
 static int fd = -1;
 
-static int linux_spi_shutdown(struct flashctx *flash, void *data);
+static int linux_spi_shutdown(void *data);
 static int linux_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			const unsigned char *txbuf, unsigned char *rxbuf);
 static int linux_spi_read(struct flashctx *flash, uint8_t *buf,
@@ -225,7 +225,7 @@ int linux_spi_init(struct flashctx *flash)
 	return 0;
 }
 
-static int linux_spi_shutdown(struct flashctx *flash, void *data)
+static int linux_spi_shutdown(void *data)
 {
 	if (fd != -1) {
 		close(fd);

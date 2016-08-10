@@ -131,7 +131,7 @@ struct programmer_entry {
 extern const struct programmer_entry programmer_table[];
 
 int programmer_init(struct flashctx *flash, enum programmer prog, char *param);
-int programmer_shutdown(struct flashctx *flash);
+int programmer_shutdown(void);
 
 enum bitbang_spi_master_type {
 	BITBANG_SPI_INVALID	= 0, /* This must always be the first entry. */
@@ -475,7 +475,7 @@ int raiden_debug_spi_init(struct flashctx *flash);
 
 /* linux_i2c.c */
 #if CONFIG_LINUX_I2C == 1
-int linux_i2c_shutdown(struct flashctx *flash, void *data);
+int linux_i2c_shutdown(void *data);
 int linux_i2c_init(struct flashctx *flash);
 int linux_i2c_open(int bus, int addr, int force);
 void linux_i2c_close(void);

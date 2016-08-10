@@ -120,7 +120,7 @@ static const struct par_programmer par_programmer_dummy = {
 
 enum chipbustype dummy_buses_supported = BUS_NONE;
 
-static int dummy_shutdown(struct flashctx *flash, void *data)
+static int dummy_shutdown(void *data)
 {
 	msg_pspew("%s\n", __func__);
 #if EMULATE_CHIP

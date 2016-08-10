@@ -71,7 +71,7 @@ static const struct par_programmer par_programmer_nic3com = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int nic3com_shutdown(struct flashctx *flash, void *data)
+static int nic3com_shutdown(void *data)
 {
 	/* 3COM 3C90xB cards need a special fixup. */
 	if (id == 0x9055 || id == 0x9001 || id == 0x9004 || id == 0x9005

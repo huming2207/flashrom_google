@@ -51,7 +51,7 @@ static const struct par_programmer par_programmer_nicnatsemi = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int nicnatsemi_shutdown(struct flashctx *flash, void *data)
+static int nicnatsemi_shutdown(void *data)
 {
 	pci_cleanup(pacc);
 	release_io_perms();
