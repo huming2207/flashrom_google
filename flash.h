@@ -122,6 +122,7 @@ extern enum chipbustype target_bus;
 #define FEATURE_ADDR_SHIFTED	(1 << 5)
 #define FEATURE_WRSR_EWSR	(1 << 6)
 #define FEATURE_WRSR_WREN	(1 << 7)
+#define FEATURE_OTP		(1 << 8)
 #define FEATURE_WRSR_EITHER	(FEATURE_WRSR_EWSR | FEATURE_WRSR_WREN)
 
 /* Erasing flash produces zeroes rather than ones */
