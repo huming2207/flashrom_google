@@ -55,6 +55,8 @@ struct cros_ec_priv {
 	unsigned int erase_block_size;
 };
 
+extern struct cros_ec_priv *cros_ec_priv;
+
 int cros_ec_test(struct cros_ec_priv *priv);
 void cros_ec_set_max_size(struct cros_ec_priv *priv,
 			  struct opaque_programmer *op);
