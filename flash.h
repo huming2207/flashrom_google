@@ -122,11 +122,9 @@ extern enum chipbustype target_bus;
 #define FEATURE_ADDR_SHIFTED	(1 << 5)
 #define FEATURE_WRSR_EWSR	(1 << 6)
 #define FEATURE_WRSR_WREN	(1 << 7)
-#define FEATURE_OTP		(1 << 8)
 #define FEATURE_WRSR_EITHER	(FEATURE_WRSR_EWSR | FEATURE_WRSR_WREN)
-
-/* Erasing flash produces zeroes rather than ones */
-#define FEATURE_ERASE_TO_ZERO	(1 << 8)
+#define FEATURE_OTP		(1 << 8)
+#define FEATURE_ERASE_TO_ZERO	(1 << 9)
 #define FEATURE_UNBOUND_READ	(1 << 10)
 
 struct voltage_range {
