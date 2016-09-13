@@ -238,9 +238,10 @@ int main(int argc, char *argv[])
 	int option_index = 0;
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
-	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
-	int dont_verify_it = 0, list_supported = 0, extract_it = 0;
+		get_size = 0, dont_verify_it = 0, list_supported = 0,
+		extract_it = 0, flash_name = 0;
+	int set_wp_range = 0, set_wp_enable = 0, set_wp_disable = 0,
+		wp_status = 0, wp_list = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
