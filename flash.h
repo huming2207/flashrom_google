@@ -359,35 +359,6 @@ int print(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 #define msg_pspew(...)	print(MSG_BARF, __VA_ARGS__)	/* programmer debug barf  */
 #define msg_cspew(...)	print(MSG_BARF, __VA_ARGS__)	/* chip debug barf  */
 
-/* layout.c */
-int specified_partition();
-int read_romlayout(char *name);
-int find_romentry(char *name);
-int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents);
-int add_fmap_entries(struct flashctx *flash);
-int get_num_include_args(void);
-int register_include_arg(char *name);
-int process_include_args(void);
-int num_include_files(void);
-int included_regions_overlap(void);
-int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents);
-int handle_partial_read(
-    struct flashctx *flash,
-    uint8_t *buf,
-    int (*read) (struct flashctx *flash, uint8_t *buf,
-                 unsigned int start, unsigned int len),
-    int write_to_file);
-    /* RETURN: the number of partitions that have beenpartial read.
-    *         ==0 means no partition is specified.
-    *         < 0 means writing file error. */
-int handle_partial_verify(
-    struct flashctx *flash,
-    uint8_t *buf,
-    int (*verify) (struct flashctx *flash, uint8_t *buf, unsigned int start,
-                   unsigned int len, const char* message));
-    /* RETURN: ==0 means all identical.
-               !=0 means buf and flash are different. */
-
 /* spi.c */
 struct spi_command {
 	unsigned int writecnt;
