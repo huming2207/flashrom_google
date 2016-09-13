@@ -36,4 +36,6 @@ typedef struct romlayout {
  */
 int extract_regions(struct flashctx *flash);
 
+int fill_romentry(romlayout_t *entry, int n);
+
 #endif

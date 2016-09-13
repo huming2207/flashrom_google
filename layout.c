@@ -457,6 +457,16 @@ int find_romentry(char *name)
 	return -1;
 }
 
+
+int fill_romentry(romlayout_t *entry, int n)
+{
+	if (!entry)
+		return 1;
+
+	memcpy(entry, &rom_entries[n], sizeof(*entry));
+	return 0;
+}
+
 /*
  * num_include_files - count filenames used with -i args
  *
