@@ -1808,7 +1808,7 @@ void print_version(void)
 	/* send to stderr for chromium os */
 	msg_gerr("flashrom v%s", flashrom_version);
 	print_sysinfo();
-	msg_ginfo("\n");
+	msg_gerr("\n");
 }
 
 void print_banner(void)
