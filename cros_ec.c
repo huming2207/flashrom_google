@@ -938,6 +938,7 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 int cros_ec_probe_size(struct flashctx *flash) {
 	int rc;
 	struct ec_response_flash_info info;
+	struct ec_response_flash_spi_info spi_info;
 	struct ec_response_get_chip_info chip_info;
 	struct block_eraser *eraser;
 	static struct wp wp = {
@@ -965,7 +966,6 @@ int cros_ec_probe_size(struct flashctx *flash) {
 
 	flash->total_size = info.flash_size / 1024;
 	flash->page_size = opaque_programmer->max_data_read;
-	flash->tested = TEST_OK_PREW;
 	eraser = &flash->block_erasers[0];
 
 	/* Allow overriding the erase block size in case EC is incorrect */
@@ -998,6 +998,35 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	if (rc < 0) {
 		msg_perr("%s(): Unable to set write size\n", __func__);
 		return 0;
+	}
+
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_SPI_INFO,
+				0, NULL, 0, &spi_info, sizeof(spi_info));
+	if (rc < 0) {
+		static char chip_vendor[32];
+		static char chip_name[32];
+
+		memcpy(chip_vendor, chip_info.vendor, sizeof(chip_vendor));
+		memcpy(chip_name, chip_info.name, sizeof(chip_name));
+		flash->vendor = chip_vendor;
+		flash->name = chip_name;
+		flash->tested = TEST_OK_PREWU;
+	} else {
+		const struct flashchip *f;
+		uint32_t mfg = spi_info.jedec[0];
+		uint32_t model = (spi_info.jedec[1] << 8) | spi_info.jedec[2];
+
+		for (f = flashchips; f && f->name; f++) {
+			if (f->bustype != BUS_SPI)
+				continue;
+			if ((f->manufacture_id == mfg) &&
+				f->model_id == model) {
+				flash->vendor = f->vendor;
+				flash->name = f->name;
+				flash->tested = f->tested;
+				break;
+			}
+		}
 	}
 
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
