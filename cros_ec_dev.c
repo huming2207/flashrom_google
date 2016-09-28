@@ -52,8 +52,7 @@
 #include "cros_ec.h"
 #include "programmer.h"
 
-#define CROS_EC_DEV_SUFFIX "/dev/cros_"
-#define CROS_EC_DEV_NAME CROS_EC_DEV_SUFFIX "XX"
+#define CROS_EC_DEV_PREFIX "/dev/cros_"
 #define CROS_EC_COMMAND_RETRIES	50
 
 int cros_ec_fd;		/* File descriptor for kernel device */
@@ -348,7 +347,7 @@ static int cros_ec_dev_shutdown(void *data)
 
 int cros_ec_probe_dev(void)
 {
-	char dev_name[strlen(CROS_EC_DEV_NAME)];
+	char dev_path[32];
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
@@ -356,11 +355,11 @@ int cros_ec_probe_dev(void)
 	if (cros_ec_parse_param(&cros_ec_dev_priv))
 		return 1;
 
-	strcpy(dev_name, CROS_EC_DEV_SUFFIX);
-	strcat(dev_name, cros_ec_dev_priv.dev);
+	snprintf(dev_path, sizeof(dev_path), "%s%s",
+			CROS_EC_DEV_PREFIX, cros_ec_dev_priv.dev);
 
-	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, dev_name);
-	cros_ec_fd = open(dev_name, O_RDWR);
+	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, dev_path);
+	cros_ec_fd = open(dev_path, O_RDWR);
 	if (cros_ec_fd < 0)
 		return cros_ec_fd;
 
@@ -374,7 +373,7 @@ int cros_ec_probe_dev(void)
 
 	cros_ec_set_max_size(&cros_ec_dev_priv, &opaque_programmer_cros_ec_dev);
 
-	msg_pdbg("CROS_EC detected at %s\n", dev_name);
+	msg_pdbg("CROS_EC detected at %s\n", dev_path);
 	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
 	register_shutdown(cros_ec_dev_shutdown, NULL);
 	cros_ec_dev_priv.detected = 1;
