@@ -53,6 +53,8 @@
 
 struct cros_ec_priv *cros_ec_priv;
 
+static int set_wp(int enable);	/* FIXME: move set_wp() */
+
 struct wp_data {
 	int enable;
 	unsigned int start;
@@ -322,15 +324,78 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 	return rc;
 }
 
+static int cros_ec_restore_wp(void *data)
+{
+	msg_pdbg("Restoring EC soft WP.\n");
+	return set_wp(1);
+}
 
-/* Given an image, this function parses FMAP and recognize the firmware
- * ranges.
+static int cros_ec_wp_is_enabled(void)
+{
+	struct ec_params_flash_protect p;
+	struct ec_response_flash_protect r;
+	int rc;
+
+	memset(&p, 0, sizeof(p));
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
+			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("FAILED: Cannot get the write protection status: %d\n",
+			 rc);
+		return -1;
+	} else if (rc < sizeof(r)) {
+		msg_perr("FAILED: Too little data returned (expected:%zd, "
+			 "actual:%d)\n", sizeof(r), rc);
+		return -1;
+	}
+
+	if (r.flags & (EC_FLASH_PROTECT_RO_NOW | EC_FLASH_PROTECT_ALL_NOW))
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Prepare EC for update:
+ * - Disable soft WP if needed.
+ * - Parse flashmap.
+ * - Jump to RO firmware.
  */
 int cros_ec_prepare(uint8_t *image, int size) {
 	struct fmap *fmap;
-	int i, j;
+	int i, j, wp_status;
 
 	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
+
+	/*
+	 * If HW WP is disabled we may still need to disable write protection
+	 * that is active on the EC. Otherwise the EC can reject erase/write
+	 * commands.
+	 *
+	 * Failure is OK since HW WP might be enabled or the EC needs to be
+	 * rebooted for the change to take effect. We can still update RW
+	 * portions.
+	 *
+	 * If disabled here, EC WP will be restored at the end so that
+	 * "--wp-enable" does not need to be run later. This greatly
+	 * simplifies logic for developers and scripts.
+	 */
+	wp_status = cros_ec_wp_is_enabled();
+	if (wp_status < 0) {
+		return 1;
+	} else if (wp_status == 1) {
+		msg_pdbg("Attempting to disable EC soft WP.\n");
+		if (!set_wp(0)) {
+			msg_pdbg("EC soft WP disabled successfully.\n");
+			if (register_shutdown(cros_ec_restore_wp, NULL))
+				return 1;
+		} else {
+			msg_pdbg("Failed. Hardware WP might in effect or EC "
+				"needs to be rebooted first.\n");
+		}
+	} else {
+		msg_pdbg("EC soft WP is already disabled.\n");
+	}
 
 	// Parse the fmap in the image file and cache the firmware ranges.
 	fmap = fmap_find_in_memory(image, size);

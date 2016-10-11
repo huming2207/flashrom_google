@@ -2134,7 +2134,7 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 	}
 
 	if (write_it) {
-		// parse the new fmap
+		// parse the new fmap and disable soft WP if necessary
 		if ((ret = cros_ec_prepare(newcontents, size))) {
 			msg_cerr("CROS_EC prepare failed, ret=%d.\n", ret);
 			goto out;
