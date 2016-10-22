@@ -995,15 +995,31 @@ int wpce775x_probe_superio()
 /* Called by internal_init() */
 int wpce775x_probe_spi_flash(const char *name)
 {
+	int ret = 0;
+	char *p = NULL;
+
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
-	if (wpce775x_probe_superio())
-		return 1;
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("mec1308 only supports \"ec\" type devices\n");
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
 
-	if (wpce775x_spi_common_init())
-		return 1;
+	if (wpce775x_probe_superio()) {
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
 
-	return 0;
+	if (wpce775x_spi_common_init()) {
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
+
+wpce775x_probe_spi_flash_exit:
+	free(p);
+	return ret;
 }
 #endif

@@ -415,9 +415,28 @@ void setup_it8518_io_base()
 	OUTB(0x01, 0x2f);
 }
 
+static int check_params(void)
+{
+	int ret = 0;
+	char *p = NULL;
+
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("it85xx only supports \"ec\" type devices\n");
+		ret = 1;
+	}
+
+	free(p);
+	return ret;
+}
+
 int it8518_spi_init(struct superio s)
 {
 	int ret;
+
+	if (check_params())
+		return 1;
+
 	if (!(internal_buses_supported & BUS_FWH)) {
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
@@ -459,6 +478,9 @@ int it85xx_spi_init(struct superio s)
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
+	if (check_params())
+		return 1;
+
 	found_chip = &ite_chips[ITE_IT85XX];
 
 	/*
@@ -493,6 +515,7 @@ int it85xx_spi_init(struct superio s)
 		buses_supported |= BUS_LPC | BUS_FWH;
 		register_spi_programmer(&spi_programmer_it85xx);
 	}
+
 	return ret;
 }
 
