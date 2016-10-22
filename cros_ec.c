@@ -941,10 +941,11 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
  */
 int cros_ec_parse_param(struct cros_ec_priv *priv)
 {
-	char *p;
+	int ret = 0;
+	char *dev = NULL, *type = NULL, *block = NULL;
 
-	p = extract_programmer_param("dev");
-	if (p) {
+	dev = extract_programmer_param("dev");
+	if (dev) {
 		unsigned int index;
 		char *endptr = NULL;
 
@@ -954,56 +955,66 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 		 * a number: 0: main EC, 1: PD
 		 * works only on Samus.
 		 */
-		index = strtoul(p, &endptr, 10);
-		if (errno || (endptr != (p + 1)) || (strlen(p) > 1)) {
-			msg_perr("Invalid argument: \"%s\"\n", p);
-			return 1;
+		index = strtoul(dev, &endptr, 10);
+		if (errno || (endptr != (dev + 1)) || (strlen(dev) > 1)) {
+			msg_perr("Invalid argument: \"%s\"\n", dev);
+			ret = 1;
+			goto cros_ec_parse_param_exit;
 		}
 
 		if (index > 1) {
 			msg_perr("%s: Invalid device index\n", __func__);
-			return 1;
+			ret = 1;
+			goto cros_ec_parse_param_exit;
 		}
 		priv->dev = ec_type[index];
 		msg_pdbg("Target %s used\n", priv->dev);
 	}
 
-	p = extract_programmer_param("type");
-	if (p) {
+	type = extract_programmer_param("type");
+	if (type) {
 		unsigned int index;
 		for (index = 0; index < ARRAY_SIZE(ec_type); index++)
-			if (!strcmp(p, ec_type[index]))
+			if (!strcmp(type, ec_type[index]))
 				break;
 		if (index == ARRAY_SIZE(ec_type)) {
-			msg_perr("Invalid argument: \"%s\"\n", p);
-			return 1;
+			msg_perr("Invalid argument: \"%s\"\n", type);
+			ret = 1;
+			goto cros_ec_parse_param_exit;
 		}
 		priv->dev = ec_type[index];
 		msg_pdbg("Target %s used\n", priv->dev);
 	}
 
-	p = extract_programmer_param("block");
-	if (p) {
-		unsigned int block;
+	block = extract_programmer_param("block");
+	if (block) {
+		unsigned int block_size;
 		char *endptr = NULL;
 
 		errno = 0;
-		block = strtoul(p, &endptr, 0);
-		if (errno || (strlen(p) > 10) || (endptr != (p + strlen(p)))) {
-			msg_perr("Invalid argument: \"%s\"\n", p);
-			return 1;
+		block_size = strtoul(block, &endptr, 0);
+		if (errno || (strlen(block) > 10) ||
+			(endptr != (block + strlen(block)))) {
+			msg_perr("Invalid argument: \"%s\"\n", block);
+			ret = 1;
+			goto cros_ec_parse_param_exit;
 		}
 
-		if (block <= 0) {
+		if (block_size <= 0) {
 			msg_perr("%s: Invalid block size\n", __func__);
-			return 1;
+			ret = 1;
+			goto cros_ec_parse_param_exit;
 		}
 
-		msg_pdbg("Override block size to 0x%x\n", block);
-		priv->erase_block_size = block;
+		msg_pdbg("Override block size to 0x%x\n", block_size);
+		priv->erase_block_size = block_size;
 	}
 
-	return 0;
+cros_ec_parse_param_exit:
+	free(dev);
+	free(type);
+	free(block);
+	return ret;
 }
 
 int cros_ec_probe_size(struct flashctx *flash) {

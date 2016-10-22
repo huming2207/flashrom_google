@@ -389,6 +389,7 @@ int linux_mtd_init(void)
 	ret = 0;
 linux_mtd_init_exit:
 	msg_pdbg("%s: %s\n", __func__, ret == 0 ? "success." : "failed.");
+	free(param);
 	return ret;
 }
 

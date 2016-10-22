@@ -1004,12 +1004,13 @@ static int dediprog_shutdown(void *data)
 /* URB numbers refer to the first log ever captured. */
 int dediprog_init(void)
 {
-	char *voltage, *device, *spispeed, *target_str;
+	char *voltage = NULL, *device = NULL, *spispeed = NULL,
+	     *target_str = NULL;
 	int spispeed_idx = 1;
 	int millivolt = 0;
 	long usedevice = 0;
 	long target = 1;
-	int i, ret;
+	int i, ret = 0;
 
 	msg_pspew("%s\n", __func__);
 
@@ -1023,18 +1024,19 @@ int dediprog_init(void)
 		}
 		if (!spispeeds[i].name) {
 			msg_perr("Error: Invalid spispeed value: '%s'.\n", spispeed);
-			free(spispeed);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
-		free(spispeed);
 	}
 
 	voltage = extract_programmer_param("voltage");
 	if (voltage) {
 		millivolt = parse_voltage(voltage);
 		free(voltage);
-		if (millivolt < 0)
-			return 1;
+		if (millivolt < 0) {
+			ret = 1;
+			goto dediprog_init_exit;
+		}
 		msg_pinfo("Setting voltage to %i mV\n", millivolt);
 	}
 
@@ -1045,22 +1047,21 @@ int dediprog_init(void)
 		usedevice = strtol(device, &dev_suffix, 10);
 		if (errno != 0 || device == dev_suffix) {
 			msg_perr("Error: Could not convert 'device'.\n");
-			free(device);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		if (usedevice < 0 || usedevice > UINT_MAX) {
 			msg_perr("Error: Value for 'device' is out of range.\n");
-			free(device);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		if (strlen(dev_suffix) > 0) {
 			msg_perr("Error: Garbage following 'device' value.\n");
-			free(device);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		msg_pinfo("Using device %li.\n", usedevice);
 	}
-	free(device);
 
 	target_str = extract_programmer_param("target");
 	if (target_str) {
@@ -1069,61 +1070,68 @@ int dediprog_init(void)
 		target = strtol(target_str, &target_suffix, 10);
 		if (errno != 0 || target_str == target_suffix) {
 			msg_perr("Error: Could not convert 'target'.\n");
-			free(target_str);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		if (target < 1 || target > 2) {
 			msg_perr("Error: Value for 'target' is out of range.\n");
-			free(target_str);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		if (strlen(target_suffix) > 0) {
 			msg_perr("Error: Garbage following 'target' value.\n");
-			free(target_str);
-			return 1;
+			ret = 1;
+			goto dediprog_init_exit;
 		}
 		msg_pinfo("Using target %li.\n", target);
 	}
-	free(target_str);
 
 	/* Here comes the USB stuff. */
 	libusb_init(&usb_ctx);
 	if (!usb_ctx) {
 		msg_perr("Could not initialize libusb!\n");
-		return 1;
+		ret = 1;
+		goto dediprog_init_exit;
 	}
 	dediprog_handle = get_device_by_vid_pid_number(0x0483, 0xdada, (unsigned int) usedevice);
 	if (!dediprog_handle) {
 		msg_perr("Could not find a Dediprog programmer on USB!\n");
 		libusb_exit(usb_ctx);
-		return 1;
+		ret = 1;
+		goto dediprog_init_exit;
 	}
-	ret = libusb_set_configuration(dediprog_handle, 1);
-	if (ret != 0) {
+	if (libusb_set_configuration(dediprog_handle, 1)) {
 		msg_perr("Could not set USB device configuration: %i %s\n", ret, libusb_error_name(ret));
 		libusb_close(dediprog_handle);
 		libusb_exit(usb_ctx);
-		return 1;
+		ret = 1;
+		goto dediprog_init_exit;
 	}
-	ret = libusb_claim_interface(dediprog_handle, 0);
-	if (ret < 0) {
+	if (libusb_claim_interface(dediprog_handle, 0) < 0) {
 		msg_perr("Could not claim USB device interface %i: %i %s\n", 0, ret, libusb_error_name(ret));
 		libusb_close(dediprog_handle);
 		libusb_exit(usb_ctx);
-		return 1;
+		ret = 1;
+		goto dediprog_init_exit;
 	}
 
-	if (register_shutdown(dediprog_shutdown, NULL))
-		return 1;
+	if (register_shutdown(dediprog_shutdown, NULL)) {
+		ret = 1;
+		goto dediprog_init_exit;
+	}
 
 	/* Try reading the devicestring. If that fails and the device is old
 	 * (FW < 6.0.0) then we need to try the "set voltage" command and then
 	 * attempt to read the devicestring again. */
 	if (dediprog_check_devicestring()) {
-		if (dediprog_set_voltage())
-			return 1;
-		if (dediprog_check_devicestring())
-			return 1;
+		if (dediprog_set_voltage()) {
+			ret = 1;
+			goto dediprog_init_exit;
+		}
+		if (dediprog_check_devicestring()) {
+			ret = 1;
+			goto dediprog_init_exit;
+		}
 	}
 
 	/* SF100 firmware exposes only one endpoint for in/out, SF600 firmware
@@ -1148,15 +1156,22 @@ int dediprog_init(void)
 	    dediprog_set_spi_speed(spispeed_idx) ||
 	    dediprog_set_spi_voltage(millivolt, voltage ? 0 : 1)) {
 		dediprog_set_leds(LED_ERROR);
-		return 1;
+		ret = 1;
+		goto dediprog_init_exit;
 	}
 
-	if (dediprog_leave_standalone_mode())
-		return 1;
-
+	if (dediprog_leave_standalone_mode()) {
+		ret = 1;
+		goto dediprog_init_exit;
+	}
 
 	dediprog_set_leds(LED_NONE);
 
-	return 0;
+dediprog_init_exit:
+	free(voltage);
+	free(device);
+	free(spispeed);
+	free(target_str);
+	return ret;
 }
 
