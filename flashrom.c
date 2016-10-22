@@ -406,11 +406,6 @@ int programmer_init(enum programmer prog, char *param)
 	msg_pdbg("Initializing %s programmer\n",
 		 programmer_table[programmer].name);
 	ret = programmer_table[programmer].init();
-	if (programmer_param && strlen(programmer_param)) {
-		msg_perr("Unhandled programmer parameters: %s\n",
-			 programmer_param);
-		/* Do not error out here, the init itself was successful. */
-	}
 	return ret;
 }
 
@@ -548,14 +543,12 @@ char *strcat_realloc(char *dest, const char *src)
 	return dest;
 }
 
-/* This is a somewhat hacked function similar in some ways to strtok().
- * It will look for needle with a subsequent '=' in haystack, return a copy of
- * needle and remove everything from the first occurrence of needle to the next
- * delimiter from haystack.
+/* This is a somewhat hacked function similar in some ways to strtok(). It will
+ * look for needle with a subsequent '=' in haystack, return a copy of needle.
  */
 char *extract_param(char **haystack, const char *needle, const char *delim)
 {
-	char *param_pos, *opt_pos, *rest;
+	char *param_pos, *opt_pos;
 	char *opt = NULL;
 	int optlen;
 	int needlelen;
@@ -600,11 +593,6 @@ char *extract_param(char **haystack, const char *needle, const char *delim)
 		}
 		strncpy(opt, opt_pos, optlen);
 		opt[optlen] = '\0';
-		rest = opt_pos + optlen;
-		/* Skip all delimiters after the current parameter. */
-		rest += strspn(rest, delim);
-		memmove(param_pos, rest, strlen(rest) + 1);
-		/* We could shrink haystack, but the effort is not worth it. */
 	}
 
 	return opt;
