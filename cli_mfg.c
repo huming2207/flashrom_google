@@ -38,8 +38,6 @@
 
 #define LOCK_TIMEOUT_SECS	180
 
-/* This variable is shared with doit() in flashrom.c */
-int set_ignore_fmap = 0;
 int set_ignore_lock = 0;
 
 #if CONFIG_INTERNAL == 1
@@ -242,6 +240,7 @@ int main(int argc, char *argv[])
 		extract_it = 0, flash_name = 0;
 	int set_wp_range = 0, set_wp_enable = 0, set_wp_disable = 0,
 		wp_status = 0, wp_list = 0;
+	int set_ignore_fmap = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -865,6 +864,19 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* If the user doesn't specify any -i argument, then we can skip the
+	 * fmap parsing to speed up. */
+	if (get_num_include_args() == 0 && !extract_it) {
+		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
+		set_ignore_fmap = 1;
+	}
+
+	/* add entries for regions specified in flashmap */
+	if (!set_ignore_fmap && add_fmap_entries(fill_flash) < 0) {
+		rc = 1;
+		goto cli_mfg_silent_exit;
+	}
+
 	/* Note: set_wp_range must happen before set_wp_enable */
 	if (set_wp_range) {
 		unsigned int start, len;
@@ -951,13 +963,6 @@ int main(int argc, char *argv[])
 			rc = 1;
 		}
 		goto cli_mfg_silent_exit;
-	}
-
-	/* If the user doesn't specify any -i argument, then we can skip the
-	 * fmap parsing to speed up. */
-	if (get_num_include_args() == 0 && !extract_it) {
-		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
-		set_ignore_fmap = 1;
 	}
 
 	if (read_it || write_it || erase_it || verify_it || extract_it) {

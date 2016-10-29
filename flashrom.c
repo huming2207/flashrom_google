@@ -1986,12 +1986,6 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 	if (flash->unlock)
 		flash->unlock(flash);
 
-	/* add entries for regions specified in flashmap */
-	if (!set_ignore_fmap && add_fmap_entries(flash) < 0) {
-		ret = 1;
-		goto out_nofree;
-	}
-
 	if (extract_it) {
 		ret = extract_regions(flash);
 		goto out_nofree;
