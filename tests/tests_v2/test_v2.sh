@@ -318,6 +318,38 @@ export REMOTE_HOST REMOTE_PORT_OPTION
 export LOCAL REMOTE FATAL NONFATAL EXIT_SUCCESS EXIT_FAILURE
 export CUSTOM_HOOKS_FILENAME SUDO_CMD
 . "$(pwd)/tests/tests_v2/cmd.sh"
+
+# We will set up a logs directory within the tmpdirs to store
+# all output logs.
+LOGS="logs"
+
+# Setup temporary working directories:
+# LOCAL_TMPDIR:  Working directory on local host.
+# REMOTE_TMPDIR: Working directory on remote host.
+# TMPDIR:        The temporary directy in which we do most of the work. This is
+#                convenient for commands that depend on $DO_REMOTE.
+LOCAL_TMPDIR=$(mktemp -d --tmpdir flashrom_test.XXXXXXXX)
+if [ $? -ne 0 ] ; then
+	printf "Could not create temporary directory\n"
+	exit $EXIT_FAILURE
+fi
+mkdir "${LOCAL_TMPDIR}/${LOGS}"
+
+if [ $DO_REMOTE -eq 1 ]; then
+	REMOTE_TMPDIR=$(ssh root@${REMOTE_HOST} mktemp -d --tmpdir flashrom_test.XXXXXXXX)
+	if [ $? -ne 0 ] ; then
+		printf "Could not create temporary directory\n"
+		exit $EXIT_FAILURE
+	fi
+	scmd $REMOTE "mkdir ${REMOTE_TMPDIR}/${LOGS}"
+fi
+
+if [ $DO_REMOTE -eq 0 ]; then
+	TMPDIR="$LOCAL_TMPDIR"
+else
+	TMPDIR="$REMOTE_TMPDIR"
+fi
+
 #
 # Test command-line validity.
 #
@@ -417,37 +449,6 @@ test_cmd $DO_REMOTE "$OLD_FLASHROM --help" $NONFATAL
 if [ $? -ne 0 ]; then
 	printf "Old flashrom binary is not usable.\n"
 	exit $EXIT_FAILURE
-fi
-
-# We will set up a logs directory within the tmpdirs to store
-# all output logs.
-LOGS="logs"
-
-# Setup temporary working directories:
-# LOCAL_TMPDIR:  Working directory on local host.
-# REMOTE_TMPDIR: Working directory on remote host.
-# TMPDIR:        The temporary directy in which we do most of the work. This is
-#                convenient for commands that depend on $DO_REMOTE.
-LOCAL_TMPDIR=$(mktemp -d --tmpdir flashrom_test.XXXXXXXX)
-if [ $? -ne 0 ] ; then
-	printf "Could not create temporary directory\n"
-	exit $EXIT_FAILURE
-fi
-mkdir "${LOCAL_TMPDIR}/${LOGS}"
-
-if [ $DO_REMOTE -eq 1 ]; then
-	REMOTE_TMPDIR=$(ssh root@${REMOTE_HOST} mktemp -d --tmpdir flashrom_test.XXXXXXXX)
-	if [ $? -ne 0 ] ; then
-		printf "Could not create temporary directory\n"
-		exit $EXIT_FAILURE
-	fi
-	scmd $REMOTE "mkdir ${REMOTE_TMPDIR}/${LOGS}"
-fi
-
-if [ $DO_REMOTE -eq 0 ]; then
-	TMPDIR="$LOCAL_TMPDIR"
-else
-	TMPDIR="$REMOTE_TMPDIR"
 fi
 
 # Check if both flashrom binaries support logging
