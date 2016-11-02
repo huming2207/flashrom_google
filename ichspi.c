@@ -1458,7 +1458,7 @@ int ich_hwseq_block_erase(struct flashctx *flash,
 		return -1;
 	}
 
-	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Erasing %d bytes starting at 0x%06x.\n", len, addr);
 
 	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
@@ -1467,7 +1467,7 @@ int ich_hwseq_block_erase(struct flashctx *flash,
 	hsfc &= ~HSFC_FCYCLE; /* clear operation */
 	hsfc |= (0x3 << HSFC_FCYCLE_OFF); /* set erase operation */
 	hsfc |= HSFC_FGO; /* start */
-	msg_pdbg("HSFC used for block erasing: ");
+	msg_pspew("HSFC used for block erasing: ");
 	prettyprint_ich9_reg_hsfc(hsfc);
 	REGWRITE16(ICH9_REG_HSFC, hsfc);
 
@@ -1489,7 +1489,7 @@ int ich_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		return -1;
 	}
 
-	msg_pdbg("Reading %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Reading %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
 
@@ -1527,7 +1527,7 @@ static int ich_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int ad
 		return -1;
 	}
 
-	msg_pdbg("Writing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Writing %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
 
@@ -1682,7 +1682,7 @@ int pch_hwseq_block_erase(struct flashctx *flash,
 	if (result)
 		return result;
 
-	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Erasing %d bytes starting at 0x%06x.\n", len, addr);
 
 	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
 	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
@@ -1691,7 +1691,7 @@ int pch_hwseq_block_erase(struct flashctx *flash,
 	hsfc &= ~HSFSC_FCYCLE; /* clear operation */
 	hsfc |= (0x3 << HSFSC_FCYCLE_OFF); /* set erase operation */
 	hsfc |= HSFSC_FGO; /* start */
-	msg_pdbg("HSFC used for block erasing: ");
+	msg_pspew("HSFC used for block erasing: ");
 	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
 
 	if (pch_hwseq_wait_for_cycle_complete(timeout, len))
@@ -1714,7 +1714,7 @@ int pch_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		return -1;
 	}
 
-	msg_pdbg("Reading %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Reading %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 
 	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
@@ -1801,7 +1801,7 @@ int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		return -1;
 	}
 
-	msg_pdbg("Writing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Writing %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
 
