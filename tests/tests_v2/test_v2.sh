@@ -955,9 +955,9 @@ if [ $TEST_TYPE -eq $TEST_TYPE_SINGLE ]; then
 		end=""
 		size=""
 
-		# Look for a region named "RW" with any amount of leading whitespace
+		# Look for a region name with any amount of leading whitespace
 		# and no trailing whitespace or characters.
-		rw_layout=$(grep "\s${LAYOUT_REGION}$" $LAYOUT_FILE | head -n 1)
+		rw_layout=$(grep "\s${LAYOUT_REGION}$" "${LOCAL_TMPDIR}/$(basename $LAYOUT_FILE)" | head -n 1)
 		if [ -z "$rw_layout" ]; then
 			print_and_log "No region matching \"${LAYOUT_REGION}\" found layout file \"%s\"\n" "$LAYOUT_FILE"
 			test_fail ""
