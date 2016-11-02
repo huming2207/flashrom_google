@@ -153,7 +153,7 @@ static int __cros_ec_command_dev(int command, int version,
 		return -EC_RES_ERROR;
 	}
 	if (cmd.result) {
-		msg_perr("%s(): Command 0x%02x returned result: %d\n",
+		msg_pdbg("%s(): Command 0x%02x returned result: %d\n",
 			 __func__, command, cmd.result);
 		return -cmd.result;
 	}
@@ -249,7 +249,7 @@ static int __cros_ec_command_dev_v2(int command, int version,
 		return -EC_RES_ERROR;
 	}
 	if (s_cmd->result) {
-		msg_perr("%s(): Command 0x%02x returned result: %d\n",
+		msg_pdbg("%s(): Command 0x%02x returned result: %d\n",
 			 __func__, command, s_cmd->result);
 		free(s_cmd);
 		return -s_cmd->result;
