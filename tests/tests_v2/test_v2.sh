@@ -278,6 +278,9 @@ while true ; do
 		--skip-consistency-check)
 			SKIP_CONSISTENCY_CHECK=1
 			;;
+		--small-region)
+			SMALL_REGION=1
+			;;
 		--wp-hooks)
 			shift
 			WP_HOOKS_FILENAME="$1"
