@@ -703,8 +703,9 @@ double_read_test()
 	local cmp1="${TMPDIR}/cmp1.bin"
 	local cmp2="${TMPDIR}/cmp2.bin"
 	local layout="double_read_test_layout.txt"
+	local len=$(($2 / $K))
 
-	print_and_log "Doing double read test, size: %u KiB\n" $(($2 / $K))
+	print_and_log "Doing double read test, size: $len KiB\n"
 	# FIXME: Figure out how to do printf remotely...
 	printf "%06x:%06x region\n" $1 $(($1 + $2 - 1)) > "${LOCAL_TMPDIR}/${layout}"
 	if [ $DO_REMOTE -eq 1 ]; then copy_to_remote "$layout" ; fi
@@ -957,20 +958,22 @@ if [ $TEST_TYPE -eq $TEST_TYPE_SINGLE ]; then
 		addr=""
 		end=""
 		size=""
+		size_kb=""
 
 		# Look for a region name with any amount of leading whitespace
 		# and no trailing whitespace or characters.
 		rw_layout=$(grep "\s${LAYOUT_REGION}$" "${LOCAL_TMPDIR}/$(basename $LAYOUT_FILE)" | head -n 1)
 		if [ -z "$rw_layout" ]; then
-			print_and_log "No region matching \"${LAYOUT_REGION}\" found layout file \"%s\"\n" "$LAYOUT_FILE"
+			print_and_log "No region matching \"${LAYOUT_REGION}\" found layout file \"${LAYOUT_FILE}\"\n"
 			test_fail ""
 		fi
 
 		addr="0x$(echo "$rw_layout" | cut -d ' ' -f -1 | awk -F ':' '{ print $1 }')"
 		end="0x$(echo "$rw_layout" | cut -d ' ' -f -1 | awk -F ':' '{ print $2 }')"
 		size="$(($end - $addr + 1))"
+		size_kb="$(($size / $K))"
 
-		print_and_log "\"$LAYOUT_REGION\" region address: ${addr}, size: %u KiB\n" $(($size / $K))
+		print_and_log "\"$LAYOUT_REGION\" region address: ${addr}, size: $size_kb KiB\n"
 		partial_write_test "$LAYOUT_REGION"
 		if [ $? -ne 0 ]; then
 			print_and_log "Layout mode test failed\n"
