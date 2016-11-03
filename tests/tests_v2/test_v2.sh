@@ -105,7 +105,7 @@ if [ "$(id -u)" -ne "0" ]; then
 fi
 
 # 1KB
-K="1024"
+K=1024
 
 show_help() {
 	printf "Usage:
