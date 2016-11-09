@@ -130,6 +130,8 @@ General options:
     	Test type (single, endurance, writeprotect).
     -u, --upload-results
         Upload results to flashrom.org.
+    -v, --voltage
+        Chip voltage in millivolts (usually 1800 or 3300).
 
 Long options:
     --custom-hooks <filename>
@@ -171,7 +173,7 @@ fi
 LONGOPTS="backup-image:,help,,new:,old:,remote-host:,upload-results:"
 LONGOPTS="${LONGOPTS},primary-programmer:,secondary-programmer:,local-flashrom:"
 LONGOPTS="${LONGOPTS},custom-hooks:,mode:,skip-consistency-check,small-region"
-LONGOPTS="${LONGOPTS},wp-hooks:,type:"
+LONGOPTS="${LONGOPTS},wp-hooks:,type:,voltage:"
 LONGOPTS="${LONGOPTS},layout-file:,descriptor-region:,flashmap-region:,layout-region:"
 LONGOPTS="${LONGOPTS},no-clean"
 LONGOPTS="${LONGOPTS},ssh-port:"
@@ -246,6 +248,10 @@ while true ; do
 		-u|--upload-results)
 			UPLOAD_RESULTS=1
 			;;
+		-v|--voltage)
+			shift
+			VOLTAGE="$1"
+			;;
 
 		# Longopts only
 		--custom-hooks)
@@ -315,7 +321,7 @@ fi
 #
 export REMOTE_HOST REMOTE_PORT_OPTION
 export LOCAL REMOTE FATAL NONFATAL EXIT_SUCCESS EXIT_FAILURE
-export CUSTOM_HOOKS_FILENAME SUDO_CMD
+export CUSTOM_HOOKS_FILENAME SUDO_CMD VOLTAGE
 . "$(pwd)/tests/tests_v2/cmd.sh"
 
 # We will set up a logs directory within the tmpdirs to store
@@ -385,7 +391,21 @@ elif [ $TEST_TYPE -eq $TEST_TYPE_WRITEPROTECT ]; then
 		printf "Must specify a wp hooks file when doing a write-protect test.\n"
 		exit $EXIT_FAILURE
 	fi
+
+	if [ -z "$VOLTAGE" ]; then
+		printf "Voltage (mV) must be specified when testing write protection.\n"
+		exit $EXIT_FAILURE
+	fi
+
 	. "$WP_HOOKS_FILENAME"
+fi
+
+if [ -n "$VOLTAGE" ]; then
+	echo "$VOLTAGE" | grep -q '[^0-9]'
+	if [ $? -ne 1 ]; then
+		printf "Voltage must be an integer with units of millivolts."
+		exit $EXIT_FAILURE
+	fi
 fi
 
 if [ $DO_REMOTE -eq 1 ]; then
@@ -646,9 +666,7 @@ restore_wp_state()
 		restore_opts="--wp-disable $restore_opts"
 	fi
 
-	# TODO: move these dut-control commands into functions from an external
-	# script, similar to the custom hooks
-	wp_enable_hook
+	wp_enable_hook "$VOLTAGE"
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $restore_opts"
 	# if we are running on a remote machine, we stored the hw wp state and can restore now
@@ -672,9 +690,7 @@ set_wp_state()
 		return $EXIT_FAILURE
 	fi
 
-	# TODO: move these dut-control commands into functions from an external
-	# script, similar to the custom hooks
-	wp_enable_hook
+	wp_enable_hook "$VOLTAGE"
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $wp_opts"
 	wp_on_hook

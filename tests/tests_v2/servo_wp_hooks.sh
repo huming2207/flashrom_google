@@ -17,34 +17,39 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 #
 
-wp_enable_hook(){
+# $1: Chip voltage (in millivolts)
+wp_enable_hook()
+{
 	local rc=0
 
-	dut-control fw_wp_en:on fw_wp_vref:pp3300
+	dut-control fw_wp_en:on fw_wp_vref:pp${1}
 	rc=$?
 
 	return $rc
 }
 
-wp_on_hook(){
+wp_on_hook()
+{
 	local rc=0
 
-	dut-control fw_wp:on fw_wp
+	dut-control fw_wp:on
 	rc=$?
 
 	return $rc
 }
 
-wp_off_hook(){
+wp_off_hook()
+{
 	local rc=0
 
-	dut-control fw_wp:off fw_wp
+	dut-control fw_wp:off
 	rc=$?
 
 	return $rc
 }
 
-wp_disable_hook(){
+wp_disable_hook()
+{
 	local rc=0
 
 	dut-control fw_wp_en:off fw_wp_vref:off
