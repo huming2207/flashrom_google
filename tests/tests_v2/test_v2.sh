@@ -40,10 +40,6 @@ UPLOAD_RESULTS=0
 # By default this will be set to the result of `which flashrom`.
 LOCAL_FLASHROM=""
 
-# Primary/Secondary programmer names
-PRIMARY_PROG=""
-SECONDARY_PROG=""
-
 # Primary/Secondary programmer options
 PRIMARY_OPTS=""
 SECONDARY_OPTS=""
@@ -52,7 +48,7 @@ SECONDARY_OPTS=""
 CUSTOM_HOOKS_FILENAME=""
 
 # if doing wp test, we require the commands that the programmer uses to enable/disable wp
-WP_HOOKS_FILENAME="";
+WP_HOOKS_FILENAME=""
 
 # logfile to store the script's output
 SCRIPT_LOGFILE="flashrom-test_script_output.txt"
@@ -521,6 +517,7 @@ if [ -z "$BACKUP_IMAGE" ]; then
 		BACKUP_IMAGE="${LOCAL_TMPDIR}/${backup_file}"
 	fi
 
+	print_and_log "Reading backup image..."
 	flashrom_log_scmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS -r $BACKUP_IMAGE" "read_backup"
 
 	if [ $? -ne 0 ]; then
@@ -711,6 +708,7 @@ double_read_test()
 	if [ $DO_REMOTE -eq 1 ]; then copy_to_remote "$layout" ; fi
 
 	flashrom_log_scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS -r -l ${TMPDIR}/${layout} --ignore-fmap -i region:${cmp1}" "double_read_1"
+	# FIXME: second (or maybe third?) read should be done using secondary programmer, if applicable.
 	flashrom_log_scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS -r -l ${TMPDIR}/${layout} --ignore-fmap -i region:${cmp2}" "double_read_2"
 	scmd $DO_REMOTE "cmp $cmp1 $cmp2"
 	if [ $? -ne 0 ]; then
