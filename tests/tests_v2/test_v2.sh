@@ -398,6 +398,12 @@ elif [ $TEST_TYPE -eq $TEST_TYPE_WRITEPROTECT ]; then
 	fi
 
 	. "$WP_HOOKS_FILENAME"
+
+	wp_sanity_check
+	if [ $? -ne $EXIT_SUCCESS ]; then
+		printf "Write-protect sanity check failed.\n"
+		exit $EXIT_FAILURE
+	fi
 fi
 
 if [ -n "$VOLTAGE" ]; then

@@ -17,6 +17,19 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 #
 
+wp_sanity_check()
+{
+	local rc=0
+
+	dut-control fw_wp_en fw_wp_vref fw_wp >/dev/null
+	rc=$?
+	if [ $rc -ne 0 ]; then
+		printf "dut-control failed. Check that servod is running.\n"
+	fi
+
+	return $rc
+}
+
 # $1: Chip voltage (in millivolts)
 wp_enable_hook()
 {
