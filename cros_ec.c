@@ -52,6 +52,7 @@
 #include <unistd.h>
 
 struct cros_ec_priv *cros_ec_priv;
+static int ignore_wp_range_command = 0;
 
 static int set_wp(int enable);	/* FIXME: move set_wp() */
 
@@ -793,6 +794,8 @@ static int cros_ec_set_range(const struct flashctx *flash,
 		return 1;
 	}
 
+	if (ignore_wp_range_command)
+		return 0;
 	return set_wp(!!len);
 }
 
@@ -817,6 +820,9 @@ static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 
 
 static int cros_ec_disable_writeprotect(const struct flashctx *flash) {
+	/* --wp-range implicitly enables write protection on CrOS EC, so force
+	   it not to if --wp-disable is what the user really wants. */
+	ignore_wp_range_command = 1;
 	return set_wp(0);
 }
 
