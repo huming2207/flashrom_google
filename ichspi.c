@@ -2457,7 +2457,7 @@ int via_init_spi(struct pci_dev *dev)
 	msg_pdbg("0x6c: 0x%04x     (CLOCK/DEBUG)\n",
 		 mmio_readw(ich_spibar + 0x6c));
 	if (mmio_readw(ich_spibar) & (1 << 15)) {
-		msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+		msg_pdbg("WARNING: SPI Configuration Lockdown activated.\n");
 		ichspi_lock = 1;
 	}
 
