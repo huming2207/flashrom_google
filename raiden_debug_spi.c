@@ -247,7 +247,6 @@ int raiden_debug_spi_init(void)
 	char *serial = extract_programmer_param("serial");
 	struct usb_device *current;
 	int found = 0;
-	int ret = 0;
 
 	if (target_str) {
 		if (!strcasecmp(target_str, "ap"))
@@ -257,10 +256,10 @@ int raiden_debug_spi_init(void)
 		else {
 			msg_perr("Invalid target: %s\n", target_str);
 			free(target_str);
-			ret = 1;
-			goto raiden_debug_spi_init_exit;
+			return 1;
 		}
 	}
+	free(target_str);
 
 	usb_match_init(&match);
 
@@ -331,8 +330,7 @@ loop_end:
 
 	if (!device || !found) {
 		msg_perr("Raiden: No usable device found.\n");
-		ret = 1;
-		goto raiden_debug_spi_init_exit;
+		return 1;
 	}
 
 	/* free devices we don't care about */
@@ -356,8 +354,5 @@ loop_end:
 	register_spi_programmer(&spi_programmer_raiden_debug);
 	register_shutdown(shutdown, NULL);
 
-raiden_debug_spi_init_exit:
-	free(target_str);
-	free(serial);
-	return ret;
+	return 0;
 }

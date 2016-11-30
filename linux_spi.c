@@ -167,9 +167,8 @@ static int manual_mknod(const char *dev)
 
 int linux_spi_init(void)
 {
-	char *p = NULL, *dev = NULL, *endp;
+	char *p, *endp, *dev;
 	uint32_t speed = 0;
-	int ret = 0;
 
 	/*
 	 * FIXME: There might be other programmers with flash memory (such as
@@ -185,8 +184,7 @@ int linux_spi_init(void)
 	if (!dev || !strlen(dev)) {
 		msg_perr("No SPI device found. Use flashrom -p "
 			 "linux_spi:dev=/dev/spidevX.Y\n");
-		ret = 1;
-		goto linux_spi_init_exit;
+		return 1;
 	}
 
 	p = extract_programmer_param("speed");
@@ -194,8 +192,7 @@ int linux_spi_init(void)
 		speed = (uint32_t)strtoul(p, &endp, 10) * 1024;
 		if (p == endp) {
 			msg_perr("%s: invalid clock: %s kHz\n", __func__, p);
-			ret = 1;
-			goto linux_spi_init_exit;
+			return 1;
 		}
 	}
 
@@ -205,8 +202,7 @@ int linux_spi_init(void)
 			 dev, strerror(errno));
 
 		if (manual_mknod(dev) == -1) {  // global fd is effected.
-			ret = 1;
-			goto linux_spi_init_exit;
+			return 1;
 		}
 	}
 
@@ -215,24 +211,18 @@ int linux_spi_init(void)
 			msg_perr("%s: failed to set speed %dHz: %s\n",
 				 __func__, speed, strerror(errno));
 			close(fd);
-			ret = 1;
-			goto linux_spi_init_exit;
+			return 1;
 		}
 
 		msg_pdbg("Using %d kHz clock\n", speed);
 	}
 
-	if (register_shutdown(linux_spi_shutdown, NULL)) {
-		ret = 1;
-		goto linux_spi_init_exit;
-	}
+	if (register_shutdown(linux_spi_shutdown, NULL))
+		return 1;
 
 	register_spi_programmer(&spi_programmer_linux);
 
-linux_spi_init_exit:
-	free(dev);
-	free(p);
-	return ret;
+	return 0;
 }
 
 static int linux_spi_shutdown(void *data)
