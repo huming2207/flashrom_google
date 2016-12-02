@@ -1923,8 +1923,10 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 				   enable_flash_baytrail) {
 				/* Baytrail has 2 bit BBS at different offset */
 				is_new_ich = 3;
-			} else if (chipset_enables[i].doit ==
-				   enable_flash_sunrisepoint) {
+			} else if ((chipset_enables[i].doit ==
+				   enable_flash_sunrisepoint) ||
+				   (chipset_enables[i].doit ==
+				    enable_flash_apl)) {
 				/* Sunrise point has 1 bit BBS
 				 * in GCS register */
 				is_new_ich = 4;
