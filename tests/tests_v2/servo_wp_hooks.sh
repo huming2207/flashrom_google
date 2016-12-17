@@ -24,6 +24,7 @@ wp_enable_hook()
 
 	dut-control fw_wp_en:on fw_wp_vref:pp${1}
 	rc=$?
+	sleep 1
 
 	return $rc
 }
@@ -34,6 +35,7 @@ wp_on_hook()
 
 	dut-control fw_wp:on
 	rc=$?
+	sleep 1
 
 	return $rc
 }
@@ -44,6 +46,7 @@ wp_off_hook()
 
 	dut-control fw_wp:off
 	rc=$?
+	sleep 1
 
 	return $rc
 }
@@ -54,6 +57,7 @@ wp_disable_hook()
 
 	dut-control fw_wp_en:off fw_wp_vref:off
 	rc=$?
+	sleep 1
 
 	return $rc
 }
