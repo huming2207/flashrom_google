@@ -626,7 +626,7 @@ do_cleanup()
 test_fail()
 {
 	print_and_log "$1\n"
-	do_cleanup
+	printf "Skipping cleanup (logs saved).\n"
 	exit $EXIT_FAILURE
 }
 
