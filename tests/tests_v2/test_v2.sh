@@ -672,7 +672,7 @@ restore_wp_state()
 		restore_opts="--wp-disable $restore_opts"
 	fi
 
-	wp_enable_hook "$VOLTAGE"
+	wp_enable_hook
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $restore_opts"
 	# if we are running on a remote machine, we stored the hw wp state and can restore now
@@ -696,7 +696,7 @@ set_wp_state()
 		return $EXIT_FAILURE
 	fi
 
-	wp_enable_hook "$VOLTAGE"
+	wp_enable_hook
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $wp_opts"
 	wp_on_hook
