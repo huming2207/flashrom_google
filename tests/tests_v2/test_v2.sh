@@ -769,6 +769,7 @@ partial_write_test_helper()
 partial_write_test()
 {
 	local opts="--fast-verify"
+	local secondary_opts=""		# for secondary programmer
 	local region_name="$1"
 	local filename=""
 	local test_num=0
@@ -781,11 +782,13 @@ partial_write_test()
 	if [ $TEST_TYPE -eq $TEST_TYPE_SINGLE ]; then
 		if [ $REGION_MODE -eq $REGION_MODE_LAYOUT ]; then
 			opts="$opts -l $LAYOUT_FILE"
+			secondary_opts="$opts"
 		elif [ $REGION_MODE -eq $REGION_MODE_CLOBBER ]; then
 			printf "000000:%06x RW\n" $(($CHIP_SIZE - 1)) > "${LOCAL_TMPDIR}/clobber_mode_layout.txt"
 			if [ $DO_REMOTE -eq 1 ]; then
 				copy_to_remote "clobber_mode_layout.txt"
 			fi
+			secondary_opts="$opts -l ${LOCAL_TMPDIR}/clobber_mode_layout.txt"
 			opts="$opts -l ${TMPDIR}/clobber_mode_layout.txt"
 		fi
 	fi
@@ -865,7 +868,7 @@ partial_write_test()
 		fi
 
 		if [ -n "$SECONDARY_OPTS" ]; then
-			flashrom_log_scmd $LOCAL "$OLD_FLASHROM $SECONDARY_OPTS $opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
+			flashrom_log_scmd $LOCAL "$LOCAL_FLASHROM $SECONDARY_OPTS $secondary_opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
 			if [ $? -ne 0 ]; then
 				test_fail "Failed to verify write of $filename to $region_name using secondary programmer"
 			fi
@@ -917,7 +920,7 @@ partial_write_test()
 		fi
 
 		if [ -n "$SECONDARY_OPTS" ]; then
-			flashrom_log_scmd $LOCAL "$OLD_FLASHROM $SECONDARY_OPTS $opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
+			flashrom_log_scmd $LOCAL "$LOCAL_FLASHROM $SECONDARY_OPTS $secondary_opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
 			if [ $? -ne 0 ]; then
 				test_fail "Failed to verify write of $filename to $region_name using secondary programmer"
 			fi
