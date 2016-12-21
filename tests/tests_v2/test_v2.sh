@@ -616,24 +616,16 @@ save_wp_state()
 		cmd $DO_REMOTE "crossystem wpsw_cur" "${LOCAL_TMPDIR}/hw_wp_state.txt"
 		HW_WP_STATE=$(cat ${LOCAL_TMPDIR}/hw_wp_state.txt )
 	fi
-	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status | grep -E -o 'enabled|disabled'" "${LOCAL_TMPDIR}/sw_wp_state.txt"
-	sw_wp_str=$( cat ${LOCAL_TMPDIR}/sw_wp_state.txt )
-	if [ "$sw_wp_str" = "enabled" ]; then
+
+	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status" "${LOCAL_TMPDIR}/wp_range.txt"
+	if grep -q 'enabled' "${LOCAL_TMPDIR}/wp_range.txt"; then
 		SW_WP_STATE=1
-	elif [ "$sw_wp_str" = "disabled" ]; then
+	else
 		SW_WP_STATE=0
 	fi
 
-	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status | grep -o -E '0x[0-9]{8}'" "${LOCAL_TMPDIR}/wp_range.txt"
-	for count in 1 2; do
-		read -r line
-		dec_val=$(printf "%d\n" $line )
-		if [ $count -eq 1 ]; then
-			WP_RANGE_START=$dec_val
-		elif [ $count -eq 2 ]; then
-			WP_RANGE_LEN=$dec_val
-		fi
-	done < ${LOCAL_TMPDIR}/wp_range.txt
+	WP_RANGE_START=$(grep 'range' "${LOCAL_TMPDIR}/wp_range.txt" | grep -o -E 'start=0x[0-9]*' | cut -d '=' -f 2-)
+	WP_RANGE_LEN=$(grep 'range' "${LOCAL_TMPDIR}/wp_range.txt" | grep -o -E 'len=0x[0-9]*' | cut -d '=' -f 2-)
 }
 
 restore_wp_state()
