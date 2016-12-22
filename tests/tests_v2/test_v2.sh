@@ -486,19 +486,24 @@ copy_from_remote()
 }
 
 # A wrapper for scmd calls to flashrom when we want to log the output
-# $1 and $2 are the arguments to be passed into scmd
-# $3 is the context of the flashrom call (to be used in the logfile)
+# $1: 0 ($LOCAL) to run command locally,
+#     1 ($REMOTE) to run remotely if remote host defined
+# $2: arguments to be passed into scmd
+# $3: context of the flashrom call (to be used in the logfile)
 flashrom_log_scmd()
 {
 	local logfile="flashrom-${3}.txt"
-	tmpdir=$LOCAL_TMPDIR
+	local rc
+
 	if [ $1 -eq $REMOTE ]; then
 		tmpdir=$REMOTE_TMPDIR
+	else
+		tmpdir=$LOCAL_TMPDIR
 	fi
 
-	scmd $1 "$2 -o ${tmpdir}/${LOGS}/${logfile}"
+	scmd $1 "$2 -o ${tmpdir}/${LOGS}/${logfile}"; rc=$?
 	# if the call was successful, we don't want to save the log (only save failure logs)
-	if [ $? -eq $EXIT_SUCCESS ]; then
+	if [ $rc -eq $EXIT_SUCCESS ]; then
 		scmd $1 "rm -f ${tmpdir}/${LOGS}/${logfile}"
 	else
 		# if the log was stored remotely, we want to copy it over to local tmpdir
@@ -506,6 +511,8 @@ flashrom_log_scmd()
 			scp root@"${REMOTE_HOST}:${REMOTE_TMPDIR}/${LOGS}/${logfile}" "${LOCAL_TMPDIR}/${LOGS}" 2>&1 >/dev/null
 		fi
 	fi
+
+	return $rc
 }
 
 # Read current image as backup in case one hasn't already been specified.
