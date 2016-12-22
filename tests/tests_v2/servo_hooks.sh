@@ -33,6 +33,21 @@ if [ -z "$SERVO_SPI" ]; then
 	SERVO_SPI="spi2"
 fi
 
+custom_hook_sanity_check()
+{
+	local rc=0
+
+	dut-control --port=${SERVO_PORT} ${SERVO_SPI}_buf_en ${SERVO_SPI}_buf_on_flex_en ${SERVO_SPI}_vref >/dev/null
+	rc=$?
+	if [ $rc -ne 0 ]; then
+		printf "Servo sanity check failed. Some possible causes:\n"
+		printf "\t- Is servod running?\n"
+		printf "\t- If servod is not listening on port 9999, set SERVO_PORT as an environment variable.\n"
+	fi
+
+	return $rc
+}
+
 preflash_hook()
 {
 	local rc=0

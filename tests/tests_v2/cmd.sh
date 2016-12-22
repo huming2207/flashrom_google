@@ -14,6 +14,11 @@ if [ -n "$CUSTOM_HOOKS_FILENAME" ]; then
 		echo "Failed to source custom hooks file."
 		exit $EXIT_FAILURE
 	fi
+
+	if ! custom_hook_sanity_check; then
+		echo "Failed to run sanity check for custom hooks."
+		exit $EXIT_FAILURE
+	fi
 fi
 
 # test a command
