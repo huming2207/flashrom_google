@@ -218,6 +218,9 @@ int flash_erase_value(struct flashctx *flash);
 /* This is a byte value that indicates that the region is not erased */
 int flash_unerased_value(struct flashctx *flash);
 
+/* Given RDID info, return pointer to entry in flashchips[] */
+const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id);
+
 #define TEST_UNTESTED	0
 
 #define TEST_OK_PROBE	(1 << 0)

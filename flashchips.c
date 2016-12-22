@@ -10807,6 +10807,19 @@ int flash_unerased_value(struct flashctx *flash)
 	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0xff : 0;
 }
 
+const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id)
+{
+	const struct flashchip *chip;
+
+	for (chip = &flashchips[0]; chip->vendor; chip++) {
+		if ((chip->manufacture_id == mfg_id) &&
+			(chip->model_id == model_id))
+			return chip;
+	}
+
+	return NULL;
+}
+
 struct voltage_range voltage_ranges[NUM_VOLTAGE_RANGES];
 
 static int compar(const void *_x, const void *_y)
