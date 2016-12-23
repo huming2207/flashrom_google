@@ -925,7 +925,12 @@
 #define WINBOND_NEX_W25Q16_V	0x4015	/* W25Q16CV; W25Q16DV */
 #define WINBOND_NEX_W25Q32_V	0x4016	/* W25Q32BV; W25Q32FV in SPI mode (default) */
 #define WINBOND_NEX_W25Q64_V	0x4017	/* W25Q64BV, W25Q64CV; W25Q64FV in SPI mode (default) */
-#define WINBOND_NEX_W25Q128_V	0x4018	/* W25Q128BV; W25Q128FV in SPI mode (default) */
+
+/*
+ * W25Q128 has several variants. Currently all are 3.3V except for the W25Q128FW
+ * which is 1.8V. Otherwise they should behave the same...
+ */
+#define WINBOND_NEX_W25Q128_V	0x4018	/* W25Q128BV, W25Q128FV (SPI mode), W25Q128JV */
 #define WINBOND_NEX_W25Q256_V	0x4019	/* W25Q256FV */
 #define WINBOND_NEX_W25Q20_W	0x5012	/* W25Q20BW */
 #define WINBOND_NEX_W25Q40_W	0x5013	/* W25Q40BW */
@@ -934,7 +939,8 @@
 #define WINBOND_NEX_W25Q16_W	0x6015	/* W25Q16DW */
 #define WINBOND_NEX_W25Q32_W	0x6016	/* W25Q32DW; W25Q32FV in QPI mode */
 #define WINBOND_NEX_W25Q64_W	0x6017	/* W25Q64DW; W25Q64FV in QPI mode */
-#define WINBOND_NEX_W25Q128_W	0x6018	/* (No W version known) W25Q128FV in QPI mode */
+#define WINBOND_NEX_W25Q128_W	0x6018	/* Same as W25Q128FV (QPI mode), W25R128FV */
+#define WINBOND_NEX_W25Q128FW	0x6018	/* Same as W25Q128FV (QPI mode), W25R128FV */
 
 #define WINBOND_ID		0xDA	/* Winbond */
 #define WINBOND_W19B160BB	0x49
