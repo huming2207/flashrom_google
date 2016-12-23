@@ -9588,7 +9588,7 @@ const struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Winbond",
-		.name		= "W25Q128",
+		.name		= "W25Q128.V",
 		.bustype	= BUS_SPI,
 		.manufacture_id	= WINBOND_NEX_ID,
 		.model_id	= WINBOND_NEX_W25Q128,
@@ -9632,8 +9632,8 @@ const struct flashchip flashchips[] = {
 		.model_id	= WINBOND_NEX_W25Q128FW,
 		.total_size	= 16384,
 		.page_size	= 256,
-		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ,
-		.tested		= TEST_OK_PROBE,
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ | FEATURE_OTP,
+		.tested		= TEST_OK_PREWU,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
 		.block_erasers	=
@@ -9658,6 +9658,14 @@ const struct flashchip flashchips[] = {
 		.unlock		= spi_disable_blockprotect,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
+		/*
+		 * W25Q128FW is a 1.8V chip, however 3.3V variants with the same
+		 * model ID exist. We'll err on the side of caution here. A user
+		 * with a 3.3V chip sharing the model ID will need to either
+		 * specify voltage on the command line or duplicate this struct
+		 * with a different name/voltage and specify it with "-c".
+		 */
+		.voltage	= {1650, 1950},
 		.wp		= &wp_w25q,
 	},
 
@@ -10653,20 +10661,14 @@ const struct flashchip flashchips[] = {
 	{ NULL 	}
 };
 
-/* List of all flashchips on platforms
- * that use HWSEQ host controller interface
- */
+/* Generic flashchip struct for platforms that use Intel hardware sequencing. */
 const struct flashchip flashchips_hwseq[] = {
 	{
-		.vendor		= "Winbond",
-		.name		= "W25Q128.V",
+		.vendor		= "Generic",
+		.name		= "HWSEQ chip",
 		.bustype	= BUS_PROG,
-		.manufacture_id	= WINBOND_NEX_ID,
-		.model_id	= WINBOND_NEX_W25Q128_V,
-		.total_size	= 0,
-		.page_size	= 256,
 		/* probe is assumed to work, rest will be filled in by probe */
-		.tested		= TEST_OK_PROBE,
+		.tested		= TEST_OK_PREWU,
 		.probe		= probe_opaque,
 		/* eraseblock sizes will be set by the probing function */
 		.block_erasers	=
