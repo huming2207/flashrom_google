@@ -907,6 +907,26 @@ static int w25_range_table(const struct flashctx *flash,
 			return -1;
 		}
 		break;
+	case ATMEL_ID:
+		switch(flash->model_id) {
+		case ATMEL_AT25SL128A:
+			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+				/* CMP == 1 */
+				*w25q_ranges = w25rq128_cmp1_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
+			} else {
+				/* CMP == 0 */
+				*w25q_ranges = w25rq128_cmp0_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp0_ranges);
+			}
+			break;
+		default:
+			msg_cerr("%s() %d: Atmel flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->model_id);
+			return -1;
+		}
+		break;
 	default:
 		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
 		         __func__, flash->manufacture_id);
