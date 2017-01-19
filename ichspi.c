@@ -1616,64 +1616,12 @@ static int pch_hwseq_wait_for_cycle_complete(unsigned int timeout,
 	return 0;
 }
 
-static int pch_hwseq_get_flash_id(struct flashctx *flash)
-{
-	uint16_t hsfsc;
-	uint32_t data, mfg_id, model_id;
-	const struct flashchip *entry;
-
-	/* Set RDID as flash cycle and FGO */
-	hsfsc = REGREAD16(PCH100_REG_HSFSC + 2);
-	hsfsc &= ~HSFSC_FCYCLE;
-	hsfsc |= (0x6 << HSFSC_FCYCLE_OFF) | HSFSC_FGO;
-	REGWRITE16(PCH100_REG_HSFSC + 2, hsfsc);
-	/* poll for 100ms */
-	if (pch_hwseq_wait_for_cycle_complete(100 * 1000, JEDEC_RDID_INSIZE)) {
-		msg_perr("Timed out waiting for RDID to complete.\n");
-		return 1;
-	}
-
-	/*
-	 * Data will appear in reverse order:
-	 * Byte 0: Manufacturer ID
-	 * Byte 1: Model ID (MSB)
-	 * Byte 2: Model ID (LSB)
-	 */
-	data = REGREAD32(PCH100_REG_FDATA0);
-	mfg_id = data & 0xff;
-	model_id = (data & 0xff00) | ((data >> 16) & 0xff);
-
-	entry = flash_id_to_entry(mfg_id, model_id);
-	if (entry == NULL) {
-		msg_perr("Unable to identify chip, mfg_id: 0x%02x, "
-				"model_id: 0x%02x\n", mfg_id, model_id);
-		return 1;
-	} else {
-		msg_pdbg("Chip identified: %s\n", entry->name);
-		/* Update informational flash chip entries only */
-		flash->vendor = entry->vendor;
-		flash->name = entry->name;
-		flash->manufacture_id = entry->manufacture_id;
-		flash->model_id = entry->model_id;
-		/* total_size read from flash descriptor */
-		flash->page_size = entry->page_size;
-		flash->feature_bits = entry->feature_bits;
-		flash->tested = entry->tested;
-	}
-
-	return 0;
-}
 
 int pch_hwseq_probe(struct flashctx *flash)
 {
 	uint32_t total_size, boundary = 0; /*There are no partitions in flash*/
 	uint32_t erase_size_high, size_high;
 	struct block_eraser *eraser;
-
-	if (pch_hwseq_get_flash_id(flash)) {
-		msg_perr("Unable to read flash chip ID\n");
-		return 1;
-	}
 
 	total_size = hwseq_data.size_comp0 + hwseq_data.size_comp1;
 	msg_cdbg("Found %d attached SPI flash chip",
