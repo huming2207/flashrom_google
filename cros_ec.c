@@ -1036,9 +1036,9 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	cros_ec_priv->current_image = rc;
 	cros_ec_priv->region = &regions[0];
 
-	flash->total_size = info.flash_size / 1024;
-	flash->page_size = opaque_programmer->max_data_read;
-	eraser = &flash->block_erasers[0];
+	flash->chip->total_size = info.flash_size / 1024;
+	flash->chip->page_size = opaque_programmer->max_data_read;
+	eraser = &flash->chip->block_erasers[0];
 
 	/* Allow overriding the erase block size in case EC is incorrect */
 	if (cros_ec_priv->erase_block_size > 0)
@@ -1048,7 +1048,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
-	flash->wp = &wp;
+	flash->chip->wp = &wp;
 
 	/*
 	 * Some STM32 variants erase bits to 0. For now, assume that this
@@ -1064,7 +1064,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 		return 0;
 	}
 	if (!strncmp(chip_info.name, "stm32l1", 7))
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	rc = set_ideal_write_size();
 	if (rc < 0) {
@@ -1080,9 +1080,9 @@ int cros_ec_probe_size(struct flashctx *flash) {
 
 		memcpy(chip_vendor, chip_info.vendor, sizeof(chip_vendor));
 		memcpy(chip_name, chip_info.name, sizeof(chip_name));
-		flash->vendor = chip_vendor;
-		flash->name = chip_name;
-		flash->tested = TEST_OK_PREWU;
+		flash->chip->vendor = chip_vendor;
+		flash->chip->name = chip_name;
+		flash->chip->tested = TEST_OK_PREWU;
 	} else {
 		const struct flashchip *f;
 		uint32_t mfg = spi_info.jedec[0];
@@ -1093,9 +1093,9 @@ int cros_ec_probe_size(struct flashctx *flash) {
 				continue;
 			if ((f->manufacture_id == mfg) &&
 				f->model_id == model) {
-				flash->vendor = f->vendor;
-				flash->name = f->name;
-				flash->tested = f->tested;
+				flash->chip->vendor = f->vendor;
+				flash->chip->name = f->name;
+				flash->chip->tested = f->tested;
 				break;
 			}
 		}

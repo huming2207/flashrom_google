@@ -270,18 +270,18 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 
 	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
 	msg_gdbg("%s: fmap_base: %#lx, ROM size: 0x%x\n",
-		__func__, fmap_base, search->flash->total_size * 1024);
+		__func__, fmap_base, search->flash->chip->total_size * 1024);
 
 	if (fmap_base & (1 << 31)) {
 		from_top = 0xFFFFFFFF - fmap_base + 1;
 		msg_gdbg("%s: fmap is located in shadow ROM, from_top: %#lx\n",
 				__func__, from_top);
-		if (from_top > search->flash->total_size * 1024)
+		if (from_top > search->flash->chip->total_size * 1024)
 			return -1;
-		*offset = (search->flash->total_size * 1024) - from_top;
+		*offset = (search->flash->chip->total_size * 1024) - from_top;
 	} else {
 		msg_gdbg("%s: fmap is located in physical ROM\n", __func__);
-		if (fmap_base > search->flash->total_size * 1024)
+		if (fmap_base > search->flash->chip->total_size * 1024)
 			return -1;
 		*offset = fmap_base;
 	}
@@ -635,7 +635,7 @@ int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *new
 {
 	unsigned int start = 0;
 	romlayout_t *entry;
-	unsigned int size = flash->total_size * 1024;
+	unsigned int size = flash->chip->total_size * 1024;
 
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to write the complete new image.
@@ -722,7 +722,7 @@ static int set_required_erase_size(struct flashctx *flash)
 	 */
 	required_erase_size = ~0;
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
-		struct block_eraser eraser = flash->block_erasers[i];
+		struct block_eraser eraser = flash->chip->block_erasers[i];
 		int j;
 
 		for (j = 0; j < NUM_ERASEREGIONS; j++) {
@@ -864,7 +864,7 @@ int handle_partial_verify(
 
 int extract_regions(struct flashctx *flash)
 {
-	unsigned long size = flash->total_size * 1024;
+	unsigned long size = flash->chip->total_size * 1024;
 	unsigned char *buf = calloc(size, sizeof(char));
 	int i, ret = 0;
 

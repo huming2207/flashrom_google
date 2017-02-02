@@ -10840,12 +10840,12 @@ const struct flashchip flashchips_hwseq[] = {
 
 int flash_erase_value(struct flashctx *flash)
 {
-	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0 : 0xff;
+	return flash->chip->feature_bits & FEATURE_ERASE_TO_ZERO ? 0 : 0xff;
 }
 
 int flash_unerased_value(struct flashctx *flash)
 {
-	return flash->feature_bits & FEATURE_ERASE_TO_ZERO ? 0xff : 0;
+	return flash->chip->feature_bits & FEATURE_ERASE_TO_ZERO ? 0xff : 0;
 }
 
 const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id)

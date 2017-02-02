@@ -185,27 +185,8 @@ struct flashchip {
 
 /* struct flashctx must always contain struct flashchip at the beginning. */
 struct flashctx {
-	const char *vendor;
-	const char *name;
-	enum chipbustype bustype;
-	uint32_t manufacture_id;
-	uint32_t model_id;
-	int total_size;
-	int page_size;
-	int feature_bits;
-	uint32_t tested;
-	int (*probe) (struct flashctx *flash);
-	int probe_timing;
-	struct block_eraser block_erasers[NUM_ERASEFUNCTIONS];
-	int (*printlock) (struct flashctx *flash);
-	int (*unlock) (struct flashctx *flash);
-	int (*write) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	uint8_t (*read_status) (const struct flashctx *flash);
-	int (*write_status) (const struct flashctx *flash, int status);
-	struct voltage_range voltage;
-	struct wp *wp;
-	/* struct flashchip ends here. */
+	struct flashchip *chip;
+
 	chipaddr virtual_memory;
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_registers;

@@ -184,11 +184,11 @@ static int get_mtd_info(void)
 
 static int linux_mtd_probe(struct flashctx *flash)
 {
-	flash->wp = &wp_mtd;
-	flash->tested = TEST_OK_PREW;
-	flash->total_size = mtd_total_size / 1024;	/* bytes -> kB */
-	flash->block_erasers[0].eraseblocks[0].size = mtd_erasesize;
-	flash->block_erasers[0].eraseblocks[0].count =
+	flash->chip->wp = &wp_mtd;
+	flash->chip->tested = TEST_OK_PREW;
+	flash->chip->total_size = mtd_total_size / 1024;	/* bytes -> kB */
+	flash->chip->block_erasers[0].eraseblocks[0].size = mtd_erasesize;
+	flash->chip->block_erasers[0].eraseblocks[0].count =
 				mtd_total_size / mtd_erasesize;
 	return 1;
 }
@@ -196,7 +196,7 @@ static int linux_mtd_probe(struct flashctx *flash)
 static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 			  unsigned int start, unsigned int len)
 {
-	unsigned int eb_size = flash->block_erasers[0].eraseblocks[0].size;
+	unsigned int eb_size = flash->chip->block_erasers[0].eraseblocks[0].size;
 	unsigned int i;
 
 	if (lseek(dev_fd, start, SEEK_SET) != start) {
@@ -228,7 +228,7 @@ static int linux_mtd_write(struct flashctx *flash, const uint8_t *buf,
 	unsigned int page;
 	unsigned int chunksize, page_size;
 
-	chunksize = page_size = flash->page_size;
+	chunksize = page_size = flash->chip->page_size;
 
 	if (!mtd_device_is_writeable)
 		return 1;

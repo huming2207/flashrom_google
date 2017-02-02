@@ -161,7 +161,7 @@ static int compare_id(struct flashctx *flash, uint32_t id1, uint32_t id2)
 {
 	msg_cdbg("id1 0x%02x, id2 0x%02x\n", id1, id2);
 
-	if (id1 == flash->manufacture_id && id2 == flash->model_id) {
+	if (id1 == flash->chip->manufacture_id && id2 == flash->chip->model_id) {
 		/* Print the status register to tell the
 		 * user about possible write protection.
 		 */
@@ -171,12 +171,12 @@ static int compare_id(struct flashctx *flash, uint32_t id1, uint32_t id2)
 	}
 
 	/* Test if this is a pure vendor match. */
-	if (id1 == flash->manufacture_id &&
-	    GENERIC_DEVICE_ID == flash->model_id)
+	if (id1 == flash->chip->manufacture_id &&
+	    GENERIC_DEVICE_ID == flash->chip->model_id)
 		return 1;
 
 	/* Test if there is any vendor ID. */
-	if (GENERIC_MANUF_ID == flash->manufacture_id &&
+	if (GENERIC_MANUF_ID == flash->chip->manufacture_id &&
 	    id1 != 0xff)
 		return 1;
 
@@ -276,7 +276,7 @@ int probe_spi_res1(struct flashctx *flash)
 
 	msg_cdbg("%s: id 0x%x\n", __func__, id2);
 
-	if (id2 != flash->model_id)
+	if (id2 != flash->chip->model_id)
 		return 0;
 
 	/* Print the status register to tell the
@@ -300,7 +300,7 @@ int probe_spi_res2(struct flashctx *flash)
 	id2 = id_cache[RES2].bytes[1];
 	msg_cdbg("%s: id1 0x%x, id2 0x%x\n", __func__, id1, id2);
 
-	if (id1 != flash->manufacture_id || id2 != flash->model_id)
+	if (id1 != flash->chip->manufacture_id || id2 != flash->chip->model_id)
 		return 0;
 
 	/* Print the status register to tell the
@@ -318,8 +318,8 @@ uint8_t spi_read_status_register(const struct flashctx *flash)
 	int ret;
 
 	/* Read Status Register */
-	if (flash->read_status)
-		ret = flash->read_status(flash);
+	if (flash->chip->read_status)
+		ret = flash->chip->read_status(flash);
 	else
 		ret = spi_send_command(flash, sizeof(cmd), sizeof(readarr), cmd, readarr);
 	if (ret)
@@ -431,18 +431,18 @@ int spi_prettyprint_status_register(struct flashctx *flash)
 
 	status = spi_read_status_register(flash);
 	msg_cdbg("Chip status register is %02x\n", status);
-	switch (flash->manufacture_id) {
+	switch (flash->chip->manufacture_id) {
 	case ST_ID:
-		if (((flash->model_id & 0xff00) == 0x2000) ||
-		    ((flash->model_id & 0xff00) == 0x2500))
+		if (((flash->chip->model_id & 0xff00) == 0x2000) ||
+		    ((flash->chip->model_id & 0xff00) == 0x2500))
 			spi_prettyprint_status_register_st_m25p(status);
 		break;
 	case MACRONIX_ID:
-		if ((flash->model_id & 0xff00) == 0x2000)
+		if ((flash->chip->model_id & 0xff00) == 0x2000)
 			spi_prettyprint_status_register_st_m25p(status);
 		break;
 	case SST_ID:
-		switch (flash->model_id) {
+		switch (flash->chip->model_id) {
 		case 0x2541:
 			spi_prettyprint_status_register_sst25vf016(status);
 			break;
@@ -708,7 +708,7 @@ int spi_block_erase_20(struct flashctx *flash, unsigned int addr, unsigned int b
 
 int spi_block_erase_60(struct flashctx *flash, unsigned int addr, unsigned int blocklen)
 {
-	if ((addr != 0) || (blocklen != flash->total_size * 1024)) {
+	if ((addr != 0) || (blocklen != flash->chip->total_size * 1024)) {
 		msg_cerr("%s called with incorrect arguments\n",
 			__func__);
 		return -1;
@@ -718,7 +718,7 @@ int spi_block_erase_60(struct flashctx *flash, unsigned int addr, unsigned int b
 
 int spi_block_erase_c7(struct flashctx *flash, unsigned int addr, unsigned int blocklen)
 {
-	if ((addr != 0) || (blocklen != flash->total_size * 1024)) {
+	if ((addr != 0) || (blocklen != flash->chip->total_size * 1024)) {
 		msg_cerr("%s called with incorrect arguments\n",
 			__func__);
 		return -1;
@@ -844,12 +844,12 @@ int spi_write_status_register(const struct flashctx *flash, int status)
 {
 	int ret = 1;
 
-	if (flash->write_status) {
-		ret = flash->write_status(flash, status);
+	if (flash->chip->write_status) {
+		ret = flash->chip->write_status(flash, status);
 	} else {
-		if (flash->feature_bits & FEATURE_WRSR_WREN)
+		if (flash->chip->feature_bits & FEATURE_WRSR_WREN)
 			ret = spi_write_status_register_wren(flash, status);
-		if (ret && (flash->feature_bits & FEATURE_WRSR_EWSR))
+		if (ret && (flash->chip->feature_bits & FEATURE_WRSR_EWSR))
 			ret = spi_write_status_register_ewsr(flash, status);
 	}
 
@@ -999,7 +999,7 @@ int spi_read_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 {
 	int rc = 0, chunk_status = 0;
 	unsigned int i, j, starthere, lenhere, toread;
-	unsigned int page_size = flash->page_size;
+	unsigned int page_size = flash->chip->page_size;
 
 	/* Warning: This loop has a very unusual condition and body.
 	 * The loop needs to go through each page with at least one affected
@@ -1085,7 +1085,7 @@ int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int s
 	 * spi_chip_write_256 have page_size set to max_writechunk_size, so
 	 * we're OK for now.
 	 */
-	unsigned int page_size = flash->page_size;
+	unsigned int page_size = flash->chip->page_size;
 
 	/* Warning: This loop has a very unusual condition and body.
 	 * The loop needs to go through each page with at least one affected

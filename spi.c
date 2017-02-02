@@ -107,7 +107,7 @@ int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
-	if (flash->feature_bits & FEATURE_UNBOUND_READ)
+	if (flash->chip->feature_bits & FEATURE_UNBOUND_READ)
 		rc = spi_read_unbound(flash, buf, start, len, max_data);
 	else
 		rc = spi_read_chunked(flash, buf, start, len, max_data);
@@ -149,16 +149,16 @@ int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsi
 	 * means 0xffffff, the highest unsigned 24bit number.
 	 */
 	addrbase = spi_get_valid_read_addr(flash);
-	if (addrbase + flash->total_size * 1024 > (1 << 24)) {
+	if (addrbase + flash->chip->total_size * 1024 > (1 << 24)) {
 		msg_perr("Flash chip size exceeds the allowed access window. ");
 		msg_perr("Read will probably fail.\n");
 		/* Try to get the best alignment subject to constraints. */
-		addrbase = (1 << 24) - flash->total_size * 1024;
+		addrbase = (1 << 24) - flash->chip->total_size * 1024;
 	}
 	/* Check if alignment is native (at least the largest power of two which
 	 * is a factor of the mapped size of the chip).
 	 */
-	if (ffs(flash->total_size * 1024) > (ffs(addrbase) ? : 33)) {
+	if (ffs(flash->chip->total_size * 1024) > (ffs(addrbase) ? : 33)) {
 		msg_perr("Flash chip is not aligned natively in the allowed "
 			 "access window.\n");
 		msg_perr("Read will probably return garbage.\n");

@@ -724,7 +724,7 @@ int main(int argc, char *argv[])
 	if (chipcount > 1) {
 		msg_gerr("Multiple flash chips were detected:");
 		for (i = 0; i < chipcount; i++)
-			msg_gerr(" %s", flashes[i].name);
+			msg_gerr(" %s", flashes[i].chip->name);
 		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
 		programmer_shutdown();
 		exit(1);
@@ -753,8 +753,8 @@ int main(int argc, char *argv[])
 
 	check_chip_supported(fill_flash);
 
-	size = fill_flash->total_size * 1024;
-	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
+	size = fill_flash->chip->total_size * 1024;
+	if (check_max_decode((buses_supported & fill_flash->chip->bustype), size) &&
 	    (!force)) {
 		msg_gerr("Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
@@ -852,8 +852,8 @@ int main(int argc, char *argv[])
 
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
-		if (fill_flash->wp && fill_flash->wp->disable) {
-			rc |= fill_flash->wp->disable(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->disable) {
+			rc |= fill_flash->chip->wp->disable(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -863,9 +863,10 @@ int main(int argc, char *argv[])
 	}
 
 	if (flash_name) {
-		if (fill_flash->vendor && fill_flash->name) {
+		if (fill_flash->chip->vendor && fill_flash->chip->name) {
 			msg_ginfo("vendor=\"%s\" name=\"%s\"\n",
-			       fill_flash->vendor, fill_flash->name);
+			       fill_flash->chip->vendor,
+			       fill_flash->chip->name);
 			goto cli_mfg_silent_exit;
 		} else {
 			rc = -1;
@@ -894,7 +895,7 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (!fill_flash->wp || !fill_flash->wp->set_range) {
+		if (!fill_flash->chip->wp || !fill_flash->chip->wp->set_range) {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
@@ -928,7 +929,7 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		rc |= fill_flash->wp->set_range(fill_flash, start, len);
+		rc |= fill_flash->chip->wp->set_range(fill_flash, start, len);
 	}
 
 	if (set_wp_region && wp_region) {
@@ -948,7 +949,7 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		rc |= fill_flash->wp->set_range(fill_flash,
+		rc |= fill_flash->chip->wp->set_range(fill_flash,
 				entry.start, entry.end - entry.start + 1);
 		free(wp_region);
 	}
@@ -967,8 +968,8 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (fill_flash->wp && fill_flash->wp->enable) {
-			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->enable) {
+			rc |= fill_flash->chip->wp->enable(fill_flash, wp_mode);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -978,13 +979,13 @@ int main(int argc, char *argv[])
 	}
 	
 	if (get_size) {
-		msg_ginfo("%d\n", fill_flash->total_size * 1024);
+		msg_ginfo("%d\n", fill_flash->chip->total_size * 1024);
 		goto cli_mfg_silent_exit;
 	}
 
 	if (wp_status) {
-		if (fill_flash->wp && fill_flash->wp->wp_status) {
-			rc |= fill_flash->wp->wp_status(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->wp_status) {
+			rc |= fill_flash->chip->wp->wp_status(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -995,8 +996,8 @@ int main(int argc, char *argv[])
 	
 	if (wp_list) {
 		msg_ginfo("Valid write protection ranges:\n");
-		if (fill_flash->wp && fill_flash->wp->list_ranges) {
-			rc |= fill_flash->wp->list_ranges(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->list_ranges) {
+			rc |= fill_flash->chip->wp->list_ranges(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");

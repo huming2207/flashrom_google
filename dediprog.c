@@ -606,7 +606,7 @@ static int dediprog_spi_write(struct flashctx *flash, const uint8_t *buf,
 			      unsigned int start, unsigned int len, uint8_t dedi_spi_cmd)
 {
 	int ret;
-	const unsigned int chunksize = flash->page_size;
+	const unsigned int chunksize = flash->chip->page_size;
 	unsigned int residue = start % chunksize ? chunksize - start % chunksize : 0;
 	unsigned int bulklen;
 
@@ -822,8 +822,8 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 					break;
 				}
 
-				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
-					(dummy.model_id == GENERIC_DEVICE_ID)) {
+				if ((dummy.chip->manufacture_id == GENERIC_MANUF_ID) ||
+					(dummy.chip->model_id == GENERIC_DEVICE_ID)) {
 					break;
 				}
 

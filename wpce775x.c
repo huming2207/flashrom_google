@@ -413,9 +413,9 @@ int initflash_cfg_setup(struct flashctx *flash)
 	/* Set "sane" defaults. If the flash chip is known, then use parameters
 	   from it. */
 	initflash_cfg->read_device_id = JEDEC_RDID;
-	if (flash && (flash->feature_bits | FEATURE_WRSR_WREN))
+	if (flash && (flash->chip->feature_bits | FEATURE_WRSR_WREN))
 		initflash_cfg->write_status_enable = JEDEC_WREN;
-	else if (flash && (flash->feature_bits | FEATURE_WRSR_EWSR))
+	else if (flash && (flash->chip->feature_bits | FEATURE_WRSR_EWSR))
 		initflash_cfg->write_status_enable = JEDEC_EWSR;
 	else
 		initflash_cfg->write_status_enable = JEDEC_WREN;
@@ -432,7 +432,7 @@ int initflash_cfg_setup(struct flashctx *flash)
 	/* back to "sane" defaults... */
 	initflash_cfg->program_unit_size = 0x01;
 	if (flash)
-		initflash_cfg->page_size = logbase2(flash->page_size);
+		initflash_cfg->page_size = logbase2(flash->chip->page_size);
 	else
 		initflash_cfg->page_size = 0x08;
 	
@@ -716,7 +716,8 @@ int wpce775x_spi_read(struct flashctx *flash, uint8_t * buf,
 		initflash_cfg_setup(flash);
 		InitFlash();
 	}
-	return spi_read_chunked(flash, buf, start, len, flash->page_size);
+	return spi_read_chunked(flash, buf, start, len,
+				flash->chip->page_size);
 }
 
 int wpce775x_spi_write_256(struct flashctx *flash, const uint8_t *buf,
@@ -726,7 +727,8 @@ int wpce775x_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 		initflash_cfg_setup(flash);
 		InitFlash();
 	}
-	return spi_write_chunked(flash, buf, start, len, flash->page_size);
+	return spi_write_chunked(flash, buf, start, len,
+				 flash->chip->page_size);
 }
 
 int wpce775x_spi_read_status_register(unsigned int readcnt, uint8_t *readarr)

@@ -849,16 +849,16 @@ int probe_variable_size(struct flashctx *flash)
 	if (emu_chip_size % 1024)
 		msg_perr("%s: emu_chip_size is not multipler of 1024.\n",
 		         __func__);
-	flash->total_size = emu_chip_size / 1024;
+	flash->chip->total_size = emu_chip_size / 1024;
 	msg_cdbg("%s: set flash->total_size to %dK bytes.\n", __func__,
-	         flash->total_size);
+	         flash->chip->total_size);
 
 	if (erase_to_zero)
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	/* Update eraser count */
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
-		struct block_eraser *eraser = &flash->block_erasers[i];
+		struct block_eraser *eraser = &flash->chip->block_erasers[i];
 		if (eraser->block_erase == NULL)
 			break;
 
