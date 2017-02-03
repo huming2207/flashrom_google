@@ -234,38 +234,38 @@ static void print_supported_chips(int host_controller)
 		for (i = curdevlen; i < maxchiplen; i++)
 			msg_ginfo(" ");
 
-		if ((f->tested & TEST_OK_PROBE))
+		if ((f->tested.probe == OK))
 			msg_ginfo("P");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_READ))
+		if ((f->tested.read == OK))
 			msg_ginfo("R");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_ERASE))
+		if ((f->tested.erase == OK))
 			msg_ginfo("E");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_WRITE))
+		if ((f->tested.write == OK))
 			msg_ginfo("W");
 		else
 			msg_ginfo(" ");
 		for (i = 0; i < border; i++)
 			msg_ginfo(" ");
 
-		if ((f->tested & TEST_BAD_PROBE))
+		if ((f->tested.probe == BAD))
 			msg_ginfo("P");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_READ))
+		if ((f->tested.read == BAD))
 			msg_ginfo("R");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_ERASE))
+		if ((f->tested.erase == BAD))
 			msg_ginfo("E");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_WRITE))
+		if ((f->tested.write == BAD))
 			msg_ginfo("W");
 		else
 			msg_ginfo(" ");

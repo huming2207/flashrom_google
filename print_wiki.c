@@ -210,7 +210,6 @@ static void print_supported_chips_wiki(int cols)
 {
 	int i = 0, c = 1, chipcount = 0;
 	const struct flashchip *f, *old = NULL;
-	uint32_t t;
 	char *s;
 	char vmax[6];
 	char vmin[6];
@@ -239,7 +238,6 @@ static void print_supported_chips_wiki(int cols)
 		if (old != NULL && strcmp(old->vendor, f->vendor))
 			c = !c;
 
-		t = f->tested;
 		s = flashbuses_to_text(f->bustype);
 		sprintf(vmin, "%0.03f", f->voltage.min / (double)1000);
 		sprintf(vmax, "%0.03f", f->voltage.max / (double)1000);
@@ -250,14 +248,14 @@ static void print_supported_chips_wiki(int cols)
 		       "|| %s || %s \n",
 		       (c == 1) ? "eeeeee" : "dddddd", f->vendor, f->name,
 		       f->total_size, s,
-		       (t & TEST_OK_PROBE) ? "OK" :
-		       (t & TEST_BAD_PROBE) ? "No" : "?3",
-		       (t & TEST_OK_READ) ? "OK" :
-		       (t & TEST_BAD_READ) ? "No" : "?3",
-		       (t & TEST_OK_ERASE) ? "OK" :
-		       (t & TEST_BAD_ERASE) ? "No" : "?3",
-		       (t & TEST_OK_WRITE) ? "OK" :
-		       (t & TEST_BAD_WRITE) ? "No" : "?3",
+		       (f->tested.probe == OK) ? "OK" :
+		       (f->tested.probe == BAD) ? "No" : "?3",
+		       (f->tested.read == OK) ? "OK" :
+		       (f->tested.read == BAD) ? "No" : "?3",
+		       (f->tested.erase == OK) ? "OK" :
+		       (f->tested.erase == BAD) ? "No" : "?3",
+		       (f->tested.write == OK) ? "OK" :
+		       (f->tested.write == BAD) ? "No" : "?3",
 		       f->voltage.min ? vmin : "N/A",
 		       f->voltage.min ? vmax : "N/A");
 		free(s);

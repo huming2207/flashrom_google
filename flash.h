@@ -123,6 +123,30 @@ struct voltage_range {
 	uint16_t min, max;
 };
 
+enum test_state {
+	OK = 0,
+	NT = 1,	/* Not tested */
+	BAD,	/* Known to not work */
+	DEP,	/* Support depends on configuration (e.g. Intel flash descriptor) */
+	NA,	/* Not applicable (e.g. write support on ROM chips) */
+};
+
+#define TEST_UNTESTED	(struct tested){ .probe = NT, .read = NT, .erase = NT, .write = NT, .uread = NT }
+
+#define TEST_OK_PROBE	(struct tested){ .probe = OK, .read = NT, .erase = NT, .write = NT, .uread = NT }
+#define TEST_OK_PR	(struct tested){ .probe = OK, .read = OK, .erase = NT, .write = NT, .uread = NT }
+#define TEST_OK_PRE	(struct tested){ .probe = OK, .read = OK, .erase = OK, .write = NT, .uread = NT }
+#define TEST_OK_PRU	(struct tested){ .probe = OK, .read = OK, .erase = NT, .write = NT, .uread = OK }
+#define TEST_OK_PREU	(struct tested){ .probe = OK, .read = OK, .erase = OK, .write = NT, .uread = OK }
+#define TEST_OK_PREW	(struct tested){ .probe = OK, .read = OK, .erase = OK, .write = OK, .uread = NT }
+#define TEST_OK_PREWU	(struct tested){ .probe = OK, .read = OK, .erase = OK, .write = OK, .uread = OK }
+
+#define TEST_BAD_PROBE	(struct tested){ .probe = BAD, .read = NT, .erase = NT, .write = NT, .uread = NT }
+#define TEST_BAD_PR	(struct tested){ .probe = BAD, .read = BAD, .erase = NT, .write = NT, .uread = NT }
+#define TEST_BAD_PRE	(struct tested){ .probe = BAD, .read = BAD, .erase = BAD, .write = NT, .uread = NT }
+#define TEST_BAD_PREW	(struct tested){ .probe = BAD, .read = BAD, .erase = BAD, .write = BAD, .uread = NT }
+#define TEST_BAD_PREWU	(struct tested){ .probe = BAD, .read = BAD, .erase = BAD, .write = BAD, .uread = BAD }
+
 struct flashchip {
 	const char *vendor;
 	const char *name;
@@ -143,11 +167,14 @@ struct flashchip {
 	unsigned int page_size;
 	int feature_bits;
 
-	/*
-	 * Indicate if flashrom has been tested with this flash chip and if
-	 * everything worked correctly.
-	 */
-	uint32_t tested;
+	/* Indicate how well flashrom supports different operations of this flash chip. */
+	struct tested {
+		enum test_state probe;
+		enum test_state read;
+		enum test_state erase;
+		enum test_state write;
+		enum test_state uread;
+	} tested;
 
 	int (*probe) (struct flashctx *flash);
 
@@ -164,7 +191,7 @@ struct flashchip {
 	 * elements or set the function pointer to NULL.
 	 */
 	struct block_eraser {
-		struct eraseblock{
+		struct eraseblock {
 			unsigned int size; /* Eraseblock size in bytes */
 			unsigned int count; /* Number of contiguous blocks with that size */
 		} eraseblocks[NUM_ERASEREGIONS];
@@ -201,31 +228,6 @@ int flash_unerased_value(struct flashctx *flash);
 
 /* Given RDID info, return pointer to entry in flashchips[] */
 const struct flashchip *flash_id_to_entry(uint32_t mfg_id, uint32_t model_id);
-
-#define TEST_UNTESTED	0
-
-#define TEST_OK_PROBE	(1 << 0)
-#define TEST_OK_READ	(1 << 1)
-#define TEST_OK_ERASE	(1 << 2)
-#define TEST_OK_WRITE	(1 << 3)
-#define TEST_OK_UREAD	(1 << 4)
-#define TEST_OK_PR	(TEST_OK_PROBE | TEST_OK_READ)
-#define TEST_OK_PRE	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE)
-#define TEST_OK_PREU	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE | TEST_OK_UREAD)
-#define TEST_OK_PRU	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_UREAD)
-#define TEST_OK_PRW	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_WRITE)
-#define TEST_OK_PREW	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE | TEST_OK_WRITE)
-#define TEST_OK_PREWU	(TEST_OK_PROBE | TEST_OK_READ | TEST_OK_ERASE | TEST_OK_WRITE | TEST_OK_UREAD)
-#define TEST_OK_MASK	0x1f
-
-#define TEST_BAD_PROBE	(1 << 5)
-#define TEST_BAD_READ	(1 << 6)
-#define TEST_BAD_ERASE	(1 << 7)
-#define TEST_BAD_WRITE	(1 << 8)
-#define TEST_BAD_UREAD	(1 << 9)
-#define TEST_BAD_PREW	(TEST_BAD_PROBE | TEST_BAD_READ | TEST_BAD_ERASE | TEST_BAD_WRITE)
-#define TEST_BAD_PREWU	(TEST_BAD_PROBE | TEST_BAD_READ | TEST_BAD_ERASE | TEST_BAD_WRITE | TEST_BAD_UREAD)
-#define TEST_BAD_MASK	0x3e0
 
 /* Timing used in probe routines. ZERO is -2 to differentiate between an unset
  * field and zero delay.

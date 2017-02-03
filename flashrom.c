@@ -1851,36 +1851,45 @@ void check_chip_supported(const struct flashctx *flash)
 			 "clone the contents of this chip (see man page for "
 			 "details).\n");
 	}
-	if (TEST_OK_MASK != (flash->chip->tested & TEST_OK_MASK)) {
+	if ((flash->chip->tested.probe != OK) ||
+	    (flash->chip->tested.read != OK) ||
+	    (flash->chip->tested.erase != OK) ||
+	    (flash->chip->tested.write != OK) ||
+	    (flash->chip->tested.uread != OK)) {
 		msg_cdbg("===\n");
-		if (flash->chip->tested & TEST_BAD_MASK) {
+		if ((flash->chip->tested.probe == BAD) ||
+		    (flash->chip->tested.read == BAD) ||
+		    (flash->chip->tested.erase == BAD) ||
+		    (flash->chip->tested.write == BAD) ||
+		    (flash->chip->tested.uread == BAD)) {
 			msg_cdbg("This flash part has status NOT WORKING for operations:");
-			if (flash->chip->tested & TEST_BAD_PROBE)
+			if (flash->chip->tested.probe == BAD)
 				msg_cdbg(" PROBE");
-			if (flash->chip->tested & TEST_BAD_READ)
+			if (flash->chip->tested.read == BAD)
 				msg_cdbg(" READ");
-			if (flash->chip->tested & TEST_BAD_ERASE)
+			if (flash->chip->tested.erase == BAD)
 				msg_cdbg(" ERASE");
-			if (flash->chip->tested & TEST_BAD_WRITE)
+			if (flash->chip->tested.write == BAD)
 				msg_cdbg(" WRITE");
-			if (flash->chip->tested & TEST_BAD_UREAD)
+			if (flash->chip->tested.uread == BAD)
 				msg_cdbg(" UNBOUNDED READ");
 			msg_cdbg("\n");
 		}
-		if ((!(flash->chip->tested & TEST_BAD_PROBE) && !(flash->chip->tested & TEST_OK_PROBE)) ||
-		    (!(flash->chip->tested & TEST_BAD_READ) && !(flash->chip->tested & TEST_OK_READ)) ||
-		    (!(flash->chip->tested & TEST_BAD_ERASE) && !(flash->chip->tested & TEST_OK_ERASE)) ||
-		    (!(flash->chip->tested & TEST_BAD_WRITE) && !(flash->chip->tested & TEST_OK_WRITE))) {
+		if ((flash->chip->tested.probe == NT) ||
+		    (flash->chip->tested.read == NT) ||
+		    (flash->chip->tested.erase == NT) ||
+		    (flash->chip->tested.write == NT) ||
+		    (flash->chip->tested.uread == NT)) {
 			msg_cdbg("This flash part has status UNTESTED for operations:");
-			if (!(flash->chip->tested & TEST_BAD_PROBE) && !(flash->chip->tested & TEST_OK_PROBE))
+			if (flash->chip->tested.probe == NT)
 				msg_cdbg(" PROBE");
-			if (!(flash->chip->tested & TEST_BAD_READ) && !(flash->chip->tested & TEST_OK_READ))
+			if (flash->chip->tested.read == NT)
 				msg_cdbg(" READ");
-			if (!(flash->chip->tested & TEST_BAD_ERASE) && !(flash->chip->tested & TEST_OK_ERASE))
+			if (flash->chip->tested.erase == NT)
 				msg_cdbg(" ERASE");
-			if (!(flash->chip->tested & TEST_BAD_WRITE) && !(flash->chip->tested & TEST_OK_WRITE))
+			if (flash->chip->tested.write == NT)
 				msg_cdbg(" WRITE");
-			if (!(flash->chip->tested & TEST_BAD_UREAD) && !(flash->chip->tested & TEST_OK_UREAD))
+			if (flash->chip->tested.uread == NT)
 				msg_cdbg(" UNBOUNDED READ");
 			msg_cdbg("\n");
 		}
@@ -1907,6 +1916,8 @@ void check_chip_supported(const struct flashctx *flash)
  */
 int chip_safety_check(struct flashctx *flash, int force, int read_it, int write_it, int erase_it, int verify_it)
 {
+	const struct flashchip *chip = flash->chip;
+
 	if (!programmer_may_write && (write_it || erase_it)) {
 		msg_perr("Write/erase is not working yet on your programmer in "
 			 "its current configuration.\n");
@@ -1920,13 +1931,13 @@ int chip_safety_check(struct flashctx *flash, int force, int read_it, int write_
 
 	if (read_it || erase_it || write_it || verify_it) {
 		/* Everything needs read. */
-		if (flash->chip->tested & TEST_BAD_READ) {
+		if (chip->tested.read == BAD) {
 			msg_cerr("Read is not working on this chip. ");
 			if (!force)
 				return 1;
 			msg_cerr("Continuing anyway.\n");
 		}
-		if (!flash->chip->read) {
+		if (!chip->read) {
 			msg_cerr("flashrom has no read function for this "
 				 "flash chip.\n");
 			return 1;
@@ -1934,7 +1945,11 @@ int chip_safety_check(struct flashctx *flash, int force, int read_it, int write_
 	}
 	if (erase_it || write_it) {
 		/* Write needs erase. */
-		if (flash->chip->tested & TEST_BAD_ERASE) {
+		if (chip->tested.erase == NA) {
+			msg_cerr("Erase is not possible on this chip.\n");
+			return 1;
+		}
+		if (chip->tested.erase == BAD) {
 			msg_cerr("Erase is not working on this chip. ");
 			if (!force)
 				return 1;
@@ -1947,13 +1962,17 @@ int chip_safety_check(struct flashctx *flash, int force, int read_it, int write_
 		}
 	}
 	if (write_it) {
-		if (flash->chip->tested & TEST_BAD_WRITE) {
+		if (chip->tested.write == NA) {
+			msg_cerr("Write is not possible on this chip.\n");
+			return 1;
+		}
+		if (chip->tested.write == BAD) {
 			msg_cerr("Write is not working on this chip. ");
 			if (!force)
 				return 1;
 			msg_cerr("Continuing anyway.\n");
 		}
-		if (!flash->chip->write) {
+		if (!chip->write) {
 			msg_cerr("flashrom has no write function for this "
 				 "flash chip.\n");
 			return 1;
