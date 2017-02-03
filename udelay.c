@@ -23,8 +23,8 @@
 #ifndef __LIBPAYLOAD__
 
 #include <unistd.h>
-#include <sys/time.h>
 #include <time.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h>
@@ -43,12 +43,12 @@ int broken_timer = 0;
 /* loops per microsecond */
 static unsigned long micro = 1;
 
-__attribute__ ((noinline)) void myusec_delay(int usecs)
+__attribute__ ((noinline)) void myusec_delay(unsigned int usecs)
 {
 	unsigned long i;
 	for (i = 0; i < usecs * micro; i++) {
 		/* Make sure the compiler doesn't optimize the loop away. */
-		asm volatile ("" : : "rm" (i) );
+		__asm__ volatile ("" : : "rm" (i) );
 	}
 }
 
@@ -76,7 +76,7 @@ static unsigned long measure_os_delay_resolution(void)
 	return timeusec;
 }
 
-static unsigned long measure_delay(int usecs)
+static unsigned long measure_delay(unsigned int usecs)
 {
 	unsigned long timeusec;
 	struct timeval start, end;
@@ -106,7 +106,7 @@ void myusec_calibrate_delay(void)
 	if (!broken_timer)
 		return;
 
-	msg_pdbg("Calibrating delay loop... ");
+	msg_pinfo("Calibrating delay loop... ");
 	resolution = measure_os_delay_resolution();
 	if (resolution) {
 		msg_pdbg("OS timer resolution is %lu usecs, ", resolution);
@@ -182,10 +182,10 @@ recalibrate:
 	timeusec = measure_delay(resolution * 4);
 	msg_pdbg("%ld myus = %ld us, ", resolution * 4, timeusec);
 
-	msg_pdbg("OK.\n");
+	msg_pinfo("OK.\n");
 }
 
-static void imprecise_delay(int usecs)
+static void imprecise_delay(unsigned int usecs)
 {
 	int ret, done_waiting = 0;
 	unsigned long long nsecs;
@@ -224,7 +224,7 @@ static void imprecise_delay(int usecs)
 	}
 }
 
-void internal_delay(int usecs)
+void internal_delay(unsigned int usecs)
 {
 	if (broken_timer) {
 		/* Very long delays don't need much precision, so use nanosleep
@@ -247,7 +247,7 @@ void myusec_calibrate_delay(void)
 	get_cpu_speed();
 }
 
-void internal_delay(int usecs)
+void internal_delay(unsigned int usecs)
 {
 	udelay(usecs);
 }
