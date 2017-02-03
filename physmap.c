@@ -128,7 +128,7 @@ int setup_cpu_msr(int cpu)
 void cleanup_cpu_msr(void)
 {
 }
-#elif defined(__DARWIN__)
+#elif defined(__MACH__) && defined(__APPLE__)
 
 #define MEM_DEV "DirectHW"
 
@@ -466,7 +466,7 @@ void cleanup_cpu_msr(void)
 
 #else
 
-#ifdef __DARWIN__
+#if defined(__MACH__) && defined(__APPLE__)
 int setup_cpu_msr(int cpu)
 {
 	// Always succeed for now
