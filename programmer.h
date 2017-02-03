@@ -275,7 +275,6 @@ int board_flash_enable(const char *vendor, const char *part);
 /* chipset_enable.c */
 int chipset_flash_enable(void);
 int get_target_bus_from_chipset(enum chipbustype *target_bus);
-enum ich_chipset ich_generation;
 
 /* processor_enable.c */
 int processor_flash_enable(void);
@@ -603,6 +602,7 @@ enum ich_chipset {
 };
 
 #if CONFIG_INTERNAL == 1
+enum ich_chipset ich_generation;
 extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
