@@ -27,15 +27,18 @@
 /*
  * Please keep this list sorted alphabetically by manufacturer. The first
  * entry of each section should be the manufacturer ID, followed by the
- * list of devices from that manufacturer (sorted by device IDs).
+ * list of devices from that manufacturer (sorted by device ID).
  *
- * All LPC/FWH parts (parallel flash) have 8-bit device IDs if there is no
+ * Most LPC/FWH parts (parallel flash) have 8-bit device IDs if there is no
  * continuation code.
- * SPI parts have 16-bit device IDs if they support RDID.
+ * SPI parts have at least 16-bit device IDs if they support RDID.
  */
 
-#define GENERIC_MANUF_ID	0xffff	/* Check if there is a vendor ID */
-#define GENERIC_DEVICE_ID	0xffff	/* Only match the vendor ID */
+#define GENERIC_MANUF_ID	0xFFFF	/* Check if there is a vendor ID */
+#define GENERIC_DEVICE_ID	0xFFFF	/* Only match the vendor ID */
+
+#define PROGMANUF_ID		0xFFFE	/* dummy ID for opaque chips behind a programmer */
+#define PROGDEV_ID		0x01	/* dummy ID for opaque chips behind a programmer */
 
 #define VARIABLE_SIZE_MANUF_ID 0x3eaf
 #define VARIABLE_SIZE_DEVICE_ID 0x10af
@@ -64,9 +67,9 @@
 #define AMD_AM29F004BB		0x7B
 #define AMD_AM29F004BT		0x77
 #define AMD_AM29F016D		0xAD
-#define AMD_AM29F010B		0x20	/* Same as Am29F010A */
-#define AMD_AM29F040B		0xA4
-#define AMD_AM29F080B		0xD5
+#define AMD_AM29F010		0x20	/* Same as Am29F010A and Am29F010B */
+#define AMD_AM29F040		0xA4	/* Same as AM29F040B */
+#define AMD_AM29F080		0xD5	/* Same as Am29F080B */
 #define AMD_AM29F200BB		0x57
 #define AMD_AM29F200BT		0x51
 #define AMD_AM29F400BB		0xAB
@@ -112,7 +115,7 @@
 #define AMIC_A25L080		0x3014
 #define AMIC_A25L016		0x3015
 #define AMIC_A25L032		0x3016
-#define AMIC_A25LQ032		0x4016
+#define AMIC_A25LQ032		0x4016	/* Same as A25LQ32A, but the latter supports SFDP */
 #define AMIC_A29002B		0x0d
 #define AMIC_A29002T		0x8C	/* Same as A290021T */
 #define AMIC_A29040B		0x86
@@ -127,17 +130,16 @@
 #define AMIC_A29L040		0x92
 #define AMIC_A49LF040A		0x9d
 
-#define ATMEL_ID		0x1F	/* Atmel */
-#define ATMEL_AT25SL128A	0x4218
+#define ATMEL_ID		0x1F	/* Atmel (now used by Adesto) */
 #define ATMEL_AT25DF021		0x4300
 #define ATMEL_AT25DF041A	0x4401
-#define ATMEL_AT25DF081		0x4502
+#define ATMEL_AT25DF081		0x4502	/* EDI 0x00. AT25DL081 has same ID + EDI 0x0100 */
 #define ATMEL_AT25DF081A	0x4501	/* Yes, 81A has a lower number than 81 */
 #define ATMEL_AT25DF161		0x4602
 #define ATMEL_AT25DF321		0x4700	/* Same as 26DF321 */
 #define ATMEL_AT25DF321A	0x4701
 #define ATMEL_AT25DF641		0x4800
-#define ATMEL_AT25DQ161		0x8600
+#define ATMEL_AT25DQ161		0x8600	/* EDI 0x0100 */
 #define ATMEL_AT25F512		/* No device ID found in datasheet. Vendor ID
 				 * can be read with AT25F512A_RDID */
 #define ATMEL_AT25F512A		0x65 /* Needs AT25F512A_RDID */
@@ -147,6 +149,7 @@
 #define ATMEL_AT25F1024A		0x60 /* Needs AT25F512A_RDID */
 #define ATMEL_AT25FS010		0x6601
 #define ATMEL_AT25FS040		0x6604
+#define ATMEL_AT25SL128A	0x4218
 #define ATMEL_AT26DF041		0x4400
 #define ATMEL_AT26DF081		0x4500	/* guessed, no datasheet available */
 #define ATMEL_AT26DF081A	0x4501
@@ -199,7 +202,7 @@
 #define CATALYST_ID		0x31	/* Catalyst */
 #define CATALYST_CAT28F512	0xB8
 
-#define EMST_ID			0x8C	/* EMST / EFST Elite Flash Storage */
+#define EMST_ID			0x8C	/* Elite Semiconductor Memory Technology (ESMT) / EFST Elite Flash Storage */
 #define EMST_F25L008A		0x2014
 #define EMST_F49B002UA		0x00
 
@@ -214,28 +217,28 @@
  */
 #define EON_ID			0x7F1C	/* EON Silicon Devices */
 #define EON_ID_NOPREFIX		0x1C	/* EON, missing 0x7F prefix */
-#define EON_EN25B05		0x2010	/* Same as P05, 2^19 kbit or 2^16 kByte */
+#define EON_EN25B05		0x2010	/* Same as EN25P05, can be distinguished by RES/REMS: */
 #define EON_EN25B05T		0x25
 #define EON_EN25B05B		0x95
-#define EON_EN25B10		0x2011	/* Same as P10 */
+#define EON_EN25B10		0x2011	/* Same as EN25P10, can be distinguished by RES/REMS: */
 #define EON_EN25B10T		0x40
 #define EON_EN25B10B		0x30
-#define EON_EN25B20		0x2012	/* Same as P20 */
+#define EON_EN25B20		0x2012	/* Same as EN25P20, can be distinguished by RES/REMS: */
 #define EON_EN25B20T		0x41
 #define EON_EN25B20B		0x31
-#define EON_EN25B40		0x2013	/* Same as P40 */
+#define EON_EN25B40		0x2013	/* Same as EN25P40, can be distinguished by RES/REMS: */
 #define EON_EN25B40T		0x42
 #define EON_EN25B40B		0x32
-#define EON_EN25B80		0x2014	/* Same as P80 */
+#define EON_EN25B80		0x2014	/* Same as EN25P80, can be distinguished by RES/REMS: */
 #define EON_EN25B80T		0x43
 #define EON_EN25B80B		0x33
-#define EON_EN25B16		0x2015	/* Same as P16 */
+#define EON_EN25B16		0x2015	/* Same as EN25P16, can be distinguished by RES/REMS: */
 #define EON_EN25B16T		0x44
 #define EON_EN25B16B		0x34
-#define EON_EN25B32		0x2016	/* Same as P32 */
+#define EON_EN25B32		0x2016	/* Same as EN25P32, can be distinguished by RES/REMS: */
 #define EON_EN25B32T		0x45
 #define EON_EN25B32B		0x35
-#define EON_EN25B64		0x2017	/* Same as P64 */
+#define EON_EN25B64		0x2017	/* Same as EN25P64, can be distinguished by RES/REMS: */
 #define EON_EN25B64T		0x46
 #define EON_EN25B64B		0x36
 #define EON_EN25D16		0x3015
@@ -300,13 +303,13 @@
 #define FUJITSU_MBM29LV800TA	0xDA	/* Same as MBM29LV800TE */
 
 #define GIGADEVICE_ID		0xC8	/* GigaDevice */
-#define GIGADEVICE_GD25Q20	0x4012
-#define GIGADEVICE_GD25Q40	0x4013
-#define GIGADEVICE_GD25Q80	0x4014
-#define GIGADEVICE_GD25Q16	0x4015
-#define GIGADEVICE_GD25Q32	0x4016
-#define GIGADEVICE_GD25Q64	0x4017
-#define GIGADEVICE_GD25Q128	0x4018
+#define GIGADEVICE_GD25Q20	0x4012	/* Same as GD25QB */
+#define GIGADEVICE_GD25Q40	0x4013	/* Same as GD25QB */
+#define GIGADEVICE_GD25Q80	0x4014	/* Same as GD25Q80B (which has OTP) */
+#define GIGADEVICE_GD25Q16	0x4015	/* Same as GD25Q16B (which has OTP) */
+#define GIGADEVICE_GD25Q32	0x4016	/* Same as GD25Q32B */
+#define GIGADEVICE_GD25Q64	0x4017	/* Same as GD25Q64B */
+#define GIGADEVICE_GD25Q128	0x4018	/* GD25Q128B and GD25Q128C only, can be distinguished by SFDP */
 #define GIGADEVICE_GD25LQ40	0x6013
 #define GIGADEVICE_GD25LQ32	0x6016
 #define GIGADEVICE_GD25LQ64	0x6017 /* Same as GD25LB64C */
@@ -694,8 +697,5 @@
 #define WINBOND_W49F020		0x8C
 #define WINBOND_W49V002A	0xB0
 #define WINBOND_W49V002FA	0x32
-
-#define PROGMANUF_ID		0xFFFE	/* dummy ID for opaque chips behind a programmer */
-#define PROGDEV_ID		0x01	/* dummy ID for opaque chips behind a programmer */
 
 #endif /* !FLASHCHIPS_H */
