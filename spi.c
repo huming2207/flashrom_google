@@ -117,7 +117,7 @@ int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 	return rc;
 }
 
-int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int default_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int max_data = spi_programmer->max_data_write;
 	int rc;
@@ -173,7 +173,7 @@ int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsi
  * .write_256 = spi_chip_write_1
  */
 /* real chunksize is up to 256, logical chunksize is 256 */
-int spi_chip_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_chip_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	if (!spi_programmer->write_256) {
 		msg_perr("%s called, but SPI page write is unsupported on this "

@@ -891,7 +891,7 @@ int spi_byte_program(struct flashctx *flash, unsigned int addr, uint8_t databyte
 	return result;
 }
 
-int spi_nbyte_program(struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len)
+int spi_nbyte_program(struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len)
 {
 	int result;
 	/* FIXME: Switch to malloc based on len unless that kills speed. */
@@ -1076,7 +1076,7 @@ int spi_read_unbound(struct flashctx *flash, uint8_t *buf, unsigned int start, u
  * FIXME: Use the chunk code from Michael Karcher instead.
  * Each page is written separately in chunks with a maximum size of chunksize.
  */
-int spi_write_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize)
+int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize)
 {
 	int rc = 0;
 	unsigned int i, j, starthere, lenhere, towrite;
@@ -1124,7 +1124,7 @@ int spi_write_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, 
  * (e.g. due to size constraints in IT87* for over 512 kB)
  */
 /* real chunksize is 1, logical chunksize is 1 */
-int spi_chip_write_1(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_chip_write_1(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int i;
 	int result = 0;
@@ -1140,7 +1140,7 @@ int spi_chip_write_1(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 	return 0;
 }
 
-int spi_aai_write(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_aai_write(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	uint32_t pos = start;
 	int result;

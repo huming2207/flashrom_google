@@ -107,7 +107,7 @@ static int it8716f_spi_send_command(const struct flashctx *flash, unsigned int w
 			const unsigned char *writearr, unsigned char *readarr);
 static int it8716f_spi_chip_read(struct flashctx *flash, uint8_t *buf,
 				 unsigned int start, unsigned int len);
-static int it8716f_spi_chip_write_256(struct flashctx *flash, uint8_t *buf,
+static int it8716f_spi_chip_write_256(struct flashctx *flash, const uint8_t *buf,
 				      unsigned int start, unsigned int len);
 
 static const struct spi_programmer spi_programmer_it87xx = {
@@ -328,7 +328,7 @@ static int it8716f_spi_send_command(const struct flashctx *flash, unsigned int w
 }
 
 /* Page size is usually 256 bytes */
-static int it8716f_spi_page_program(struct flashctx *flash, uint8_t *buf,
+static int it8716f_spi_page_program(struct flashctx *flash, const uint8_t *buf,
 				    unsigned int start)
 {
 	unsigned int i;
@@ -374,7 +374,7 @@ static int it8716f_spi_chip_read(struct flashctx *flash, uint8_t *buf,
 	return 0;
 }
 
-static int it8716f_spi_chip_write_256(struct flashctx *flash, uint8_t *buf,
+static int it8716f_spi_chip_write_256(struct flashctx *flash, const uint8_t *buf,
 				      unsigned int start, unsigned int len)
 {
 	/*

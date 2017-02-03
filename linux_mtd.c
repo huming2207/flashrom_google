@@ -222,7 +222,7 @@ static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 }
 
 /* this version assumes we must divide the write request into pages ourselves */
-static int linux_mtd_write(struct flashctx *flash, uint8_t *buf,
+static int linux_mtd_write(struct flashctx *flash, const uint8_t *buf,
 				unsigned int start, unsigned int len)
 {
 	unsigned int page;

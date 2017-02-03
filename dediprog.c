@@ -654,8 +654,7 @@ static int dediprog_spi_write(struct flashctx *flash, const uint8_t *buf,
 	return 0;
 }
 
-//static int dediprog_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
-static int dediprog_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+static int dediprog_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	return dediprog_spi_write(flash, buf, start, len, WRITE_MODE_PAGE_PGM);
 }

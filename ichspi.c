@@ -1514,7 +1514,7 @@ int ich_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	return 0;
 }
 
-static int ich_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+static int ich_hwseq_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
 		    unsigned int len)
 {
 	uint16_t hsfc;
@@ -1786,7 +1786,7 @@ uint8_t pch_hwseq_read_status(const struct flashctx *flash)
 	return buf;
 }
 
-int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int pch_hwseq_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
 		    unsigned int len)
 {
 	uint16_t hsfc;

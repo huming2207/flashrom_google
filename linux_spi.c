@@ -53,7 +53,7 @@ static int linux_spi_send_command(const struct flashctx *flash, unsigned int wri
 			const unsigned char *txbuf, unsigned char *rxbuf);
 static int linux_spi_read(struct flashctx *flash, uint8_t *buf,
 			  unsigned int start, unsigned int len);
-static int linux_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int linux_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len);
 
 static const struct spi_programmer spi_programmer_linux = {
@@ -282,7 +282,7 @@ static int linux_spi_read(struct flashctx *flash, uint8_t *buf,
 	return spi_read_chunked(flash, buf, start, len, SPI_DMA_SIZE);
 }
 
-static int linux_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int linux_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len)
 {
 	return spi_write_chunked(flash, buf, start, len,

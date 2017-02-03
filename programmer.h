@@ -574,7 +574,7 @@ struct spi_programmer {
 
 	/* Optimized functions for this master */
 	int (*read)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*write_256)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write_256)(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 };
 
 extern const struct spi_programmer *spi_programmer;
@@ -582,7 +582,7 @@ int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt
 			     const unsigned char *writearr, unsigned char *readarr);
 int default_spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
 int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+int default_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 void register_spi_programmer(const struct spi_programmer *programmer);
 
 /* ichspi.c */
@@ -643,7 +643,7 @@ struct opaque_programmer {
 	/* Specific functions for this programmer */
 	int (*probe) (struct flashctx *flash);
 	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*write) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write) (struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 	int (*erase) (struct flashctx *flash, unsigned int blockaddr, unsigned int blocklen);
 	uint8_t (*read_status) (const struct flashctx *flash);
 	int (*write_status) (const struct flashctx *flash, int status);

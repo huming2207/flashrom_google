@@ -85,7 +85,7 @@ static unsigned long int delay_us = 0;
 
 static int dummy_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len);
 static void dummy_chip_writeb(const struct flashctx *flash, uint8_t val,
 			      chipaddr addr);
@@ -819,7 +819,7 @@ static int dummy_spi_send_command(const struct flashctx *flash, unsigned int wri
 	return 0;
 }
 
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len)
 {
 	return spi_write_chunked(flash, buf, start, len,

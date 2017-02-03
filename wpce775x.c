@@ -719,7 +719,7 @@ int wpce775x_spi_read(struct flashctx *flash, uint8_t * buf,
 	return spi_read_chunked(flash, buf, start, len, flash->page_size);
 }
 
-int wpce775x_spi_write_256(struct flashctx *flash, uint8_t *buf,
+int wpce775x_spi_write_256(struct flashctx *flash, const uint8_t *buf,
                            unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {

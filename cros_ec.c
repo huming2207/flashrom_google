@@ -551,7 +551,7 @@ int cros_ec_block_erase(struct flashctx *flash,
 }
 
 
-int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0, real_write_size;
