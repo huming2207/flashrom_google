@@ -41,7 +41,7 @@
 
 static void *realmem_map;
 
-static void *map_first_meg(unsigned long phys_addr, size_t len)
+static void *map_first_meg(uintptr_t phys_addr, size_t len)
 {
 	if (realmem_map)
 		return realmem_map + phys_addr;
@@ -60,7 +60,7 @@ static void *map_first_meg(unsigned long phys_addr, size_t len)
 	return realmem_map + phys_addr;
 }
 
-static void *sys_physmap(unsigned long phys_addr, size_t len)
+static void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	int ret;
 	__dpmi_meminfo mi;
@@ -108,7 +108,7 @@ void physunmap(void *virt_addr, size_t len)
 
 #define MEM_DEV ""
 
-void *sys_physmap(unsigned long phys_addr, size_t len)
+void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	return (void *)phys_to_virt(phys_addr);
 }
@@ -132,7 +132,7 @@ void cleanup_cpu_msr(void)
 
 #define MEM_DEV "DirectHW"
 
-static void *sys_physmap(unsigned long phys_addr, size_t len)
+static void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	/* The short form of ?: is a GNU extension.
 	 * FIXME: map_physical returns NULL both for errors and for success
@@ -164,7 +164,7 @@ static int fd_mem = -1;
 static int fd_mem_cached = -1;
 
 /* For MMIO access. Must be uncached, doesn't make sense to restrict to ro. */
-static void *sys_physmap_rw_uncached(unsigned long phys_addr, size_t len)
+static void *sys_physmap_rw_uncached(uintptr_t phys_addr, size_t len)
 {
 	void *virt_addr;
 
@@ -184,7 +184,7 @@ static void *sys_physmap_rw_uncached(unsigned long phys_addr, size_t len)
 /* For reading DMI/coreboot/whatever tables. We should never write, and we
  * do not care about caching.
  */
-static void *sys_physmap_ro_cached(unsigned long phys_addr, size_t len)
+static void *sys_physmap_ro_cached(uintptr_t phys_addr, size_t len)
 {
 	void *virt_addr;
 

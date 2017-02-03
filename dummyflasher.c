@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
@@ -487,9 +488,9 @@ dummy_init_out:
 	return 0;
 }
 
-void *dummy_map(const char *descr, unsigned long phys_addr, size_t len)
+void *dummy_map(const char *descr, uintptr_t phys_addr, size_t len)
 {
-	msg_pspew("%s: Mapping %s, 0x%lx bytes at 0x%08lx\n",
+	msg_pspew("%s: Mapping %s, 0x%lx bytes at %" PRIxPTR "\n",
 		  __func__, descr, (unsigned long)len, phys_addr);
 	return (void *)phys_addr;
 }
