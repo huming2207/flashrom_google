@@ -33,8 +33,7 @@ int probe_w29ee011(struct flashctx *flash)
 		msg_cdbg("Old Winbond W29* probe method disabled because "
 			 "the probing sequence puts the AMIC A49LF040A in "
 			 "a funky state. Use 'flashrom -c %s' if you "
-			 "have a board with such a chip.\n",
-			 flash->chip->name);
+			 "have a board with such a chip.\n", flash->chip->name);
 		return 0;
 	}
 
