@@ -28,7 +28,7 @@
 
 #define SATASII_MEMMAP_SIZE	0x100
 
-uint8_t *sii_bar;
+static uint8_t *sii_bar;
 static uint16_t id;
 
 const struct dev_entry satas_sii[] = {
@@ -39,14 +39,11 @@ const struct dev_entry satas_sii[] = {
 	{0x1095, 0x3132, OK, "Silicon Image", "SiI 3132 SATA Raid II Ctrl"},
 	{0x1095, 0x3512, OK, "Silicon Image", "SiI 3512 [SATALink/SATARaid] SATA Ctrl"},
 
-	{},
+	{0},
 };
 
-static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val,
-				chipaddr addr);
-static uint8_t satasii_chip_readb(const struct flashctx *flash,
-				  const chipaddr addr);
-
+static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr);
+static uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr);
 static const struct par_master par_master_satasii = {
 		.chip_readb		= satasii_chip_readb,
 		.chip_readw		= fallback_chip_readw,
@@ -92,7 +89,7 @@ int satasii_init(void)
 	return 0;
 }
 
-void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
 	uint32_t ctrl_reg, data_reg;
 
@@ -109,7 +106,7 @@ void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr add
 	while (pci_mmio_readl(sii_bar) & (1 << 25)) ;
 }
 
-uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
 	uint32_t ctrl_reg;
 
