@@ -449,42 +449,42 @@ void programmer_unmap_flash_region(void *virt_addr, size_t len)
 
 void chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
-	par_programmer->chip_writeb(flash, val, addr);
+	par_master->chip_writeb(flash, val, addr);
 }
 
 void chip_writew(const struct flashctx *flash, uint16_t val, chipaddr addr)
 {
-	par_programmer->chip_writew(flash, val, addr);
+	par_master->chip_writew(flash, val, addr);
 }
 
 void chip_writel(const struct flashctx *flash, uint32_t val, chipaddr addr)
 {
-	par_programmer->chip_writel(flash, val, addr);
+	par_master->chip_writel(flash, val, addr);
 }
 
 void chip_writen(const struct flashctx *flash, uint8_t *buf, chipaddr addr, size_t len)
 {
-	par_programmer->chip_writen(flash, buf, addr, len);
+	par_master->chip_writen(flash, buf, addr, len);
 }
 
 uint8_t chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
-	return par_programmer->chip_readb(flash, addr);
+	return par_master->chip_readb(flash, addr);
 }
 
 uint16_t chip_readw(const struct flashctx *flash, const chipaddr addr)
 {
-	return par_programmer->chip_readw(flash, addr);
+	return par_master->chip_readw(flash, addr);
 }
 
 uint32_t chip_readl(const struct flashctx *flash, const chipaddr addr)
 {
-	return par_programmer->chip_readl(flash, addr);
+	return par_master->chip_readl(flash, addr);
 }
 
 void chip_readn(const struct flashctx *flash, uint8_t *buf, chipaddr addr, size_t len)
 {
-	par_programmer->chip_readn(flash, buf, addr, len);
+	par_master->chip_readn(flash, buf, addr, len);
 }
 
 void programmer_delay(int usecs)

@@ -660,7 +660,7 @@ void fallback_chip_writen(const struct flashctx *flash, uint8_t *buf, chipaddr a
 uint16_t fallback_chip_readw(const struct flashctx *flash, const chipaddr addr);
 uint32_t fallback_chip_readl(const struct flashctx *flash, const chipaddr addr);
 void fallback_chip_readn(const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
-struct par_programmer {
+struct par_master {
 	void (*chip_writeb) (const struct flashctx *flash, uint8_t val, chipaddr addr);
 	void (*chip_writew) (const struct flashctx *flash, uint16_t val, chipaddr addr);
 	void (*chip_writel) (const struct flashctx *flash, uint32_t val, chipaddr addr);
@@ -670,8 +670,8 @@ struct par_programmer {
 	uint32_t (*chip_readl) (const struct flashctx *flash, const chipaddr addr);
 	void (*chip_readn) (const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
 };
-extern const struct par_programmer *par_programmer;
-void register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses);
+extern const struct par_master *par_master;
+void register_par_master(const struct par_master *pgm, const enum chipbustype buses);
 
 /* serprog.c */
 #if CONFIG_SERPROG == 1

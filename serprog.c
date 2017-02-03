@@ -321,7 +321,7 @@ static uint8_t serprog_chip_readb(const struct flashctx *flash,
 static void serprog_chip_readn(const struct flashctx *flash, uint8_t *buf,
 			       const chipaddr addr, size_t len);
 
-static const struct par_programmer par_programmer_serprog = {
+static const struct par_master par_master_serprog = {
 		.chip_readb		= serprog_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -603,7 +603,7 @@ int serprog_init(void)
 	if (serprog_buses_supported & BUS_SPI)
 		register_spi_programmer(&spi_programmer_serprog);
 	if (serprog_buses_supported & BUS_NONSPI)
-		register_par_programmer(&par_programmer_serprog,
+		register_par_master(&par_master_serprog,
 					serprog_buses_supported & BUS_NONSPI);
 	return 0;
 }

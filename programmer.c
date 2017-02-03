@@ -21,7 +21,7 @@
 #include "flash.h"
 #include "programmer.h"
 
-static const struct par_programmer par_programmer_none = {
+static const struct par_master par_master_none = {
 		.chip_readb		= noop_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -32,7 +32,7 @@ static const struct par_programmer par_programmer_none = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-const struct par_programmer *par_programmer = &par_programmer_none;
+const struct par_master *par_master = &par_master_none;
 
 /* No-op shutdown() for programmers which don't need special handling */
 int noop_shutdown(void)
@@ -111,9 +111,9 @@ void fallback_chip_readn(const struct flashctx *flash, uint8_t *buf, chipaddr ad
 	return;
 }
 
-void register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses)
+void register_par_master(const struct par_master *pgm, const enum chipbustype buses)
 {
-	par_programmer = pgm;
+	par_master = pgm;
 	buses_supported |= buses;
 }
 

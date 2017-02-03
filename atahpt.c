@@ -45,7 +45,7 @@ static void atahpt_chip_writeb(const struct flashctx *flash, uint8_t val,
 static uint8_t atahpt_chip_readb(const struct flashctx *flash,
 				 const chipaddr addr);
 
-static const struct par_programmer par_programmer_atahpt = {
+static const struct par_master par_master_atahpt = {
 		.chip_readb		= atahpt_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -80,7 +80,7 @@ int atahpt_init(void)
 	if (register_shutdown(atahpt_shutdown, NULL))
 		return 1;
 
-	register_par_programmer(&par_programmer_atahpt, BUS_PARALLEL);
+	register_par_master(&par_master_atahpt, BUS_PARALLEL);
 
 	return 0;
 }

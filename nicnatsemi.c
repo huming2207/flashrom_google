@@ -40,7 +40,7 @@ static void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val,
 static uint8_t nicnatsemi_chip_readb(const struct flashctx *flash,
 				     const chipaddr addr);
 
-static const struct par_programmer par_programmer_nicnatsemi = {
+static const struct par_master par_master_nicnatsemi = {
 		.chip_readb		= nicnatsemi_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -74,7 +74,7 @@ int nicnatsemi_init(void)
 	 * functions below wants to be 0x0000FFFF.
 	 */
 	max_rom_decode.parallel = 131072;
-	register_par_programmer(&par_programmer_nicnatsemi, BUS_PARALLEL);
+	register_par_master(&par_master_nicnatsemi, BUS_PARALLEL);
 
 	return 0;
 }

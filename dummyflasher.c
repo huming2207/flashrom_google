@@ -114,7 +114,7 @@ static const struct spi_programmer spi_programmer_dummyflasher = {
 	.write_256	= dummy_spi_write_256,
 };
 
-static const struct par_programmer par_programmer_dummy = {
+static const struct par_master par_master_dummy = {
 		.chip_readb		= dummy_chip_readb,
 		.chip_readw		= dummy_chip_readw,
 		.chip_readl		= dummy_chip_readl,
@@ -478,7 +478,7 @@ dummy_init_out:
 		return 1;
 	}
 	if (dummy_buses_supported & (BUS_PARALLEL | BUS_LPC | BUS_FWH))
-		register_par_programmer(&par_programmer_dummy,
+		register_par_master(&par_master_dummy,
 					dummy_buses_supported &
 						(BUS_PARALLEL | BUS_LPC |
 						 BUS_FWH));
