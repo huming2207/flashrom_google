@@ -287,7 +287,7 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
+all: pciutils features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 
 # Set the flashrom version string from the highest revision number
 # of the checked out flashrom files.
@@ -765,7 +765,14 @@ endif
 	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
 	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 
-install: $(PROGRAM)$(EXEC_SUFFIX)
+$(PROGRAM).8.html: $(PROGRAM).8
+	@groff -mandoc -Thtml $< >$@
+
+$(PROGRAM).8: $(PROGRAM).8.tmpl
+	@# Add the man page change date and version to the man page
+	@sed -e 's#.TH FLASHROM 8 ".*".*#.TH FLASHROM 8 "$(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)" "$(VERSION)"#' <$< >$@
+
+install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin
