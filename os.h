@@ -21,6 +21,8 @@
  * Header file for OS checking.
  */
 
+#include "platform.h"
+
 // Solaris
 #if defined (__sun) && (defined(__i386) || defined(__amd64))
 #define __FLASHROM_OS__ "SunOS"
@@ -30,6 +32,9 @@
 // FreeBSD
 #elif defined(__FreeBSD__)
 #define __FLASHROM_OS__ "FreeBSD"
+// FreeBSD with glibc-based userspace (e.g. Debian/kFreeBSD)
+#elif defined(__FreeBSD_kernel__) && defined(__GLIBC__)
+#define __FLASHROM_OS__ "FreeBSD-glibc"
 // DragonFlyBSD
 #elif defined(__DragonFly__)
 #define __FLASHROM_OS__ "DragonFlyBSD"
@@ -51,8 +56,16 @@
 // libpayload
 #elif defined(__LIBPAYLOAD__)
 #define __FLASHROM_OS__ "libpayload"
+// GNU Hurd
+#elif defined(__gnu_hurd__)
+#define __FLASHROM_OS__ "Hurd"
 // Linux
 #elif defined(__linux__)
-#define __FLASHROM_OS__ "Linux"
+	// There are various flags in use on Android apparently. __ANDROID__ seems to be the most trustworthy.
+	#if defined(__ANDROID__)
+		#define __FLASHROM_OS__ "Android"
+	#else
+		#define __FLASHROM_OS__ "Linux"
+	#endif
 #endif
 __FLASHROM_OS__
