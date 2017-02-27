@@ -29,7 +29,6 @@
 #include "flash.h"
 #include "fdtmap.h"
 #include "fmap.h"
-#include "libfdt.h"
 #include "layout.h"
 #include "programmer.h"
 #include "search.h"
