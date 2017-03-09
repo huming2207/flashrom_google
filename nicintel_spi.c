@@ -153,7 +153,6 @@ static int nicintel_spi_shutdown(void *data)
 
 	physunmap(nicintel_spibar, 4096);
 	pci_cleanup(pacc);
-	release_io_perms();
 
 	return 0;
 }
@@ -162,7 +161,8 @@ int nicintel_spi_init(void)
 {
 	uint32_t tmp;
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_intel_spi);
 

@@ -189,7 +189,8 @@ static int nuvoton_get_sio_index(uint16_t *port)
 		return 0;
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	for (i = 0; i < ARRAY_SIZE(ports); i++) {
 		uint8_t sid = sio_read(ports[i], NUVOTON_SIOCFG_SID);

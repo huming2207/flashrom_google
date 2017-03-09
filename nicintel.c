@@ -64,7 +64,6 @@ static int nicintel_shutdown(void *data)
 	physunmap(nicintel_control_bar, NICINTEL_CONTROL_MEMMAP_SIZE);
 	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
 	pci_cleanup(pacc);
-	release_io_perms();
 	return 0;
 }
 
@@ -75,7 +74,8 @@ int nicintel_init(void)
 	/* Needed only for PCI accesses on some platforms.
 	 * FIXME: Refactor that into get_mem_perms/get_io_perms/get_pci_perms?
 	 */
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	/* No need to check for errors, pcidev_init() will not return in case
 	 * of errors.
@@ -118,7 +118,6 @@ error_out_unmap:
 	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
 error_out:
 	pci_cleanup(pacc);
-	release_io_perms();
 	return 1;
 }
 

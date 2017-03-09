@@ -161,7 +161,6 @@ enum chipbustype internal_buses_supported = BUS_NONE;
 
 static int internal_shutdown(void *data)
 {
-	release_io_perms();
 	return 0;
 }
 enum chipbustype target_bus;
@@ -302,7 +301,8 @@ int internal_init(void)
 #endif
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 	if (register_shutdown(internal_shutdown, NULL))
 		return 1;
 
