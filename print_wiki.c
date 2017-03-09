@@ -276,7 +276,7 @@ static void print_supported_chips_wiki(int cols)
 
 /* Not needed for CONFIG_INTERNAL, but for all other PCI-based programmers. */
 #if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI+CONFIG_SATAMV >= 1
-static void print_supported_pcidevs_wiki(const struct pcidev_status *devs)
+static void print_supported_pcidevs_wiki(const struct dev_entry *devs)
 {
 	int i = 0;
 	static int c = 0;

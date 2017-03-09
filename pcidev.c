@@ -36,7 +36,7 @@ enum pci_bartype {
 };
 
 uintptr_t pcidev_validate(struct pci_dev *dev, int bar,
-			 const struct pcidev_status *devs)
+			 const struct dev_entry *devs)
 {
 	int i;
 	uint64_t addr;
@@ -188,7 +188,7 @@ uintptr_t pcidev_validate(struct pci_dev *dev, int bar,
 	return 0;
 }
 
-uintptr_t pcidev_init(int bar, const struct pcidev_status *devs)
+uintptr_t pcidev_init(int bar, const struct dev_entry *devs)
 {
 	struct pci_dev *dev;
 	struct pci_filter filter;
@@ -240,7 +240,7 @@ uintptr_t pcidev_init(int bar, const struct pcidev_status *devs)
 	return curaddr;
 }
 
-void print_supported_pcidevs(const struct pcidev_status *devs)
+void print_supported_pcidevs(const struct dev_entry *devs)
 {
 	int i;
 
