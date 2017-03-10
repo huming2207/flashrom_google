@@ -898,7 +898,7 @@ static int wpce775x_shutdown(void *data)
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_wpce775x = {
+static const struct spi_master spi_master_wpce775x = {
 	.type = SPI_CONTROLLER_WPCE775X,
 	.max_data_read = 256,	/* FIXME: should be MAX_DATA_READ_UNLIMITED? */
 	.max_data_write = 256,	/* FIXME: should be MAX_DATA_WRITE_UNLIMITED? */
@@ -962,7 +962,7 @@ int wpce775x_spi_common_init(void)
 	/* Add FWH | LPC to list of buses supported if they are not
 	 * both there already. */
 	buses_supported |= BUS_FWH | BUS_LPC;
-	register_spi_programmer(&spi_programmer_wpce775x);
+	register_spi_master(&spi_master_wpce775x);
 	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
 	return 0;
 }

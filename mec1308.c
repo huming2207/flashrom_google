@@ -395,7 +395,7 @@ mec1308_spi_send_command_exit:
 	return rc;
 }
 
-static const struct spi_programmer spi_programmer_mec1308 = {
+static const struct spi_master spi_master_mec1308 = {
 	.type = SPI_CONTROLLER_MEC1308,
 	.max_data_read = 256,	/* FIXME: should be MAX_DATA_READ_UNLIMITED? */
 	.max_data_write = 256,	/* FIXME: should be MAX_DATA_WRITE_UNLIMITED? */
@@ -506,7 +506,7 @@ int mec1308_probe_spi_flash(const char *name)
 	}
 
 	buses_supported |= BUS_LPC;	/* for LPC <--> SPI bridging */
-	register_spi_programmer(&spi_programmer_mec1308);
+	register_spi_master(&spi_master_mec1308);
 	msg_pdbg("%s(): successfully initialized mec1308\n", __func__);
 mec1308_probe_spi_flash_exit:
 	free(p);

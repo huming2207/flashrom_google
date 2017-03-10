@@ -500,7 +500,7 @@ exit:
 	return rv;
 }
 
-static const struct spi_programmer spi_programmer_ene = {
+static const struct spi_master spi_master_ene = {
 	.type = SPI_CONTROLLER_ENE,
 	.max_data_read = 256,
 	.max_data_write = 256,
@@ -560,7 +560,7 @@ int ene_probe_spi_flash(const char *name)
 	ene_enter_flash_mode();
 
 	buses_supported |= BUS_LPC;
-	register_spi_programmer(&spi_programmer_ene);
+	register_spi_master(&spi_master_ene);
 	msg_pdbg("%s: successfully initialized ene\n", __func__);
 ene_probe_spi_flash_exit:
 	free(p);

@@ -104,7 +104,7 @@ static uint32_t dummy_chip_readl(const struct flashctx *flash,
 static void dummy_chip_readn(const struct flashctx *flash, uint8_t *buf,
 			     const chipaddr addr, size_t len);
 
-static const struct spi_programmer spi_programmer_dummyflasher = {
+static const struct spi_master spi_master_dummyflasher = {
 	.type		= SPI_CONTROLLER_DUMMY,
 	.max_data_read	= MAX_DATA_READ_UNLIMITED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
@@ -483,7 +483,7 @@ dummy_init_out:
 						(BUS_PARALLEL | BUS_LPC |
 						 BUS_FWH));
 	if (dummy_buses_supported & BUS_SPI)
-		register_spi_programmer(&spi_programmer_dummyflasher);
+		register_spi_master(&spi_master_dummyflasher);
 
 	return 0;
 }

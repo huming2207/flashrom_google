@@ -686,7 +686,7 @@ static void ich_set_bbar(uint32_t min_addr)
 
 /* Read len bytes from the fdata/spid register into the data array.
  *
- * Note that using len > spi_programmer->max_data_read will return garbage or
+ * Note that using len > spi_master->max_data_read will return garbage or
  * may even crash.
  */
  static void ich_read_data(uint8_t *data, int len, int reg0_off)
@@ -704,7 +704,7 @@ static void ich_set_bbar(uint32_t min_addr)
 
 /* Fill len bytes from the data array into the fdata/spid registers.
  *
- * Note that using len > spi_programmer->max_data_write will trash the registers
+ * Note that using len > spi_master->max_data_write will trash the registers
  * following the data registers.
  */
 static void ich_fill_data(const uint8_t *data, int len, int reg0_off)
@@ -1017,9 +1017,9 @@ static int run_opcode(const struct flashctx *flash, OPCODE op, uint32_t offset,
 		      uint8_t datalength, uint8_t * data)
 {
 	/* max_data_read == max_data_write for all Intel/VIA SPI masters */
-	uint8_t maxlength = spi_programmer->max_data_read;
+	uint8_t maxlength = spi_master->max_data_read;
 
-	if (spi_programmer->type == SPI_CONTROLLER_NONE) {
+	if (spi_master->type == SPI_CONTROLLER_NONE) {
 		msg_perr("%s: unsupported chipset\n", __func__);
 		return -1;
 	}
@@ -2016,7 +2016,7 @@ static void ich9_set_pr(int i, int read_prot, int write_prot, int chipset)
 	msg_gspew("resulted in 0x%08x.\n", mmio_readl(addr));
 }
 
-static const struct spi_programmer spi_programmer_ich7 = {
+static const struct spi_master spi_master_ich7 = {
 	.type = SPI_CONTROLLER_ICH7,
 	.max_data_read = 64,
 	.max_data_write = 64,
@@ -2026,7 +2026,7 @@ static const struct spi_programmer spi_programmer_ich7 = {
 	.write_256 = default_spi_write_256,
 };
 
-static const struct spi_programmer spi_programmer_ich9 = {
+static const struct spi_master spi_master_ich9 = {
 	.type = SPI_CONTROLLER_ICH9,
 	.max_data_read = 64,
 	.max_data_write = 64,
@@ -2139,7 +2139,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		}
 		ich_init_opcodes();
 		ich_set_bbar(0);
-		register_spi_programmer(&spi_programmer_ich7);
+		register_spi_master(&spi_master_ich7);
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 	case CHIPSET_APL:
@@ -2376,7 +2376,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			hwseq_data.size_comp1 = getFCBA_component_density(&desc, 1);
 			register_opaque_programmer(&opaque_programmer_ich_hwseq);
 		} else {
-			register_spi_programmer(&spi_programmer_ich9);
+			register_spi_master(&spi_master_ich9);
 		}
 		break;
 	}
@@ -2407,7 +2407,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_via = {
+static const struct spi_master spi_master_via = {
 	.type = SPI_CONTROLLER_VIA,
 	.max_data_read = 16,
 	.max_data_write = 16,
@@ -2429,7 +2429,7 @@ int via_init_spi(struct pci_dev *dev)
 	/* Not sure if it speaks all these bus protocols. */
 	internal_buses_supported = BUS_LPC | BUS_FWH;
 	ich_generation = CHIPSET_ICH7;
-	register_spi_programmer(&spi_programmer_via);
+	register_spi_master(&spi_master_via);
 
 	msg_pdbg("0x00: 0x%04x     (SPIS)\n", mmio_readw(ich_spibar + 0));
 	msg_pdbg("0x02: 0x%04x     (SPIC)\n", mmio_readw(ich_spibar + 2));

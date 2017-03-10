@@ -191,7 +191,7 @@ static int sb600_spi_send_command(const struct flashctx *flash, unsigned int wri
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_sb600 = {
+static const struct spi_master spi_master_sb600 = {
 	.type = SPI_CONTROLLER_SB600,
 	.max_data_read = 8,
 	.max_data_write = 5,
@@ -316,7 +316,7 @@ int sb600_probe_spi(struct pci_dev *dev)
 	/* Bring the FIFO to a clean state. */
 	reset_internal_fifo_pointer();
 
-	register_spi_programmer(&spi_programmer_sb600);
+	register_spi_master(&spi_master_sb600);
 	return 0;
 }
 

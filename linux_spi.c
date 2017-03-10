@@ -56,7 +56,7 @@ static int linux_spi_read(struct flashctx *flash, uint8_t *buf,
 static int linux_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len);
 
-static const struct spi_programmer spi_programmer_linux = {
+static const struct spi_master spi_master_linux = {
 	.type		= SPI_CONTROLLER_LINUX,
 	.max_data_read	= MAX_DATA_UNSPECIFIED, /* TODO? */
 	.max_data_write	= MAX_DATA_UNSPECIFIED, /* TODO? */
@@ -220,7 +220,7 @@ int linux_spi_init(void)
 	if (register_shutdown(linux_spi_shutdown, NULL))
 		return 1;
 
-	register_spi_programmer(&spi_programmer_linux);
+	register_spi_master(&spi_master_linux);
 
 	return 0;
 }

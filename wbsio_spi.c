@@ -64,7 +64,7 @@ static int wbsio_spi_send_command(const struct flashctx *flash, unsigned int wri
 		      const unsigned char *writearr, unsigned char *readarr);
 static int wbsio_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 
-static const struct spi_programmer spi_programmer_wbsio = {
+static const struct spi_master spi_master_wbsio = {
 	.type = SPI_CONTROLLER_WBSIO,
 	.max_data_read = MAX_DATA_UNSPECIFIED,
 	.max_data_write = MAX_DATA_UNSPECIFIED,
@@ -85,7 +85,7 @@ int wbsio_check_for_spi(void)
 	msg_pdbg("%s: Winbond saved on 4 register bits so max chip size is "
 		 "1024 kB!\n", __func__);
 	max_rom_decode.spi = 1024 * 1024;
-	register_spi_programmer(&spi_programmer_wbsio);
+	register_spi_master(&spi_master_wbsio);
 
 	return 0;
 }

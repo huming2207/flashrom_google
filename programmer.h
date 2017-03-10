@@ -559,12 +559,12 @@ enum spi_controller {
 	SPI_CONTROLLER_SERPROG,
 #endif
 };
-extern const int spi_programmer_count;
+extern const int spi_master_count;
 
 #define MAX_DATA_UNSPECIFIED 0
 #define MAX_DATA_READ_UNLIMITED 64 * 1024
 #define MAX_DATA_WRITE_UNLIMITED 256
-struct spi_programmer {
+struct spi_master {
 	enum spi_controller type;
 	unsigned int max_data_read;
 	unsigned int max_data_write;
@@ -577,13 +577,13 @@ struct spi_programmer {
 	int (*write_256)(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 };
 
-extern const struct spi_programmer *spi_programmer;
+extern const struct spi_master *spi_master;
 int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr, unsigned char *readarr);
 int default_spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
 int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 int default_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
-void register_spi_programmer(const struct spi_programmer *programmer);
+void register_spi_master(const struct spi_master *programmer);
 
 /* ichspi.c */
 enum ich_chipset {

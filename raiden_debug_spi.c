@@ -164,7 +164,7 @@ static int send_command(const struct flashctx *flash,
 			 JEDEC_BYTE_PROGRAM_OUTSIZE +		\
 			 1)
 
-static const struct spi_programmer spi_programmer_raiden_debug = {
+static const struct spi_master spi_master_raiden_debug = {
 	.type		= SPI_CONTROLLER_RAIDEN_DEBUG,
 	.max_data_read	= MAX_DATA_SIZE,
 	.max_data_write	= MAX_DATA_SIZE,
@@ -351,7 +351,7 @@ loop_end:
 			     TRANSFER_TIMEOUT_MS)),
 		"Raiden: Failed to enable SPI bridge\n");
 
-	register_spi_programmer(&spi_programmer_raiden_debug);
+	register_spi_master(&spi_master_raiden_debug);
 	register_shutdown(shutdown, NULL);
 
 	return 0;

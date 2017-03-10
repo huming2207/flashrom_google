@@ -969,7 +969,7 @@ static const struct spi_master spi_master_dediprog = {
 	.write_aai	= dediprog_spi_write_aai,
 };
 #endif
-static const struct spi_programmer spi_programmer_dediprog = {
+static const struct spi_master spi_master_dediprog = {
 	.type		= SPI_CONTROLLER_DEDIPROG,
 	.max_data_read	= MAX_DATA_UNSPECIFIED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
@@ -1140,7 +1140,7 @@ int dediprog_init(void)
 	dediprog_set_leds(LED_PASS | LED_BUSY);
 
 	/* FIXME: need to do this so buses_supported gets SPI */
-	register_spi_programmer(&spi_programmer_dediprog);
+	register_spi_master(&spi_master_dediprog);
 
 	/* Select target/socket, frequency and VCC. */
 	if (set_target_flash(FLASH_TYPE_APPLICATION_FLASH_1) ||
