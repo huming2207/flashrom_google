@@ -96,6 +96,7 @@ static const char *ec_type[] = {
 	[0] = "ec",
 	[1] = "pd",
 	[2] = "sh",
+	[3] = "fp",
 };
 
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
@@ -1062,7 +1063,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 		msg_perr("%s(): CHIP_INFO returned %d.\n", __func__, rc);
 		return 0;
 	}
-	if (!strncmp(chip_info.name, "stm32l", 6))
+	if (!strncmp(chip_info.name, "stm32l1", 7))
 		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	rc = set_ideal_write_size();
