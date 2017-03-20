@@ -226,7 +226,7 @@ endif
 # IMPORTANT: The following line must be placed before ARCH is ever used
 # (of course), but should come after any lines setting CC because the line
 # below uses CC itself.
-override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E arch.h 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
+override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E archtest.c 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
 
 ifeq ($(ARCH), ppc)
 # There's no PCI port I/O support on PPC/PowerPC, yet.
