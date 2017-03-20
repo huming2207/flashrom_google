@@ -86,15 +86,12 @@ void probe_superio_ite(void)
 		case 0x86:
 		case 0x87:
 			/* FIXME: Print revision for all models? */
-			msg_pdbg("Found ITE Super I/O, ID 0x%04hx on port "
-				 "0x%x\n", s.model, s.port);
+			msg_pdbg("Found ITE Super I/O, ID 0x%04hx on port 0x%x\n", s.model, s.port);
 			register_superio(s);
 			break;
 		case 0x85:
-			msg_pdbg("Found ITE EC, ID 0x%04hx,"
-			         "Rev 0x%02x on port 0x%x.\n",
-			         s.model, sio_read(s.port, CHIP_VER_REG),
-			         s.port);
+			msg_pdbg("Found ITE EC, ID 0x%04hx, Rev 0x%02x on port 0x%x.\n",
+			         s.model, sio_read(s.port, CHIP_VER_REG), s.port);
 			register_superio(s);
 			break;
 		}
@@ -103,8 +100,10 @@ void probe_superio_ite(void)
 	return;
 }
 
-static int it8716f_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
-			const unsigned char *writearr, unsigned char *readarr);
+static int it8716f_spi_send_command(const struct flashctx *flash,
+				    unsigned int writecnt, unsigned int readcnt,
+				    const unsigned char *writearr,
+				    unsigned char *readarr);
 static int it8716f_spi_chip_read(struct flashctx *flash, uint8_t *buf,
 				 unsigned int start, unsigned int len);
 static int it8716f_spi_chip_write_256(struct flashctx *flash, const uint8_t *buf,
@@ -263,8 +262,10 @@ int init_superio_ite(void)
  * commands with the address in inverse wire order. That's why the register
  * ordering in case 4 and 5 may seem strange.
  */
-static int it8716f_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
-			const unsigned char *writearr, unsigned char *readarr)
+static int it8716f_spi_send_command(const struct flashctx *flash,
+				    unsigned int writecnt, unsigned int readcnt,
+				    const unsigned char *writearr,
+				    unsigned char *readarr)
 {
 	uint8_t busy, writeenc;
 	int i;
@@ -328,8 +329,7 @@ static int it8716f_spi_send_command(const struct flashctx *flash, unsigned int w
 }
 
 /* Page size is usually 256 bytes */
-static int it8716f_spi_page_program(struct flashctx *flash, const uint8_t *buf,
-				    unsigned int start)
+static int it8716f_spi_page_program(struct flashctx *flash, const uint8_t *buf, unsigned int start)
 {
 	unsigned int i;
 	int result;
