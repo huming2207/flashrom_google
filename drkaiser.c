@@ -34,7 +34,7 @@
 
 const struct dev_entry drkaiser_pcidev[] = {
 	{0x1803, 0x5057, OK, "Dr. Kaiser", "PC-Waechter (Actel FPGA)"},
-	{},
+	{0},
 };
 
 static uint8_t *drkaiser_bar;

@@ -308,7 +308,7 @@ const struct programmer_entry programmer_table[] = {
 	},
 #endif
 
-	{}, /* This entry corresponds to PROGRAMMER_INVALID. */
+	{0}, /* This entry corresponds to PROGRAMMER_INVALID. */
 };
 
 #define CHIP_RESTORE_MAXFN 4

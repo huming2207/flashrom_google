@@ -69,7 +69,7 @@ const struct usbdev_status devs_ft2232spi[] = {
 	{GOOGLE_VID, GOOGLE_SERVO_PID, OK, "Google", "Servo"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID0, OK, "Google", "Servo V2 Legacy"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID1, OK, "Google", "Servo V2"},
-	{},
+	{0},
 };
 
 /*

@@ -32,7 +32,7 @@
 const struct dev_entry nics_natsemi[] = {
 	{0x100b, 0x0020, NT, "National Semiconductor", "DP83815/DP83816"},
 	{0x100b, 0x0022, NT, "National Semiconductor", "DP83820"},
-	{},
+	{0},
 };
 
 static void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val,

@@ -1831,7 +1831,7 @@ const struct penable chipset_enables[] = {
 	 */
 	{0x8086, 0x5af0, OK, "Intel", "Apollolake", enable_flash_apl},
 #endif
-	{},
+	{0},
 };
 
 int chipset_flash_enable(void)
