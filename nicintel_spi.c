@@ -164,7 +164,6 @@ static int nicintel_spi_shutdown(void *data)
 	pci_mmio_writel(tmp, nicintel_spibar + EECD);
 
 	physunmap(nicintel_spibar, 4096);
-	pci_cleanup(pacc);
 
 	return 0;
 }

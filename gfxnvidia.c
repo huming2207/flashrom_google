@@ -80,10 +80,6 @@ static const struct par_master par_master_gfxnvidia = {
 static int gfxnvidia_shutdown(void *data)
 {
 	physunmap(nvidia_bar, GFXNVIDIA_MEMMAP_SIZE);
-	/* Flash interface access is disabled (and screen enabled) automatically
-	 * by PCI restore.
-	 */
-	pci_cleanup(pacc);
 	return 0;
 }
 

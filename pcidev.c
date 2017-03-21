@@ -188,6 +188,32 @@ uintptr_t pcidev_validate(struct pci_dev *dev, int bar,
 	return 0;
 }
 
+static int pcidev_shutdown(void *data)
+{
+	if (pacc == NULL) {
+		msg_perr("%s: Tried to cleanup an invalid PCI context!\n"
+			 "Please report a bug at flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
+	pci_cleanup(pacc);
+	return 0;
+}
+
+int pci_init_common(void)
+{
+	if (pacc != NULL) {
+		msg_perr("%s: Tried to allocate a new PCI context, but there is still an old one!\n"
+			 "Please report a bug at flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
+	pacc = pci_alloc();     /* Get the pci_access structure */
+	pci_init(pacc);         /* Initialize the PCI library */
+	if (register_shutdown(pcidev_shutdown, NULL))
+		return 1;
+	pci_scan_bus(pacc);     /* We want to get the list of devices */
+	return 0;
+}
+
 uintptr_t pcidev_init(int bar, const struct dev_entry *devs)
 {
 	struct pci_dev *dev;
@@ -197,9 +223,8 @@ uintptr_t pcidev_init(int bar, const struct dev_entry *devs)
 	int found = 0;
 	uintptr_t addr = 0, curaddr = 0;
 
-	pacc = pci_alloc();     /* Get the pci_access structure */
-	pci_init(pacc);         /* Initialize the PCI library */
-	pci_scan_bus(pacc);     /* We want to get the list of devices */
+	if (pci_init_common() != 0)
+		return 0;
 	pci_filter_init(pacc, &filter);
 
 	/* Filter by bb:dd.f (if supplied by the user). */

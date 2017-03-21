@@ -80,7 +80,6 @@ static int nic3com_shutdown(void *data)
 		OUTL(internal_conf, io_base_addr + INTERNAL_CONFIG);
 	}
 
-	pci_cleanup(pacc);
 	return 0;
 }
 

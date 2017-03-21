@@ -55,13 +55,6 @@ static const struct par_master par_master_atahpt = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int atahpt_shutdown(void *data)
-{
-	/* Flash access is disabled automatically by PCI restore. */
-	pci_cleanup(pacc);
-	return 0;
-}
-
 int atahpt_init(void)
 {
 	uint32_t reg32;
@@ -75,9 +68,6 @@ int atahpt_init(void)
 	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
 	reg32 |= (1 << 24);
 	rpci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
-
-	if (register_shutdown(atahpt_shutdown, NULL))
-		return 1;
 
 	register_par_master(&par_master_atahpt, BUS_PARALLEL);
 

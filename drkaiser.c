@@ -58,8 +58,6 @@ static const struct par_master par_master_drkaiser = {
 static int drkaiser_shutdown(void *data)
 {
 	physunmap(drkaiser_bar, DRKAISER_MEMMAP_SIZE);
-	/* Flash write is disabled automatically by PCI restore. */
-	pci_cleanup(pacc);
 	return 0;
 };
 

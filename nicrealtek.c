@@ -55,7 +55,6 @@ static const struct par_master par_master_nicrealtek = {
 static int nicrealtek_shutdown(void *data)
 {
 	/* FIXME: We forgot to disable software access again. */
-	pci_cleanup(pacc);
 	return 0;
 }
 

@@ -63,7 +63,6 @@ static int nicintel_shutdown(void *data)
 {
 	physunmap(nicintel_control_bar, NICINTEL_CONTROL_MEMMAP_SIZE);
 	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
-	pci_cleanup(pacc);
 	return 0;
 }
 
@@ -117,7 +116,6 @@ int nicintel_init(void)
 error_out_unmap:
 	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
 error_out:
-	pci_cleanup(pacc);
 	return 1;
 }
 

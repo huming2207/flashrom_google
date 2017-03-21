@@ -60,7 +60,6 @@ static const struct par_master par_master_satamv = {
 static int satamv_shutdown(void *data)
 {
 	physunmap(mv_bar, 0x20000);
-	pci_cleanup(pacc);
 	return 0;
 }
 
@@ -161,7 +160,6 @@ int satamv_init(void)
 	return 0;
 
 error_out:
-	pci_cleanup(pacc);
 	return 1;
 }
 
