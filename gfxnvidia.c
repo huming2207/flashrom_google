@@ -77,12 +77,6 @@ static const struct par_master par_master_gfxnvidia = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int gfxnvidia_shutdown(void *data)
-{
-	physunmap(nvidia_bar, GFXNVIDIA_MEMMAP_SIZE);
-	return 0;
-}
-
 int gfxnvidia_init(void)
 {
 	uint32_t reg32;
@@ -95,10 +89,8 @@ int gfxnvidia_init(void)
 	io_base_addr += 0x300000;
 	msg_pinfo("Detected NVIDIA I/O base address: 0x%x.\n", io_base_addr);
 
-	nvidia_bar = physmap("NVIDIA", io_base_addr, GFXNVIDIA_MEMMAP_SIZE);
-
-	/* Must be done before rpci calls. */
-	if (register_shutdown(gfxnvidia_shutdown, NULL))
+	nvidia_bar = rphysmap("NVIDIA", io_base_addr, GFXNVIDIA_MEMMAP_SIZE);
+	if (nvidia_bar == ERROR_PTR)
 		return 1;
 
 	/* Allow access to flash interface (will disable screen). */

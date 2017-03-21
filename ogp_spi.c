@@ -94,13 +94,6 @@ static const struct bitbang_spi_master bitbang_spi_master_ogp = {
 	.half_period = 0,
 };
 
-static int ogp_spi_shutdown(void *data)
-{
-	physunmap(ogp_spibar, 4096);
-
-	return 0;
-}
-
 int ogp_spi_init(void)
 {
 	char *type;
@@ -131,9 +124,8 @@ int ogp_spi_init(void)
 
 	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, ogp_spi);
 
-	ogp_spibar = physmap("OGP registers", io_base_addr, 4096);
-
-	if (register_shutdown(ogp_spi_shutdown, NULL))
+	ogp_spibar = rphysmap("OGP registers", io_base_addr, 4096);
+	if (ogp_spibar == ERROR_PTR)
 		return 1;
 
 	if (register_spi_bitbang_master(&bitbang_spi_master_ogp))

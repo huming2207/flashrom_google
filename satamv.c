@@ -57,12 +57,6 @@ static const struct par_master par_master_satamv = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int satamv_shutdown(void *data)
-{
-	physunmap(mv_bar, 0x20000);
-	return 0;
-}
-
 /*
  * Random notes:
  * FCE#		Flash Chip Enable
@@ -93,12 +87,9 @@ int satamv_init(void)
 	 */
 	addr = pcidev_init(PCI_BASE_ADDRESS_0, satas_mv);
 
-	mv_bar = physmap("Marvell 88SX7042 registers", addr, 0x20000);
+	mv_bar = rphysmap("Marvell 88SX7042 registers", addr, 0x20000);
 	if (mv_bar == ERROR_PTR)
 		goto error_out;
-
-	if (register_shutdown(satamv_shutdown, NULL))
-		return 1;
 
 	tmp = pci_mmio_readl(mv_bar + FLASH_PARAM);
 	msg_pspew("Flash Parameters:\n");

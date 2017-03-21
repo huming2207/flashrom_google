@@ -55,12 +55,6 @@ static const struct par_master par_master_drkaiser = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int drkaiser_shutdown(void *data)
-{
-	physunmap(drkaiser_bar, DRKAISER_MEMMAP_SIZE);
-	return 0;
-};
-
 int drkaiser_init(void)
 {
 	uint32_t addr;
@@ -75,10 +69,8 @@ int drkaiser_init(void)
 			PCI_MAGIC_DRKAISER_VALUE);
 
 	/* Map 128kB flash memory window. */
-	drkaiser_bar = physmap("Dr. Kaiser PC-Waechter flash memory",
-			       addr, DRKAISER_MEMMAP_SIZE);
-
-	if (register_shutdown(drkaiser_shutdown, NULL))
+	drkaiser_bar = rphysmap("Dr. Kaiser PC-Waechter flash memory", addr, DRKAISER_MEMMAP_SIZE);
+	if (drkaiser_bar == ERROR_PTR)
 		return 1;
 
 	max_rom_decode.parallel = 128 * 1024;
