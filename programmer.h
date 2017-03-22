@@ -159,6 +159,9 @@ struct bitbang_spi_master {
 	int (*get_miso) (void);
 	void (*request_bus) (void);
 	void (*release_bus) (void);
+
+	/* Length of half a clock period in usecs. */
+	unsigned int half_period;
 };
 
 #if CONFIG_INTERNAL == 1
@@ -454,7 +457,7 @@ int rayer_spi_init(void);
 #endif
 
 /* bitbang_spi.c */
-int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod);
+int register_spi_bitbang_master(const struct bitbang_spi_master *master);
 int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 
 /* buspirate_spi.c */

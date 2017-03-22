@@ -78,7 +78,7 @@ static const struct spi_programmer spi_programmer_bitbang = {
 	.write_256	= default_spi_write_256,
 };
 
-int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod)
+int register_spi_bitbang_master(const struct bitbang_spi_master *master)
 {
 	/* BITBANG_SPI_INVALID is 0, so if someone forgot to initialize ->type,
 	 * we catch it here. Same goes for missing initialization of bitbanging
@@ -97,7 +97,7 @@ int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod)
 	}
 
 	bitbang_spi_master = master;
-	bitbang_spi_half_period = halfperiod;
+	bitbang_spi_half_period = master->half_period;
 
 	register_spi_programmer(&spi_programmer_bitbang);
 
