@@ -19,10 +19,19 @@
  */
 
 /*
- * Datasheet:
+ * Datasheets:
  * PCI/PCI-X Family of Gigabit Ethernet Controllers Software Developer's Manual
  * 82540EP/EM, 82541xx, 82544GC/EI, 82545GM/EM, 82546GB/EB, and 82547xx
- * http://download.intel.com/design/network/manuals/8254x_GBe_SDM.pdf
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/pci-pci-x-family-gbe-controllers-software-dev-manual.html
+ *
+ * PCIe GbE Controllers Open Source Software Developer's Manual
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/pcie-gbe-controllers-open-source-manual.html
+ *
+ * Intel 82574 Gigabit Ethernet Controller Family Datasheet
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/82574l-gbe-controller-datasheet.html
+ *
+ * Intel 82599 10 GbE Controller Datasheet (331520)
+ * http://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf
  */
 
 #include <stdlib.h>
@@ -31,14 +40,17 @@
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 
+/* EEPROM/Flash Control & Data Register */
 #define EECD	0x10
+/* Flash Access Register */
 #define FLA	0x1c
 
 /*
  * Register bits of EECD.
- * 
+ * Table 13-6
+ *
  * Bit 04, 05: FWE (Flash Write Enable Control)
- * 00b = not allowed
+ * 00b = not allowed (on some cards this sends an erase command if bit 31 (FL_ER) of FLA is set)
  * 01b = flash writes disabled
  * 10b = flash writes enabled
  * 11b = not allowed
@@ -46,8 +58,9 @@
 #define FLASH_WRITES_DISABLED	0x10 /* FWE: 10000b */
 #define FLASH_WRITES_ENABLED	0x20 /* FWE: 100000b */
 
-/* Flash Access register bits */
-/* Table 13-9 */
+/* Flash Access register bits
+ * Table 13-9
+ */
 #define FL_SCK	0
 #define FL_CS	1
 #define FL_SI	2
@@ -144,9 +157,7 @@ static int nicintel_spi_shutdown(void *data)
 {
 	uint32_t tmp;
 
-	/* Disable writes manually. See the comment about EECD in
-	 * nicintel_spi_init() for details.
-	 */
+	/* Disable writes manually. See the comment about EECD in nicintel_spi_init() for details. */
 	tmp = pci_mmio_readl(nicintel_spibar + EECD);
 	tmp &= ~FLASH_WRITES_ENABLED;
 	tmp |= FLASH_WRITES_DISABLED;

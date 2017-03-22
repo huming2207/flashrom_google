@@ -34,6 +34,7 @@
 
 const struct dev_entry drkaiser_pcidev[] = {
 	{0x1803, 0x5057, OK, "Dr. Kaiser", "PC-Waechter (Actel FPGA)"},
+
 	{0},
 };
 
@@ -43,7 +44,6 @@ static void drkaiser_chip_writeb(const struct flashctx *flash, uint8_t val,
 				 chipaddr addr);
 static uint8_t drkaiser_chip_readb(const struct flashctx *flash,
 				   const chipaddr addr);
-
 static const struct par_master par_master_drkaiser = {
 		.chip_readb		= drkaiser_chip_readb,
 		.chip_readw		= fallback_chip_readw,

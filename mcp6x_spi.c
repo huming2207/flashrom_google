@@ -19,7 +19,7 @@
 
 /* Driver for the NVIDIA MCP6x/MCP7x MCP6X_SPI controller.
  * Based on clean room reverse engineered docs from
- * http://www.flashrom.org/pipermail/flashrom/2009-December/001180.html
+ * https://flashrom.org/pipermail/flashrom/2009-December/001180.html
  * created by Michael Karcher.
  */
 
@@ -134,15 +134,13 @@ int mcp6x_spi_init(int want_spi)
 
 	/* Accessing a NULL pointer BAR is evil. Don't do it. */
 	if (!mcp6x_spibaraddr && want_spi) {
-		msg_perr("Error: Chipset is strapped for SPI, but MCP SPI BAR "
-			 "is invalid.\n");
+		msg_perr("Error: Chipset is strapped for SPI, but MCP SPI BAR is invalid.\n");
 		return 1;
 	} else if (!mcp6x_spibaraddr && !want_spi) {
 		msg_pdbg("MCP SPI is not used.\n");
 		return 0;
 	} else if (mcp6x_spibaraddr && !want_spi) {
-		msg_pdbg("Strange. MCP SPI BAR is valid, but chipset apparently"
-			 " doesn't have SPI enabled.\n");
+		msg_pdbg("Strange. MCP SPI BAR is valid, but chipset apparently doesn't have SPI enabled.\n");
 		/* FIXME: Should we enable SPI anyway? */
 		return 0;
 	}

@@ -571,7 +571,7 @@ struct spi_programmer {
 		   const unsigned char *writearr, unsigned char *readarr);
 	int (*multicommand)(const struct flashctx *flash, struct spi_command *cmds);
 
-	/* Optimized functions for this programmer */
+	/* Optimized functions for this master */
 	int (*read)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 	int (*write_256)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
 };
