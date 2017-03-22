@@ -59,7 +59,8 @@ int unlock_49lfxxxc(struct flashctx *flash)
 	return write_lockbits_49lfxxxc(flash, 0);
 }
 
-int erase_sector_49lfxxxc(struct flashctx *flash, unsigned int address, unsigned int sector_size)
+int erase_sector_49lfxxxc(struct flashctx *flash, unsigned int address,
+			  unsigned int sector_size)
 {
 	uint8_t status;
 	chipaddr bios = flash->virtual_memory;

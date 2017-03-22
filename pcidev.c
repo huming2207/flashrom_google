@@ -245,10 +245,8 @@ struct pci_dev *pcidev_init(const struct dev_entry *devs, int bar)
 		msg_perr("Error: No supported PCI device found.\n");
 		exit(1);
 	} else if (found > 1) {
-		msg_perr("Error: Multiple supported PCI devices found. "
-			"Use 'flashrom -p xxxx:pci=bb:dd.f' \n"
-			"to explicitly select the card with the given BDF "
-			"(PCI bus, device, function).\n");
+		msg_perr("Error: Multiple supported PCI devices found. Use 'flashrom -p xxxx:pci=bb:dd.f' \n"
+			 "to explicitly select the card with the given BDF (PCI bus, device, function).\n");
 		exit(1);
 	}
 
