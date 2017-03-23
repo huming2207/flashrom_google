@@ -63,7 +63,7 @@ int satasii_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	pcidev_init(PCI_BASE_ADDRESS_0, satas_sii);
+	pcidev_init(satas_sii, PCI_BASE_ADDRESS_0);
 
 	id = pcidev_dev->device_id;
 

@@ -123,7 +123,7 @@ int ogp_spi_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, ogp_spi);
+	io_base_addr = pcidev_init(ogp_spi, PCI_BASE_ADDRESS_0);
 
 	ogp_spibar = rphysmap("OGP registers", io_base_addr, 4096);
 	if (ogp_spibar == ERROR_PTR)

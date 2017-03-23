@@ -62,7 +62,7 @@ int drkaiser_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	addr = pcidev_init(PCI_BASE_ADDRESS_2, drkaiser_pcidev);
+	addr = pcidev_init(drkaiser_pcidev, PCI_BASE_ADDRESS_2);
 
 	/* Write magic register to enable flash write. */
 	rpci_write_word(pcidev_dev, PCI_MAGIC_DRKAISER_ADDR,

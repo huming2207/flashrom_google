@@ -248,7 +248,7 @@ struct dev_entry {
 	const char *device_name;
 };
 uintptr_t pcidev_validate(struct pci_dev *dev, int bar, const struct dev_entry *devs);
-uintptr_t pcidev_init(int bar, const struct dev_entry *devs);
+uintptr_t pcidev_init(const struct dev_entry *devs, int bar);
 /* rpci_write_* are reversible writes. The original PCI config space register
  * contents will be restored on shutdown.
  */

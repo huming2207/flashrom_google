@@ -83,7 +83,7 @@ int gfxnvidia_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, gfx_nvidia);
+	io_base_addr = pcidev_init(gfx_nvidia, PCI_BASE_ADDRESS_0);
 
 	io_base_addr += 0x300000;
 	msg_pinfo("Detected NVIDIA I/O base address: 0x%x.\n", io_base_addr);

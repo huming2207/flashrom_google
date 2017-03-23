@@ -84,7 +84,7 @@ int satamv_init(void)
 	/* No need to check for errors, pcidev_init() will not return in case
 	 * of errors.
 	 */
-	addr = pcidev_init(PCI_BASE_ADDRESS_0, satas_mv);
+	addr = pcidev_init(satas_mv, PCI_BASE_ADDRESS_0);
 
 	mv_bar = rphysmap("Marvell 88SX7042 registers", addr, 0x20000);
 	if (mv_bar == ERROR_PTR)

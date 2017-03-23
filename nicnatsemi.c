@@ -56,7 +56,7 @@ int nicnatsemi_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_natsemi);
+	io_base_addr = pcidev_init(nics_natsemi, PCI_BASE_ADDRESS_0);
 
 	/* The datasheet shows address lines MA0-MA16 in one place and MA0-MA15
 	 * in another. My NIC has MA16 connected to A16 on the boot ROM socket

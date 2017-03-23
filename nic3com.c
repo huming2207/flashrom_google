@@ -88,7 +88,7 @@ int nic3com_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_3com);
+	io_base_addr = pcidev_init(nics_3com, PCI_BASE_ADDRESS_0);
 
 	id = pcidev_dev->device_id;
 

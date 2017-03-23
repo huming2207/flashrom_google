@@ -214,7 +214,7 @@ int pci_init_common(void)
 	return 0;
 }
 
-uintptr_t pcidev_init(int bar, const struct dev_entry *devs)
+uintptr_t pcidev_init(const struct dev_entry *devs, int bar)
 {
 	struct pci_dev *dev;
 	struct pci_filter filter;

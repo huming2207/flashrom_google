@@ -60,7 +60,7 @@ int nicrealtek_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_realtek);
+	io_base_addr = pcidev_init(nics_realtek, PCI_BASE_ADDRESS_0);
 
 	if (register_shutdown(nicrealtek_shutdown, NULL))
 		return 1;

@@ -62,7 +62,7 @@ int atahpt_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_4, ata_hpt);
+	io_base_addr = pcidev_init(ata_hpt, PCI_BASE_ADDRESS_4);
 
 	/* Enable flash access. */
 	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
