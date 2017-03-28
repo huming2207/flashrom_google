@@ -24,7 +24,6 @@
 #include "flash.h"
 #include "programmer.h"
 
-uint32_t io_base_addr;
 struct pci_access *pacc;
 struct pci_dev *pcidev_dev = NULL;
 
@@ -208,17 +207,17 @@ int pci_init_common(void)
 	return 0;
 }
 
-uintptr_t pcidev_init(const struct dev_entry *devs, int bar)
+struct pci_dev *pcidev_init(const struct dev_entry *devs, int bar)
 {
 	struct pci_dev *dev;
 	struct pci_filter filter;
 	char *pcidev_bdf;
 	char *msg = NULL;
 	int found = 0;
-	uintptr_t addr = 0, curaddr = 0;
+	uintptr_t addr = 0;
 
 	if (pci_init_common() != 0)
-		return 0;
+		return NULL;
 	pci_filter_init(pacc, &filter);
 
 	/* Filter by bb:dd.f (if supplied by the user). */
@@ -237,7 +236,6 @@ uintptr_t pcidev_init(const struct dev_entry *devs, int bar)
 			 * just those with a valid BAR.
 			 */
 			if ((addr = pcidev_validate(dev, bar, devs)) != 0) {
-				curaddr = addr;
 				pcidev_dev = dev;
 				found++;
 			}
@@ -256,7 +254,7 @@ uintptr_t pcidev_init(const struct dev_entry *devs, int bar)
 		exit(1);
 	}
 
-	return curaddr;
+	return pcidev_dev;
 }
 
 void print_supported_pcidevs(const struct dev_entry *devs)

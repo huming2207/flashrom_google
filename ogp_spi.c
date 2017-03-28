@@ -97,6 +97,7 @@ static const struct bitbang_spi_master bitbang_spi_master_ogp = {
 
 int ogp_spi_init(void)
 {
+	struct pci_dev *dev = NULL;
 	char *type;
 
 	type = extract_programmer_param("rom");
@@ -123,7 +124,13 @@ int ogp_spi_init(void)
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(ogp_spi, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(ogp_spi, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	uint32_t io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	ogp_spibar = rphysmap("OGP registers", io_base_addr, 4096);
 	if (ogp_spibar == ERROR_PTR)

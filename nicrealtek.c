@@ -30,6 +30,8 @@
 #define BIOS_ROM_ADDR		0xD4
 #define BIOS_ROM_DATA		0xD7
 
+static uint32_t io_base_addr = 0;
+
 const struct dev_entry nics_realtek[] = {
 	{0x10ec, 0x8139, OK, "Realtek", "RTL8139/8139C/8139C+"},
 	{0x1113, 0x1211, OK, "SMC2", "1211TX"}, /* RTL8139 clone */
@@ -57,10 +59,18 @@ static int nicrealtek_shutdown(void *data)
 
 int nicrealtek_init(void)
 {
+	struct pci_dev *dev = NULL;
+
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(nics_realtek, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(nics_realtek, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	if (register_shutdown(nicrealtek_shutdown, NULL))
 		return 1;

@@ -78,12 +78,19 @@ static const struct par_master par_master_gfxnvidia = {
 
 int gfxnvidia_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t reg32;
 
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(gfx_nvidia, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(gfx_nvidia, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	uint32_t io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	io_base_addr += 0x300000;
 	msg_pinfo("Detected NVIDIA I/O base address: 0x%x.\n", io_base_addr);

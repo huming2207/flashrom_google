@@ -57,12 +57,19 @@ static const struct par_master par_master_drkaiser = {
 
 int drkaiser_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t addr;
 
 	if (rget_io_perms())
 		return 1;
 
-	addr = pcidev_init(drkaiser_pcidev, PCI_BASE_ADDRESS_2);
+	dev = pcidev_init(drkaiser_pcidev, PCI_BASE_ADDRESS_2);
+	if (!dev)
+		return 1;
+
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_2);
+	if (!addr)
+		return 1;
 
 	/* Write magic register to enable flash write. */
 	rpci_write_word(pcidev_dev, PCI_MAGIC_DRKAISER_ADDR,

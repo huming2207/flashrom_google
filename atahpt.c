@@ -32,6 +32,8 @@
 
 #define PCI_VENDOR_ID_HPT	0x1103
 
+static uint32_t io_base_addr = 0;
+
 const struct dev_entry ata_hpt[] = {
 	{0x1103, 0x0004, NT, "Highpoint", "HPT366/368/370/370A/372/372N"},
 	{0x1103, 0x0005, NT, "Highpoint", "HPT372A/372N"},
@@ -57,12 +59,19 @@ static const struct par_master par_master_atahpt = {
 
 int atahpt_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t reg32;
 
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(ata_hpt, PCI_BASE_ADDRESS_4);
+	dev = pcidev_init(ata_hpt, PCI_BASE_ADDRESS_4);
+	if (!dev)
+		return 1;
+
+	io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_4);
+	if (!io_base_addr)
+		return 1;
 
 	/* Enable flash access. */
 	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);

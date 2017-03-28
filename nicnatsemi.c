@@ -29,6 +29,7 @@
 #define BOOT_ROM_ADDR		0x50
 #define BOOT_ROM_DATA		0x54
 
+static uint32_t io_base_addr = 0;
 const struct dev_entry nics_natsemi[] = {
 	{0x100b, 0x0020, NT, "National Semiconductor", "DP83815/DP83816"},
 	{0x100b, 0x0022, NT, "National Semiconductor", "DP83820"},
@@ -53,10 +54,18 @@ static const struct par_master par_master_nicnatsemi = {
 
 int nicnatsemi_init(void)
 {
+	struct pci_dev *dev = NULL;
+
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(nics_natsemi, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(nics_natsemi, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	/* The datasheet shows address lines MA0-MA16 in one place and MA0-MA15
 	 * in another. My NIC has MA16 connected to A16 on the boot ROM socket

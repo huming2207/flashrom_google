@@ -168,12 +168,19 @@ static int nicintel_spi_shutdown(void *data)
 
 int nicintel_spi_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t tmp;
 
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(nics_intel_spi, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(nics_intel_spi, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	uint32_t io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	nicintel_spibar = rphysmap("Intel Gigabit NIC w/ SPI flash", io_base_addr, 4096);
 	/* Automatic restore of EECD on shutdown is not possible because EECD

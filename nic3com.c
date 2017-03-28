@@ -32,6 +32,7 @@
 
 #define PCI_VENDOR_ID_3COM	0x10b7
 
+static uint32_t io_base_addr = 0;
 static uint32_t internal_conf;
 static uint16_t id;
 
@@ -85,10 +86,18 @@ static int nic3com_shutdown(void *data)
 
 int nic3com_init(void)
 {
+	struct pci_dev *dev = NULL;
+
 	if (rget_io_perms())
 		return 1;
 
-	io_base_addr = pcidev_init(nics_3com, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(nics_3com, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
 
 	id = pcidev_dev->device_id;
 

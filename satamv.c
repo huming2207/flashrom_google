@@ -74,6 +74,7 @@ static const struct par_master par_master_satamv = {
  */
 int satamv_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uintptr_t addr;
 	uint32_t tmp;
 
@@ -81,10 +82,13 @@ int satamv_init(void)
 		return 1;
 
 	/* BAR0 has all internal registers memory mapped. */
-	/* No need to check for errors, pcidev_init() will not return in case
-	 * of errors.
-	 */
-	addr = pcidev_init(satas_mv, PCI_BASE_ADDRESS_0);
+	dev = pcidev_init(satas_mv, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!addr)
+		return 1;
 
 	mv_bar = rphysmap("Marvell 88SX7042 registers", addr, 0x20000);
 	if (mv_bar == ERROR_PTR)
