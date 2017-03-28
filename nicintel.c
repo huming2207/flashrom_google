@@ -103,12 +103,14 @@ int nicintel_init(void)
 	return 0;
 }
 
-void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val,
+				 chipaddr addr)
 {
 	pci_mmio_writeb(val, nicintel_bar + (addr & NICINTEL_MEMMAP_MASK));
 }
 
-uint8_t nicintel_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t nicintel_chip_readb(const struct flashctx *flash,
+				   const chipaddr addr)
 {
 	return pci_mmio_readb(nicintel_bar + (addr & NICINTEL_MEMMAP_MASK));
 }

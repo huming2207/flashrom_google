@@ -45,7 +45,6 @@ static void satamv_chip_writeb(const struct flashctx *flash, uint8_t val,
 			       chipaddr addr);
 static uint8_t satamv_chip_readb(const struct flashctx *flash,
 				 const chipaddr addr);
-
 static const struct par_master par_master_satamv = {
 		.chip_readb		= satamv_chip_readb,
 		.chip_readw		= fallback_chip_readw,
@@ -176,13 +175,15 @@ static uint8_t satamv_indirect_chip_readb(const chipaddr addr)
 }
 
 /* FIXME: Prefer direct access to BAR2 if BAR2 is active. */
-void satamv_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void satamv_chip_writeb(const struct flashctx *flash, uint8_t val,
+			       chipaddr addr)
 {
 	satamv_indirect_chip_writeb(val, addr);
 }
 
 /* FIXME: Prefer direct access to BAR2 if BAR2 is active. */
-uint8_t satamv_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t satamv_chip_readb(const struct flashctx *flash,
+				 const chipaddr addr)
 {
 	return satamv_indirect_chip_readb(addr);
 }

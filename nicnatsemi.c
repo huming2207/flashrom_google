@@ -32,6 +32,7 @@
 const struct dev_entry nics_natsemi[] = {
 	{0x100b, 0x0020, NT, "National Semiconductor", "DP83815/DP83816"},
 	{0x100b, 0x0022, NT, "National Semiconductor", "DP83820"},
+
 	{0},
 };
 
@@ -39,7 +40,6 @@ static void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val,
 				   chipaddr addr);
 static uint8_t nicnatsemi_chip_readb(const struct flashctx *flash,
 				     const chipaddr addr);
-
 static const struct par_master par_master_nicnatsemi = {
 		.chip_readb		= nicnatsemi_chip_readb,
 		.chip_readw		= fallback_chip_readw,
@@ -70,7 +70,8 @@ int nicnatsemi_init(void)
 	return 0;
 }
 
-void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val,
+				   chipaddr addr)
 {
 	OUTL((uint32_t)addr & 0x0001FFFF, io_base_addr + BOOT_ROM_ADDR);
 	/*
@@ -84,7 +85,8 @@ void nicnatsemi_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr 
 	OUTB(val, io_base_addr + BOOT_ROM_DATA);
 }
 
-uint8_t nicnatsemi_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t nicnatsemi_chip_readb(const struct flashctx *flash,
+				     const chipaddr addr)
 {
 	OUTL(((uint32_t)addr & 0x0001FFFF), io_base_addr + BOOT_ROM_ADDR);
 	/*
