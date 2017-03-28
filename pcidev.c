@@ -25,7 +25,6 @@
 #include "programmer.h"
 
 struct pci_access *pacc;
-struct pci_dev *pcidev_dev = NULL;
 
 enum pci_bartype {
 	TYPE_MEMBAR,
@@ -236,7 +235,6 @@ struct pci_dev *pcidev_init(const struct dev_entry *devs, int bar)
 			 * just those with a valid BAR.
 			 */
 			if ((addr = pcidev_validate(dev, bar, devs)) != 0) {
-				pcidev_dev = dev;
 				found++;
 			}
 		}
@@ -254,7 +252,7 @@ struct pci_dev *pcidev_init(const struct dev_entry *devs, int bar)
 		exit(1);
 	}
 
-	return pcidev_dev;
+	return dev;
 }
 
 void print_supported_pcidevs(const struct dev_entry *devs)

@@ -74,9 +74,9 @@ int atahpt_init(void)
 		return 1;
 
 	/* Enable flash access. */
-	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
+	reg32 = pci_read_long(dev, REG_FLASH_ACCESS);
 	reg32 |= (1 << 24);
-	rpci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
+	rpci_write_long(dev, REG_FLASH_ACCESS, reg32);
 
 	register_par_master(&par_master_atahpt, BUS_PARALLEL);
 

@@ -84,7 +84,7 @@ int nicintel_init(void)
 	if (nicintel_bar == ERROR_PTR)
 		return 1;
 
-	addr = pcidev_validate(pcidev_dev, PCI_BASE_ADDRESS_0, nics_intel);
+	addr = pcidev_validate(dev, PCI_BASE_ADDRESS_0, nics_intel);
 	nicintel_control_bar = rphysmap("Intel NIC control/status reg", addr, NICINTEL_CONTROL_MEMMAP_SIZE);
 	if (nicintel_control_bar == ERROR_PTR)
 		return 1;

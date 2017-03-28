@@ -137,7 +137,7 @@ int satamv_init(void)
 	pci_rmmio_writel(tmp, mv_bar + GPIO_PORT_CONTROL);
 
 	/* Get I/O BAR location. */
-	tmp = pci_read_long(pcidev_dev, PCI_BASE_ADDRESS_2) &
+	tmp = pci_read_long(dev, PCI_BASE_ADDRESS_2) &
 	      PCI_BASE_ADDRESS_IO_MASK;
 	/* Truncate to reachable range.
 	 * FIXME: Check if the I/O BAR is actually reachable.

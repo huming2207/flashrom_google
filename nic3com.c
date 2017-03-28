@@ -99,7 +99,7 @@ int nic3com_init(void)
 	if (!io_base_addr)
 		return 1;
 
-	id = pcidev_dev->device_id;
+	id = dev->device_id;
 
 	/* 3COM 3C90xB cards need a special fixup. */
 	if (id == 0x9055 || id == 0x9001 || id == 0x9004 || id == 0x9005

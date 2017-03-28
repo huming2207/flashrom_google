@@ -68,7 +68,7 @@ int satasii_init(void)
 	if (!dev)
 		return 1;
 
-	id = pcidev_dev->device_id;
+	id = dev->device_id;
 
 	if ((id == 0x3132) || (id == 0x3124)) {
 		addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);

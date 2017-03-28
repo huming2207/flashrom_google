@@ -100,9 +100,9 @@ int gfxnvidia_init(void)
 		return 1;
 
 	/* Allow access to flash interface (will disable screen). */
-	reg32 = pci_read_long(pcidev_dev, 0x50);
+	reg32 = pci_read_long(dev, 0x50);
 	reg32 &= ~(1 << 0);
-	rpci_write_long(pcidev_dev, 0x50, reg32);
+	rpci_write_long(dev, 0x50, reg32);
 
 	/* Write/erase doesn't work. */
 	programmer_may_write = 0;

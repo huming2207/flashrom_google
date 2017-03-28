@@ -238,7 +238,6 @@ void internal_delay(int usecs);
 #if NEED_PCI == 1
 /* pcidev.c */
 extern struct pci_access *pacc;
-extern struct pci_dev *pcidev_dev;
 struct dev_entry {
 	uint16_t vendor_id;
 	uint16_t device_id;
