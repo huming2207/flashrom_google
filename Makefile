@@ -2,7 +2,7 @@
 # This file is part of the flashrom project.
 #
 # Copyright (C) 2005 coresystems GmbH <stepan@coresystems.de>
-# Copyright (C) 2009,2010 Carl-Daniel Hailfinger
+# Copyright (C) 2009,2010,2012 Carl-Daniel Hailfinger
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,15 @@
 
 PROGRAM = flashrom
 
-CC      ?= gcc
+###############################################################################
+# Defaults for the toolchain.
+
+# If you want to cross-compile, just run e.g.
+# make CC=i586-pc-msdosdjgpp-gcc
+# You may have to specify STRIP/AR/RANLIB as well.
+#
+# Note for anyone editing this Makefile: gnumake will happily ignore any
+# changes in this Makefile to variables set on the command line.
 STRIP   ?= strip
 INSTALL = install
 DIFF    = diff
@@ -28,22 +36,49 @@ PREFIX  ?= /usr/local
 MANDIR  ?= $(PREFIX)/share/man
 CFLAGS  ?= -Os -Wall -Wshadow
 EXPORTDIR ?= .
-AR      ?= ar
 RANLIB  ?= ranlib
 PKG_CONFIG ?= pkg-config
+BUILD_DETAILS_FILE ?= build_details.txt
 
+# If your compiler spits out excessive warnings, run make WARNERROR=no
+# You shouldn't have to change this flag.
 WARNERROR ?= yes
 
-ifneq ($(NOWARNERROR),yes)
+ifeq ($(WARNERROR), yes)
 CFLAGS += -Werror
 endif
 
-ifeq ($(CONFIG_STATIC),yes)
-PKG_CONFIG += --static
+ifdef LIBS_BASE
+PKG_CONFIG_LIBDIR ?= $(LIBS_BASE)/lib/pkgconfig
+override CPPFLAGS += -I$(LIBS_BASE)/include
+override LDFLAGS += -L$(LIBS_BASE)/lib -Wl,-rpath -Wl,$(LIBS_BASE)/lib
 endif
 
+ifeq ($(CONFIG_STATIC),yes)
+override PKG_CONFIG += --static
+override LDFLAGS += -static
+endif
+
+# Set LC_ALL=C to minimize influences of the locale.
+# However, this won't work for the majority of relevant commands because they use the $(shell) function and
+# GNU make does not relay variables exported within the makefile to their evironment.
+LC_ALL=C
+export LC_ALL
+
+dummy_for_make_3_80:=$(shell printf "Build started on %s\n\n" "$$(date)" >$(BUILD_DETAILS_FILE))
+
+# Provide an easy way to execute a command, print its output to stdout and capture any error message on stderr
+# in the build details file together with the original stdout output.
+debug_shell = $(shell export LC_ALL=C ; { echo 'exec: export LC_ALL=C ; { $(1) ; }' >&2;  { $(1) ; } | tee -a $(BUILD_DETAILS_FILE) ; echo >&2 ; } 2>>$(BUILD_DETAILS_FILE))
+
+###############################################################################
+# General OS-specific settings.
+# 1. Prepare for later by gathering information about host and target OS
+# 2. Set compiler flags and parameters according to OSes
+# 3. Likewise verify user-supplied CONFIG_* variables.
+
 # HOST_OS is only used to work around local toolchain issues.
-HOST_OS	?= $(shell uname)
+HOST_OS ?= $(shell uname)
 ifeq ($(HOST_OS), MINGW32_NT-5.1)
 # Explicitly set CC = gcc on MinGW, otherwise: "cc: command not found".
 CC = gcc
@@ -52,33 +87,43 @@ ifneq ($(HOST_OS), SunOS)
 STRIP_ARGS = -s
 endif
 
-# Determine the destination processor architecture.
+# Determine the destination OS.
 # IMPORTANT: The following line must be placed before TARGET_OS is ever used
 # (of course), but should come after any lines setting CC because the line
 # below uses CC itself.
-override TARGET_OS := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E os.h 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
+override TARGET_OS := $(strip $(call debug_shell,$(CC) $(CPPFLAGS) -E os.h 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
 
 ifeq ($(TARGET_OS), Darwin)
-CPPFLAGS += -I/opt/local/include -I/usr/local/include
-# DirectHW framework can be found in the DirectHW library.
-LDFLAGS += -framework IOKit -framework DirectHW -L/opt/local/lib -L/usr/local/lib
+override CPPFLAGS += -I/opt/local/include -I/usr/local/include
+override LDFLAGS += -L/opt/local/lib -L/usr/local/lib
 endif
+
 ifeq ($(TARGET_OS), FreeBSD)
-CPPFLAGS += -I/usr/local/include
-LDFLAGS += -L/usr/local/lib
+override CPPFLAGS += -I/usr/local/include
+override LDFLAGS += -L/usr/local/lib
 endif
+
 ifeq ($(TARGET_OS), OpenBSD)
-CPPFLAGS += -I/usr/local/include
-LDFLAGS += -L/usr/local/lib
+override CPPFLAGS += -I/usr/local/include
+override LDFLAGS += -L/usr/local/lib
 endif
+
+ifeq ($(TARGET_OS), NetBSD)
+override CPPFLAGS += -I/usr/pkg/include
+override LDFLAGS += -L/usr/pkg/lib
+endif
+
+ifeq ($(TARGET_OS), DragonFlyBSD)
+override CPPFLAGS += -I/usr/local/include
+override LDFLAGS += -L/usr/local/lib
+endif
+
 ifeq ($(TARGET_OS), DOS)
 EXEC_SUFFIX := .exe
-CPPFLAGS += -I../libgetopt -I../libpci/include
 # DJGPP has odd uint*_t definitions which cause lots of format string warnings.
-CPPFLAGS += -Wno-format
-# FIXME Check if we can achieve the same effect with -L../libgetopt -lgetopt
-LIBS += ../libgetopt/libgetopt.a
-# Bus Pirate and Serprog are not supported under DOS (missing serial support).
+override CFLAGS += -Wno-format
+LIBS += -lgetopt
+# Bus Pirate, Serprog and PonyProg are not supported under DOS (missing serial support).
 ifeq ($(CONFIG_BUSPIRATE_SPI), yes)
 UNSUPPORTED_FEATURES += CONFIG_BUSPIRATE_SPI=yes
 else
@@ -89,7 +134,12 @@ UNSUPPORTED_FEATURES += CONFIG_SERPROG=yes
 else
 override CONFIG_SERPROG = no
 endif
-# Dediprog and FT2232 are not supported under DOS (missing USB support).
+ifeq ($(CONFIG_PONY_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_PONY_SPI=yes
+else
+override CONFIG_PONY_SPI = no
+endif
+# Dediprog, USB-Blaster, PICkit2, CH341A and FT2232 are not supported under DOS (missing USB support).
 ifeq ($(CONFIG_DEDIPROG), yes)
 UNSUPPORTED_FEATURES += CONFIG_DEDIPROG=yes
 else
@@ -99,6 +149,21 @@ ifeq ($(CONFIG_FT2232_SPI), yes)
 UNSUPPORTED_FEATURES += CONFIG_FT2232_SPI=yes
 else
 override CONFIG_FT2232_SPI = no
+endif
+ifeq ($(CONFIG_USBBLASTER_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_USBBLASTER_SPI=yes
+else
+override CONFIG_USBBLASTER_SPI = no
+endif
+ifeq ($(CONFIG_PICKIT2_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_PICKIT2_SPI=yes
+else
+override CONFIG_PICKIT2_SPI = no
+endif
+ifeq ($(CONFIG_CH341A_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_CH341A_SPI=yes
+else
+override CONFIG_CH341A_SPI = no
 endif
 endif
 
@@ -147,6 +212,21 @@ UNSUPPORTED_FEATURES += CONFIG_ATAHPT=yes
 else
 override CONFIG_ATAHPT = no
 endif
+ifeq ($(CONFIG_ATAVIA), yes)
+UNSUPPORTED_FEATURES += CONFIG_ATAVIA=yes
+else
+override CONFIG_ATAVIA = no
+endif
+ifeq ($(CONFIG_ATAPROMISE), yes)
+UNSUPPORTED_FEATURES += CONFIG_ATAPROMISE=yes
+else
+override CONFIG_ATAPROMISE = no
+endif
+ifeq ($(CONFIG_IT8212), yes)
+UNSUPPORTED_FEATURES += CONFIG_IT8212=yes
+else
+override CONFIG_IT8212 = no
+endif
 ifeq ($(CONFIG_DRKAISER), yes)
 UNSUPPORTED_FEATURES += CONFIG_DRKAISER=yes
 else
@@ -167,6 +247,11 @@ UNSUPPORTED_FEATURES += CONFIG_NICINTEL=yes
 else
 override CONFIG_NICINTEL = no
 endif
+ifeq ($(CONFIG_NICINTEL_EEPROM), yes)
+UNSUPPORTED_FEATURES += CONFIG_NICINTEL_EEPROM=yes
+else
+override CONFIG_NICINTEL_EEPROM = no
+endif
 ifeq ($(CONFIG_NICINTEL_SPI), yes)
 UNSUPPORTED_FEATURES += CONFIG_NICINTEL_SPI=yes
 else
@@ -185,12 +270,23 @@ endif
 endif
 
 ifeq ($(TARGET_OS), libpayload)
+ifeq ($(MAKECMDGOALS),)
+.DEFAULT_GOAL := libflashrom.a
+$(info Setting default goal to libflashrom.a)
+endif
 CPPFLAGS += -DSTANDALONE
 ifeq ($(CONFIG_DUMMY), yes)
 UNSUPPORTED_FEATURES += CONFIG_DUMMY=yes
 else
 override CONFIG_DUMMY = no
 endif
+# libpayload does not provide the romsize field in struct pci_dev that the atapromise code requires.
+ifeq ($(CONFIG_ATAPROMISE), yes)
+UNSUPPORTED_FEATURES += CONFIG_ATAPROMISE=yes
+else
+override CONFIG_ATAPROMISE = no
+endif
+# Bus Pirate, Serprog and PonyProg are not supported with libpayload (missing serial support).
 ifeq ($(CONFIG_BUSPIRATE_SPI), yes)
 UNSUPPORTED_FEATURES += CONFIG_BUSPIRATE_SPI=yes
 else
@@ -201,7 +297,12 @@ UNSUPPORTED_FEATURES += CONFIG_SERPROG=yes
 else
 override CONFIG_SERPROG = no
 endif
-# Dediprog and FT2232 are not supported with libpayload (missing libusb support)
+ifeq ($(CONFIG_PONY_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_PONY_SPI=yes
+else
+override CONFIG_PONY_SPI = no
+endif
+# Dediprog, USB-Blaster, PICkit2, CH341A and FT2232 are not supported with libpayload (missing libusb support).
 ifeq ($(CONFIG_DEDIPROG), yes)
 UNSUPPORTED_FEATURES += CONFIG_DEDIPROG=yes
 else
@@ -212,24 +313,61 @@ UNSUPPORTED_FEATURES += CONFIG_FT2232_SPI=yes
 else
 override CONFIG_FT2232_SPI = no
 endif
+ifeq ($(CONFIG_USBBLASTER_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_USBBLASTER_SPI=yes
+else
+override CONFIG_USBBLASTER_SPI = no
+endif
+ifeq ($(CONFIG_PICKIT2_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_PICKIT2_SPI=yes
+else
+override CONFIG_PICKIT2_SPI = no
+endif
+ifeq ($(CONFIG_CH341A_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_CH341A_SPI=yes
+else
+override CONFIG_CH341A_SPI = no
+endif
 endif
 
 ifneq ($(TARGET_OS), Linux)
+# Android is handled internally as separate OS, but it supports CONFIG_LINUX_SPI and CONFIG_MSTARDDC_SPI
+ifneq ($(TARGET_OS), Android)
 ifeq ($(CONFIG_LINUX_SPI), yes)
 UNSUPPORTED_FEATURES += CONFIG_LINUX_SPI=yes
 else
 override CONFIG_LINUX_SPI = no
 endif
+ifeq ($(CONFIG_MSTARDDC_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_MSTARDDC_SPI=yes
+else
+override CONFIG_MSTARDDC_SPI = no
 endif
+endif
+endif
+
+ifeq ($(TARGET_OS), Android)
+# Android on x86 (currently) does not provide raw PCI port I/O operations
+ifeq ($(CONFIG_RAYER_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_RAYER_SPI=yes
+else
+override CONFIG_RAYER_SPI = no
+endif
+endif
+
+###############################################################################
+# General architecture-specific settings.
+# Like above for the OS, below we verify user-supplied options depending on the target architecture.
 
 # Determine the destination processor architecture.
 # IMPORTANT: The following line must be placed before ARCH is ever used
 # (of course), but should come after any lines setting CC because the line
 # below uses CC itself.
-override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E archtest.c 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
+override ARCH := $(strip $(call debug_shell,$(CC) $(CPPFLAGS) -E archtest.c 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
 
-ifeq ($(ARCH), ppc)
-# There's no PCI port I/O support on PPC/PowerPC, yet.
+# PCI port I/O support is unimplemented on PPC/MIPS/SPARC and unavailable on ARM.
+# Right now this means the drivers below only work on x86.
+ifneq ($(ARCH), x86)
 ifeq ($(CONFIG_NIC3COM), yes)
 UNSUPPORTED_FEATURES += CONFIG_NIC3COM=yes
 else
@@ -254,6 +392,11 @@ ifeq ($(CONFIG_ATAHPT), yes)
 UNSUPPORTED_FEATURES += CONFIG_ATAHPT=yes
 else
 override CONFIG_ATAHPT = no
+endif
+ifeq ($(CONFIG_ATAPROMISE), yes)
+UNSUPPORTED_FEATURES += CONFIG_ATAPROMISE=yes
+else
+override CONFIG_ATAPROMISE = no
 endif
 ifeq ($(CONFIG_SATAMV), yes)
 UNSUPPORTED_FEATURES += CONFIG_SATAMV=yes
@@ -288,6 +431,9 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 PROGRAMMER_OBJS = udelay.o programmer.o
 
 all: pciutils features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
+ifeq ($(ARCH), x86)
+	@+$(MAKE) -C util/ich_descriptors_tool/ TARGET_OS=$(TARGET_OS) EXEC_SUFFIX=$(EXEC_SUFFIX)
+endif
 
 # Set the flashrom version string from the highest revision number
 # of the checked out flashrom files.
@@ -384,6 +530,9 @@ endif
 ifeq ($(CONFIG_RAYER_SPI), yes)
 override CONFIG_BITBANG_SPI = yes
 else
+ifeq ($(CONFIG_PONY_SPI), yes)
+override CONFIG_BITBANG_SPI = yes
+else
 ifeq ($(CONFIG_INTERNAL), yes)
 override CONFIG_BITBANG_SPI = yes
 else
@@ -395,6 +544,21 @@ override CONFIG_BITBANG_SPI = yes
 else
 CONFIG_BITBANG_SPI ?= no
 endif
+endif
+endif
+endif
+endif
+
+###############################################################################
+# Handle CONFIG_* variables that depend on others set (and verified) above.
+
+# The external DMI decoder (dmidecode) does not work in libpayload. Bail out if the internal one got disabled.
+ifeq ($(TARGET_OS), libpayload)
+ifeq ($(CONFIG_INTERNAL), yes)
+ifeq ($(CONFIG_INTERNAL_DMI), no)
+UNSUPPORTED_FEATURES += CONFIG_INTERNAL_DMI=no
+else
+override CONFIG_INTERNAL_DMI = yes
 endif
 endif
 endif
@@ -556,7 +720,7 @@ endif
 
 ifeq ($(NEED_NET), yes)
 ifeq ($(TARGET_OS), SunOS)
-LIBS += -lsocket
+LIBS += -lsocket -lnsl
 endif
 endif
 
@@ -604,10 +768,10 @@ else
 FEATURE_CFLAGS += -D'CONFIG_USE_OS_TIMER=0'
 endif
 
-FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "UTSNAME := yes" .features && printf "%s" "-D'HAVE_UTSNAME=1'")
+FEATURE_CFLAGS += $(call debug_shell,grep -q "UTSNAME := yes" .features && printf "%s" "-D'HAVE_UTSNAME=1'")
 
 # We could use PULLED_IN_LIBS, but that would be ugly.
-FEATURE_LIBS += $(shell LC_ALL=C grep -q "NEEDLIBZ := yes" .libdeps && printf "%s" "-lz")
+FEATURE_LIBS += $(call debug_shell,grep -q "NEEDLIBZ := yes" .libdeps && printf "%s" "-lz")
 
 LIBFLASHROM_OBJS = $(CHIP_OBJS) $(PROGRAMMER_OBJS) $(LIB_OBJS)
 OBJS = $(CLI_OBJS) $(LIBFLASHROM_OBJS)
@@ -631,7 +795,8 @@ TAROPTIONS = $(shell LC_ALL=C tar --version|grep -q GNU && echo "--owner=root --
 # This includes all frontends and libflashrom.
 # We don't use EXEC_SUFFIX here because we want to clean everything.
 clean:
-	rm -f $(PROGRAM) $(PROGRAM).exe libflashrom.a *.o *.d
+	rm -f $(PROGRAM) $(PROGRAM).exe libflashrom.a *.o *.d $(PROGRAM).8 $(PROGRAM).8.html $(BUILD_DETAILS_FILE)
+	@+$(MAKE) -C util/ich_descriptors_tool/ clean
 
 distclean: clean
 	rm -f .features .libdeps
@@ -653,11 +818,12 @@ endef
 export COMPILER_TEST
 
 compiler: featuresavailable
-	@printf "Checking for a C compiler... "
+	@printf "Checking for a C compiler... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$COMPILER_TEST" > .test.c
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .test.c -o .test$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
-		echo "found." || ( echo "not found."; \
-		rm -f .test.c .test$(EXEC_SUFFIX); exit 1)
+	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .test.c -o .test$(EXEC_SUFFIX)" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .test.c -o .test$(EXEC_SUFFIX) >&2 && \
+		echo "found." || { echo "not found."; \
+		rm -f .test.c .test$(EXEC_SUFFIX); exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
 	@rm -f .test.c .test$(EXEC_SUFFIX)
 	@printf "Target arch is "
 	@# FreeBSD wc will output extraneous whitespace.
@@ -669,11 +835,20 @@ compiler: featuresavailable
 	@echo $(TARGET_OS)|wc -w|grep -q '^[[:blank:]]*1[[:blank:]]*$$' ||	\
 		( echo "unknown. Aborting."; exit 1)
 	@printf "%s\n" '$(TARGET_OS)'
+ifeq ($(TARGET_OS), libpayload)
+	@$(CC) --version 2>&1 | grep -q coreboot || \
+		( echo "Warning: It seems you are not using coreboot's reference compiler."; \
+		  echo "This might work but usually does not, please beware." )
+endif
 
 define LIBPCI_TEST
 /* Avoid a failing test due to libpci header symbol shadowing breakage */
 #define index shadow_workaround_index
+#if !defined __NetBSD__
 #include <pci/pci.h>
+#else
+#include <pciutils/pci.h>
+#endif
 struct pci_access *pacc;
 int main(int argc, char **argv)
 {
@@ -687,7 +862,7 @@ export LIBPCI_TEST
 
 ifeq ($(CHECK_LIBPCI), yes)
 pciutils: compiler
-	@printf "Checking for libpci headers... "
+	@printf "Checking for libpci headers... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$LIBPCI_TEST" > .test.c
 	@$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >/dev/null 2>&1 &&		\
 		echo "found." || ( echo "not found."; echo;			\
@@ -715,17 +890,16 @@ endif
 # If a user does not explicitly request a non-working feature, we should
 # silently disable it. However, if a non-working (does not compile) feature
 # is explicitly requested, we should bail out with a descriptive error message.
-ifeq ($(UNSUPPORTED_FEATURES), )
 featuresavailable:
-else
-featuresavailable:
+ifneq ($(UNSUPPORTED_FEATURES), )
 	@echo "The following features are unavailable on your machine: $(UNSUPPORTED_FEATURES)"
 	@false
 endif
 
 define FTDI_TEST
+#include <stdlib.h>
 #include <ftdi.h>
-struct ftdi_context *ftdic = (void *)0;
+struct ftdi_context *ftdic = NULL;
 int main(int argc, char **argv)
 {
 	(void) argc;
@@ -751,26 +925,28 @@ export UTSNAME_TEST
 features: compiler
 	@echo "FEATURES := yes" > .features.tmp
 ifeq ($(CONFIG_FT2232_SPI), yes)
-	@printf "Checking for FTDI support... "
+	@printf "Checking for FTDI support... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$FTDI_TEST" > .featuretest.c
 	@$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDICFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >/dev/null 2>&1 &&	\
 		( echo "found."; echo "FTDISUPPORT := yes" >> .features.tmp ) ||	\
 		( echo "not found."; echo "FTDISUPPORT := no" >> .features.tmp )
 endif
-	@printf "Checking for utsname support... "
+	@printf "Checking for utsname support... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$UTSNAME_TEST" > .featuretest.c
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >/dev/null 2>&1 &&	\
+	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX)" >>$(BUILD_DETAILS_FILE)
+	@ { $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >&2 && \
 		( echo "found."; echo "UTSNAME := yes" >> .features.tmp ) ||	\
-		( echo "not found."; echo "UTSNAME := no" >> .features.tmp )
+		( echo "not found."; echo "UTSNAME := no" >> .features.tmp ) } 2>>$(BUILD_DETAILS_FILE) | tee -a $(BUILD_DETAILS_FILE)
 	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
 	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 
 $(PROGRAM).8.html: $(PROGRAM).8
 	@groff -mandoc -Thtml $< >$@
 
+MAN_DATE := $(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)
 $(PROGRAM).8: $(PROGRAM).8.tmpl
 	@# Add the man page change date and version to the man page
-	@sed -e 's#.TH FLASHROM 8 ".*".*#.TH FLASHROM 8 "$(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)" "$(VERSION)"#' <$< >$@
+	@sed -e 's#.TH FLASHROM 8 .*#.TH FLASHROM 8 "$(MAN_DATE)" "$(VERSION)" "$(MAN_DATE)"#' <$< >$@
 
 install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
@@ -778,23 +954,40 @@ install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin
 	$(INSTALL) -m 0644 $(PROGRAM).8 $(DESTDIR)$(MANDIR)/man8
 
-export:
-	@rm -rf $(EXPORTDIR)/flashrom-$(RELEASENAME)
-	@svn export -r BASE . $(EXPORTDIR)/flashrom-$(RELEASENAME)
-	@sed "s/^SVNVERSION.*/SVNVERSION := $(SVNVERSION)/" Makefile >$(EXPORTDIR)/flashrom-$(RELEASENAME)/Makefile
-	@LC_ALL=C svn log >$(EXPORTDIR)/flashrom-$(RELEASENAME)/ChangeLog
-	@echo Exported $(EXPORTDIR)/flashrom-$(RELEASENAME)/
+_export: $(PROGRAM).8
+	@rm -rf "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
+	@mkdir -p "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
+	@git archive HEAD | tar -x -C "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
+	@sed	-e  's/^VERSION :=.*/VERSION := $(VERSION)/' \
+		-e 's/^MAN_DATE :=.*/MAN_DATE := $(MAN_DATE)/' \
+		-e 's#./util/getrevision.sh -c#false#' \
+		Makefile >"$(EXPORTDIR)/flashrom-$(RELEASENAME)/Makefile"
+#	Restore modification date of all tracked files not marked 'export-ignore' in .gitattributes.
+#	sed is required to filter out file names having the attribute set.
+	@git ls-tree -r -z -t --full-name --name-only HEAD | \
+		git check-attr -z --stdin export-ignore | \
+		sed -zne 'x;n;n;s/^set$$//;t;x;p' | \
+		xargs -0 sh -c 'for f; do \
+			touch -d $$(git log --pretty=format:%cI -1 HEAD -- "$$f") \
+				"$(EXPORTDIR)/flashrom-$(RELEASENAME)/$$f"; \
+		done'
 
-tarball: export
-	@tar cjf $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.bz2 -C $(EXPORTDIR)/ $(TAROPTIONS) flashrom-$(RELEASENAME)/
-	@rm -rf $(EXPORTDIR)/flashrom-$(RELEASENAME)
-	@echo Created $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.bz2
+export: _export
+	@echo "Exported $(EXPORTDIR)/flashrom-$(RELEASENAME)/"
 
-djgpp-dos: clean
-	make CC=i586-pc-msdosdjgpp-gcc STRIP=i586-pc-msdosdjgpp-strip
+tarball: _export
+	@tar -cz --format=ustar -f $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.gz -C $(EXPORTDIR)/ \
+		$(TAROPTIONS) flashrom-$(RELEASENAME)/
+#	Delete the exported directory again because it is most likely what's expected by the user.
+	@rm -rf $(EXPORTDIR)/flashrom-$(RELEASENAME)
+	@echo Created $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.gz
+
 libpayload: clean
 	make CC="CC=i386-elf-gcc lpgcc" AR=i386-elf-ar RANLIB=i386-elf-ranlib
 
-.PHONY: all clean distclean compiler pciutils features export tarball dos featuresavailable
+.PHONY: all install clean distclean compiler hwlibs features _export export tarball featuresavailable libpayload
+
+# Disable implicit suffixes and built-in rules (for performance and profit)
+.SUFFIXES:
 
 -include $(OBJS:.o=.d)
