@@ -430,7 +430,7 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-all: pciutils features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
+all: hwlibs features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 ifeq ($(ARCH), x86)
 	@+$(MAKE) -C util/ich_descriptors_tool/ TARGET_OS=$(TARGET_OS) EXEC_SUFFIX=$(EXEC_SUFFIX)
 endif
@@ -890,29 +890,134 @@ int main(int argc, char **argv)
 endef
 export LIBPCI_TEST
 
+define PCI_GET_DEV_TEST
+/* Avoid a failing test due to libpci header symbol shadowing breakage */
+#define index shadow_workaround_index
+#if !defined __NetBSD__
+#include <pci/pci.h>
+#else
+#include <pciutils/pci.h>
+#endif
+struct pci_access *pacc;
+struct pci_dev *dev = {0};
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	pacc = pci_alloc();
+	dev = pci_get_dev(pacc, dev->domain, dev->bus, dev->dev, 1);
+	return 0;
+}
+endef
+export PCI_GET_DEV_TEST
+
+define LIBUSB0_TEST
+#include "platform.h"
+#if IS_WINDOWS
+#include <lusb0_usb.h>
+#else
+#include <usb.h>
+#endif
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	usb_init();
+	return 0;
+}
+endef
+export LIBUSB0_TEST
+
+define LIBUSB1_TEST
+#include <stddef.h>
+#include <libusb.h>
+int main(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+	libusb_init(NULL);
+	return 0;
+}
+endef
+export LIBUSB1_TEST
+
+hwlibs: compiler
+	@printf "" > .libdeps
 ifeq ($(CHECK_LIBPCI), yes)
-pciutils: compiler
 	@printf "Checking for libpci headers... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$LIBPCI_TEST" > .test.c
-	@$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >/dev/null 2>&1 &&		\
-		echo "found." || ( echo "not found."; echo;			\
-		echo "Please install libpci headers (package pciutils-devel).";	\
+	@printf "\nexec: %s\n" "$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >&2 && \
+		echo "found." || { echo "not found."; echo;			\
+		echo "The following features require libpci: $(NEED_LIBPCI).";	\
+		echo "Please install libpci headers or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBPCI_PROGRAMMERS=no"; \
 		echo "See README for more information."; echo;			\
-		rm -f .test.c .test.o; exit 1)
-	@printf "Checking if libpci is present and sufficient... "
-	@printf "" > .libdeps
-	@$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) >/dev/null 2>&1 &&				\
-		echo "yes." || ( echo "no.";							\
-		printf "Checking if libz+libpci are present and sufficient...";	\
-		$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) -lz >/dev/null 2>&1 &&		\
-		( echo "yes."; echo "NEEDLIBZ := yes" > .libdeps ) || ( echo "no."; echo;	\
-		echo "Please install libpci (package pciutils) and/or libz.";			\
+		rm -f .test.c .test.o; exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
+	@printf "Checking version of pci_get_dev... " | tee -a $(BUILD_DETAILS_FILE)
+	@echo "$$PCI_GET_DEV_TEST" > .test.c
+	@printf "\nexec: %s\n" "$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o" >>$(BUILD_DETAILS_FILE)
+	@ { $(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >&2 && \
+		( echo "new version (including PCI domain parameter)."; echo "OLD_PCI_GET_DEV := no" >> .libdeps ) ||	\
+		( echo "old version (without PCI domain parameter)."; echo "OLD_PCI_GET_DEV := yes" >> .libdeps ) } 2>>$(BUILD_DETAILS_FILE) | tee -a $(BUILD_DETAILS_FILE)
+	@printf "Checking if libpci is present and sufficient... " | tee -a $(BUILD_DETAILS_FILE)
+	@printf "\nexec: %s\n" "$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(PCILIBS)" >>$(BUILD_DETAILS_FILE)
+	@{ { { { $(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(PCILIBS) 2>>$(BUILD_DETAILS_FILE) >&2 && \
+		echo "yes." || { echo "no.";							\
+		printf "Checking if libz+libpci are present and sufficient..." ; \
+		{ printf "\nexec: %s\n" "$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(PCILIBS) -lz" >>$(BUILD_DETAILS_FILE) ; \
+		$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(PCILIBS) -lz >&2 && \
+		echo "yes." && echo "NEEDLIBZ := yes" > .libdeps } || { echo "no."; echo;	\
+		echo "The following features require libpci: $(NEED_LIBPCI).";			\
+		echo "Please install libpci (package pciutils) and/or libz or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBPCI_PROGRAMMERS=no"; \
 		echo "See README for more information."; echo;				\
-		rm -f .test.c .test.o .test$(EXEC_SUFFIX); exit 1) )
+		rm -f .test.c .test.o .test$(EXEC_SUFFIX); exit 1; }; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
 	@rm -f .test.c .test.o .test$(EXEC_SUFFIX)
-else
-pciutils: compiler
-	@printf "" > .libdeps
+endif
+ifeq ($(CHECK_LIBUSB0), yes)
+	@printf "Checking for libusb-0.1/libusb-compat headers... " | tee -a $(BUILD_DETAILS_FILE)
+	@echo "$$LIBUSB0_TEST" > .test.c
+	@printf "\nexec: %s\n" "$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >&2 && \
+		echo "found." || { echo "not found."; echo;				\
+		echo "The following features require libusb-0.1/libusb-compat: $(NEED_LIBUSB0)."; \
+		echo "Please install libusb-0.1 headers or libusb-compat headers or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBUSB0_PROGRAMMERS=no"; \
+		echo "See README for more information."; echo;				\
+		rm -f .test.c .test.o; exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
+	@printf "Checking if libusb-0.1 is usable... " | tee -a $(BUILD_DETAILS_FILE)
+	@printf "\nexec: %s\n" "$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(USBLIBS)" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(USBLIBS) >&2 && \
+		echo "yes." || { echo "no.";						\
+		echo "The following features require libusb-0.1/libusb-compat: $(NEED_LIBUSB0)."; \
+		echo "Please install libusb-0.1 or libusb-compat or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBUSB0_PROGRAMMERS=no"; \
+		echo "See README for more information."; echo;				\
+		rm -f .test.c .test.o .test$(EXEC_SUFFIX); exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
+	@rm -f .test.c .test.o .test$(EXEC_SUFFIX)
+endif
+ifeq ($(CHECK_LIBUSB1), yes)
+	@printf "Checking for libusb-1.0 headers... " | tee -a $(BUILD_DETAILS_FILE)
+	@echo "$$LIBUSB1_TEST" > .test.c
+	@printf "\nexec: %s\n" "$(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) -c $(CPPFLAGS) $(CFLAGS) .test.c -o .test.o >&2 && \
+		echo "found." || { echo "not found."; echo;				\
+		echo "The following features require libusb-1.0: $(NEED_LIBUSB1).";	\
+		echo "Please install libusb-1.0 headers or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBUSB1_PROGRAMMERS=no"; \
+		echo "See README for more information."; echo;				\
+		rm -f .test.c .test.o; exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
+	@printf "Checking if libusb-1.0 is usable... " | tee -a $(BUILD_DETAILS_FILE)
+	@printf "\nexec: %s\n" "$(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(USB1LIBS)" >>$(BUILD_DETAILS_FILE)
+	@{ { { { { $(CC) $(LDFLAGS) .test.o -o .test$(EXEC_SUFFIX) $(LIBS) $(USB1LIBS) >&2 && \
+		echo "yes." || { echo "no.";						\
+		echo "The following features require libusb-1.0: $(NEED_LIBUSB1).";	\
+		echo "Please install libusb-1.0 or disable all features"; \
+		echo "mentioned above by specifying make CONFIG_ENABLE_LIBUSB1_PROGRAMMERS=no"; \
+		echo "See README for more information."; echo;				\
+		rm -f .test.c .test.o .test$(EXEC_SUFFIX); exit 1; }; } 2>>$(BUILD_DETAILS_FILE); echo $? >&3 ; } | tee -a $(BUILD_DETAILS_FILE) >&4; } 3>&1;} | { read rc ; exit ${rc}; } } 4>&1
+	@rm -f .test.c .test.o .test$(EXEC_SUFFIX)
 endif
 
 .features: features
@@ -939,6 +1044,12 @@ int main(int argc, char **argv)
 endef
 export FTDI_TEST
 
+define FTDI_232H_TEST
+#include <ftdi.h>
+enum ftdi_chip_type type = TYPE_232H;
+endef
+export FTDI_232H_TEST
+
 define UTSNAME_TEST
 #include <sys/utsname.h>
 struct utsname osinfo;
@@ -952,14 +1063,67 @@ int main(int argc, char **argv)
 endef
 export UTSNAME_TEST
 
+define LINUX_SPI_TEST
+#include <linux/types.h>
+#include <linux/spi/spidev.h>
+
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	return 0;
+}
+endef
+export LINUX_SPI_TEST
+
+define LINUX_I2C_TEST
+#include <linux/i2c-dev.h>
+#include <linux/i2c.h>
+
+int main(int argc, char **argv)
+{
+	(void) argc;
+	(void) argv;
+	return 0;
+}
+endef
+export LINUX_I2C_TEST
+
 features: compiler
 	@echo "FEATURES := yes" > .features.tmp
 ifeq ($(CONFIG_FT2232_SPI), yes)
 	@printf "Checking for FTDI support... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$FTDI_TEST" > .featuretest.c
-	@$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDICFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >/dev/null 2>&1 &&	\
-		( echo "found."; echo "FTDISUPPORT := yes" >> .features.tmp ) ||	\
-		( echo "not found."; echo "FTDISUPPORT := no" >> .features.tmp )
+	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDI_INCLUDES) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS)" >>$(BUILD_DETAILS_FILE)
+	@ { $(CC) $(CPPFLAGS) $(CFLAGS) $(FTDI_INCLUDES) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >&2 && \
+	(	echo "found."; echo "FTDISUPPORT := yes" >> .features.tmp ; \
+		printf "Checking for FT232H support in libftdi... " ; \
+		echo "$$FTDI_232H_TEST" >> .featuretest.c ; \
+		printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDI_INCLUDES) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS)" >>$(BUILD_DETAILS_FILE) ; \
+		{ $(CC) $(CPPFLAGS) $(CFLAGS) $(FTDI_INCLUDES) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS) >&2 && \
+			( echo "found."; echo "FT232H := yes" >> .features.tmp ) ||	\
+			( echo "not found."; echo "FT232H := no" >> .features.tmp ) } \
+	) || \
+	( echo "not found."; echo "FTDISUPPORT := no" >> .features.tmp ) } \
+	2>>$(BUILD_DETAILS_FILE) | tee -a $(BUILD_DETAILS_FILE)
+endif
+ifeq ($(CONFIG_LINUX_SPI), yes)
+	@printf "Checking if Linux SPI headers are present... " | tee -a $(BUILD_DETAILS_FILE)
+	@echo "$$LINUX_SPI_TEST" > .featuretest.c
+	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX)" >>$(BUILD_DETAILS_FILE)
+	@ { $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >&2 && \
+		( echo "yes."; echo "LINUX_SPI_SUPPORT := yes" >> .features.tmp ) ||	\
+		( echo "no."; echo "LINUX_SPI_SUPPORT := no" >> .features.tmp ) } \
+		2>>$(BUILD_DETAILS_FILE) | tee -a $(BUILD_DETAILS_FILE)
+endif
+ifneq ($(NEED_LINUX_I2C), )
+	@printf "Checking if Linux I2C headers are present... " | tee -a $(BUILD_DETAILS_FILE)
+	@echo "$$LINUX_I2C_TEST" > .featuretest.c
+	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX)" >>$(BUILD_DETAILS_FILE)
+	@ { $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) >&2 && \
+		( echo "yes."; echo "LINUX_I2C_SUPPORT := yes" >> .features.tmp ) ||	\
+		( echo "no."; echo "LINUX_I2C_SUPPORT := no" >> .features.tmp ) } \
+		2>>$(BUILD_DETAILS_FILE) | tee -a $(BUILD_DETAILS_FILE)
 endif
 	@printf "Checking for utsname support... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$UTSNAME_TEST" > .featuretest.c
