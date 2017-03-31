@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include "flash.h"
 #include "programmer.h"
+#include "hwaccess.h"
 
 uint8_t *nicintel_bar;
 uint8_t *nicintel_control_bar;
@@ -47,7 +48,6 @@ static void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val,
 				 chipaddr addr);
 static uint8_t nicintel_chip_readb(const struct flashctx *flash,
 				   const chipaddr addr);
-
 static const struct par_master par_master_nicintel = {
 		.chip_readb		= nicintel_chip_readb,
 		.chip_readw		= fallback_chip_readw,
@@ -65,7 +65,7 @@ int nicintel_init(void)
 	uintptr_t addr;
 
 	/* Needed only for PCI accesses on some platforms.
-	 * FIXME: Refactor that into get_mem_perms/get_io_perms/get_pci_perms?
+	 * FIXME: Refactor that into get_mem_perms/rget_io_perms/get_pci_perms?
 	 */
 	if (rget_io_perms())
 		return 1;
@@ -79,12 +79,14 @@ int nicintel_init(void)
 	if (!addr)
 		return 1;
 
-
 	nicintel_bar = rphysmap("Intel NIC flash", addr, NICINTEL_MEMMAP_SIZE);
 	if (nicintel_bar == ERROR_PTR)
 		return 1;
 
-	addr = pcidev_validate(dev, PCI_BASE_ADDRESS_0, nics_intel);
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!addr)
+		return 1;
+
 	nicintel_control_bar = rphysmap("Intel NIC control/status reg", addr, NICINTEL_CONTROL_MEMMAP_SIZE);
 	if (nicintel_control_bar == ERROR_PTR)
 		return 1;

@@ -35,10 +35,13 @@
  */
 
 #include <stdlib.h>
+#include <unistd.h>
 #include "flash.h"
 #include "programmer.h"
+#include "hwaccess.h"
 
 #define PCI_VENDOR_ID_INTEL 0x8086
+#define MEMMAP_SIZE getpagesize()
 
 /* EEPROM/Flash Control & Data Register */
 #define EECD	0x10
@@ -78,6 +81,19 @@ const struct dev_entry nics_intel_spi[] = {
 	{PCI_VENDOR_ID_INTEL, 0x1076, OK, "Intel", "82541GI Gigabit Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x107c, OK, "Intel", "82541PI Gigabit Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x10b9, OK, "Intel", "82572EI Gigabit Ethernet Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10d3, OK, "Intel", "82574L Gigabit Ethernet Controller"},
+
+	{PCI_VENDOR_ID_INTEL, 0x10d8, NT, "Intel", "82599 10 Gigabit Unprogrammed Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10f7, NT, "Intel", "82599 10 Gigabit KX4 Dual Port Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10f8, NT, "Intel", "82599 10 Gigabit Dual Port Backplane Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10f9, NT, "Intel", "82599 10 Gigabit CX4 Dual Port Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10fb, NT, "Intel", "82599 10-Gigabit SFI/SFP+ Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x10fc, OK, "Intel", "82599 10 Gigabit XAUI/BX4 Dual Port Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x1517, NT, "Intel", "82599 10 Gigabit KR Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x151c, NT, "Intel", "82599 10 Gigabit TN Network Controller"},
+	{PCI_VENDOR_ID_INTEL, 0x1529, NT, "Intel", "82599 10 Gigabit Dual Port Network Controller with FCoE"},
+	{PCI_VENDOR_ID_INTEL, 0x152a, NT, "Intel", "82599 10 Gigabit Dual Port Backplane Controller with FCoE"},
+	{PCI_VENDOR_ID_INTEL, 0x1557, NT, "Intel", "82599 10 Gigabit SFI Network Controller"},
 
 	{0},
 };
@@ -182,7 +198,16 @@ int nicintel_spi_init(void)
 	if (!io_base_addr)
 		return 1;
 
-	nicintel_spibar = rphysmap("Intel Gigabit NIC w/ SPI flash", io_base_addr, 4096);
+	if (dev->device_id < 0x10d8) {
+		nicintel_spibar = rphysmap("Intel Gigabit NIC w/ SPI flash", io_base_addr,
+					   MEMMAP_SIZE);
+	} else {
+		nicintel_spibar = rphysmap("Intel 10 Gigabit NIC w/ SPI flash", io_base_addr + 0x10000,
+					   MEMMAP_SIZE);
+	}
+	if (nicintel_spibar == ERROR_PTR)
+		return 1;
+
 	/* Automatic restore of EECD on shutdown is not possible because EECD
 	 * does not only contain FLASH_WRITES_DISABLED|FLASH_WRITES_ENABLED,
 	 * but other bits with side effects as well. Those other bits must be
@@ -192,6 +217,13 @@ int nicintel_spi_init(void)
 	tmp &= ~FLASH_WRITES_DISABLED;
 	tmp |= FLASH_WRITES_ENABLED;
 	pci_mmio_writel(tmp, nicintel_spibar + EECD);
+
+	/* test if FWE is really set to allow writes */
+	tmp = pci_mmio_readl(nicintel_spibar + EECD);
+	if ( (tmp & FLASH_WRITES_DISABLED) || !(tmp & FLASH_WRITES_ENABLED) ) {
+		msg_perr("Enabling flash write access failed.\n");
+		return 1;
+	}
 
 	if (register_shutdown(nicintel_spi_shutdown, NULL))
 		return 1;
