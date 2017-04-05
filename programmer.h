@@ -549,7 +549,7 @@ enum spi_controller {
 #if CONFIG_DEDIPROG == 1
 	SPI_CONTROLLER_DEDIPROG,
 #endif
-#if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__) || defined(__arm__)))
+#if CONFIG_BITBANG_SPI == 1
 	SPI_CONTROLLER_BITBANG,
 #endif
 #if CONFIG_LINUX_SPI == 1
