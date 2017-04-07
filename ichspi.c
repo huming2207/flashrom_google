@@ -1619,6 +1619,7 @@ static int pch_hwseq_get_flash_id(struct flashctx *flash)
 {
 	uint32_t hsfsc, data, mfg_id, model_id;
 	const struct flashchip *entry;
+	const int len = sizeof(data);
 
 	/* make sure FDONE, FCERR, & AEL are cleared */
 	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
@@ -1626,10 +1627,12 @@ static int pch_hwseq_get_flash_id(struct flashctx *flash)
 	/* Set RDID as flash cycle and FGO */
 	hsfsc = REGREAD32(PCH100_REG_HSFSC);
 	hsfsc &= ~HSFSC_FCYCLE;
+	hsfsc &= ~HSFSC_FDBC;
+	hsfsc |= ((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC;
 	hsfsc |= (0x6 << HSFSC_FCYCLE_OFF) | HSFSC_FGO;
 	REGWRITE32(PCH100_REG_HSFSC, hsfsc);
 	/* poll for 100ms */
-	if (pch100_hwseq_wait_for_cycle_complete(100 * 1000, JEDEC_RDID_INSIZE)) {
+	if (pch100_hwseq_wait_for_cycle_complete(100 * 1000, len)) {
 		msg_perr("Timed out waiting for RDID to complete.\n");
 		return 0;
 	}
@@ -1640,7 +1643,7 @@ static int pch_hwseq_get_flash_id(struct flashctx *flash)
 	 * Byte 1: Model ID (MSB)
 	 * Byte 2: Model ID (LSB)
 	 */
-	data = REGREAD32(PCH100_REG_FDATA0);
+	ich_read_data((uint8_t *)&data, len, PCH100_REG_FDATA0);
 	mfg_id = data & 0xff;
 	model_id = (data & 0xff00) | ((data >> 16) & 0xff);
 
