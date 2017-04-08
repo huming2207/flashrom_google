@@ -764,6 +764,9 @@ static int need_erase(struct flashctx *flash, uint8_t *have, uint8_t *want,
 	unsigned int i, j, limit;
 	int erase_value = flash_erase_value(flash);
 
+	if (flash->chip->feature_bits & FEATURE_NO_ERASE)
+		return 0;
+
 	switch (gran) {
 	case write_gran_1bit:
 		for (i = 0; i < len; i++)

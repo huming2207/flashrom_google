@@ -118,6 +118,7 @@ extern enum chipbustype target_bus;
 #define FEATURE_OTP		(1 << 8)
 #define FEATURE_ERASE_TO_ZERO	(1 << 9)
 #define FEATURE_UNBOUND_READ	(1 << 10)
+#define FEATURE_NO_ERASE	(1 << 11)
 
 struct voltage_range {
 	uint16_t min, max;

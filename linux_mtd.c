@@ -45,6 +45,8 @@ static int dev_fd = -1;
 
 static int mtd_device_is_writeable;
 
+static int mtd_no_erase;
+
 /* Size info is presented in bytes in sysfs. */
 static unsigned long int mtd_total_size;
 static unsigned long int mtd_numeraseregions;
@@ -145,6 +147,9 @@ static int get_mtd_info(void)
 		/* cache for later use by write function */
 		mtd_device_is_writeable = 1;
 	}
+	if (tmp & MTD_NO_ERASE) {
+		mtd_no_erase = 1;
+	}
 
 	/* Device name */
 	if (read_sysfs_string("name", mtd_device_name, sizeof(mtd_device_name)))
@@ -185,6 +190,8 @@ static int get_mtd_info(void)
 static int linux_mtd_probe(struct flashctx *flash)
 {
 	flash->chip->wp = &wp_mtd;
+	if (mtd_no_erase)
+		flash->chip->feature_bits |= FEATURE_NO_ERASE;
 	flash->chip->tested = TEST_OK_PREW;
 	flash->chip->total_size = mtd_total_size / 1024;	/* bytes -> kB */
 	flash->chip->block_erasers[0].eraseblocks[0].size = mtd_erasesize;
@@ -263,6 +270,12 @@ static int linux_mtd_erase(struct flashctx *flash,
 			unsigned int start, unsigned int len)
 {
 	uint32_t u;
+
+	if (mtd_no_erase) {
+		msg_perr("%s: device does not support erasing. Please file a "
+				"bug report at flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
 
 	if (mtd_numeraseregions != 0) {
 		/* TODO: Support non-uniform eraseblock size using
