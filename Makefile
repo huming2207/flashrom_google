@@ -430,11 +430,6 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-all: hwlibs features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
-ifeq ($(ARCH), x86)
-	@+$(MAKE) -C util/ich_descriptors_tool/ TARGET_OS=$(TARGET_OS) EXEC_SUFFIX=$(EXEC_SUFFIX)
-endif
-
 # Set the flashrom version string from the highest revision number
 # of the checked out flashrom files.
 # Note to packagers: Any tree exported with "make export" or "make tarball"
@@ -450,20 +445,20 @@ SVNDEF := -D'FLASHROM_VERSION="$(VERSION)"'
 # Always enable internal/onboard support for now.
 CONFIG_INTERNAL ?= yes
 
-# Always enable serprog for now. Needs to be disabled on Windows.
-CONFIG_SERPROG ?= no
+# Always enable serprog for now.
+CONFIG_SERPROG ?= yes
 
 # RayeR SPIPGM hardware support
-CONFIG_RAYER_SPI ?= no
+CONFIG_RAYER_SPI ?= yes
 
 # Always enable 3Com NICs for now.
-CONFIG_NIC3COM ?= no
+CONFIG_NIC3COM ?= yes
 
 # Enable NVIDIA graphics cards. Note: write and erase do not work properly.
-CONFIG_GFXNVIDIA ?= no
+CONFIG_GFXNVIDIA ?= yes
 
 # Always enable SiI SATA controllers for now.
-CONFIG_SATASII ?= no
+CONFIG_SATASII ?= yes
 
 # Highpoint (HPT) ATA/RAID controller support.
 # IMPORTANT: This code is not yet working!
@@ -476,25 +471,25 @@ CONFIG_FT2232_SPI ?= yes
 CONFIG_DUMMY ?= yes
 
 # Always enable Dr. Kaiser for now.
-CONFIG_DRKAISER ?= no
+CONFIG_DRKAISER ?= yes
 
 # Always enable Realtek NICs for now.
-CONFIG_NICREALTEK ?= no
+CONFIG_NICREALTEK ?= yes
 
 # Disable National Semiconductor NICs until support is complete and tested.
 CONFIG_NICNATSEMI ?= no
 
 # Always enable Intel NICs for now.
-CONFIG_NICINTEL ?= no
+CONFIG_NICINTEL ?= yes
 
 # Always enable SPI on Intel NICs for now.
-CONFIG_NICINTEL_SPI ?= no
+CONFIG_NICINTEL_SPI ?= yes
 
 # Always enable SPI on OGP cards for now.
-CONFIG_OGP_SPI ?= no
+CONFIG_OGP_SPI ?= yes
 
 # Always enable Bus Pirate SPI for now.
-CONFIG_BUSPIRATE_SPI ?= no
+CONFIG_BUSPIRATE_SPI ?= yes
 
 # Raiden Debug SPI-over-USB support.
 CONFIG_RAIDEN_DEBUG_SPI ?= no
@@ -805,6 +800,11 @@ FEATURE_LIBS += $(call debug_shell,grep -q "NEEDLIBZ := yes" .libdeps && printf 
 
 LIBFLASHROM_OBJS = $(CHIP_OBJS) $(PROGRAMMER_OBJS) $(LIB_OBJS)
 OBJS = $(CLI_OBJS) $(LIBFLASHROM_OBJS)
+
+all: hwlibs features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
+ifeq ($(ARCH), x86)
+	@+$(MAKE) -C util/ich_descriptors_tool/ TARGET_OS=$(TARGET_OS) EXEC_SUFFIX=$(EXEC_SUFFIX)
+endif
 
 $(PROGRAM)$(EXEC_SUFFIX): $(OBJS)
 	$(CC) $(LDFLAGS) -o $(PROGRAM)$(EXEC_SUFFIX) $(OBJS) $(FEATURE_LIBS) $(LIBS)
