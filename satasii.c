@@ -20,9 +20,8 @@
 
 /* Datasheets can be found on http://www.siliconimage.com. Great thanks! */
 
-#include <stdlib.h>
-#include "flash.h"
 #include "programmer.h"
+#include "hwaccess.h"
 
 #define PCI_VENDOR_ID_SII	0x1095
 
@@ -96,14 +95,14 @@ int satasii_init(void)
 		reg_offset = 0x50;
 	}
 
-	sii_bar = rphysmap("SATA SIL registers", addr, SATASII_MEMMAP_SIZE);
+	sii_bar = rphysmap("SATA SiI registers", addr, SATASII_MEMMAP_SIZE);
 	if (sii_bar == ERROR_PTR)
 		return 1;
 	sii_bar += reg_offset;
 
 	/* Check if ROM cycle are OK. */
 	if ((id != 0x0680) && (!(pci_mmio_readl(sii_bar) & (1 << 26))))
-		msg_pinfo("Warning: Flash seems unconnected.\n");
+		msg_pwarn("Warning: Flash seems unconnected.\n");
 
 	register_par_master(&par_master_satasii, BUS_PARALLEL);
 
