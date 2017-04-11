@@ -27,15 +27,17 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
+#include "hwaccess.h"
 #include "spi.h"
 
 #define ITE_SUPERIO_PORT1	0x2e
 #define ITE_SUPERIO_PORT2	0x4e
 
-uint16_t it8716f_flashport = 0;
+static uint16_t it8716f_flashport = 0;
 /* use fast 33MHz SPI (<>0) or slow 16MHz (0) */
 static int fast_spi = 1;
 
@@ -122,7 +124,7 @@ static const struct spi_master spi_master_it87xx = {
 static uint16_t it87spi_probe(uint16_t port)
 {
 	uint8_t tmp = 0;
-	char *portpos = NULL;
+	char *param = NULL;
 	uint16_t flashport = 0;
 
 	enter_conf_mode_ite(port);
@@ -161,11 +163,11 @@ static uint16_t it87spi_probe(uint16_t port)
 	flashport |= sio_read(port, 0x65);
 	msg_pdbg("Serial flash port 0x%04x\n", flashport);
 	/* Non-default port requested? */
-	portpos = extract_programmer_param("it87spiport");
-	if (portpos) {
+	param = extract_programmer_param("it87spiport");
+	if (param) {
 		char *endptr = NULL;
 		unsigned long forced_flashport;
-		forced_flashport = strtoul(portpos, &endptr, 0);
+		forced_flashport = strtoul(param, &endptr, 0);
 		/* Port 0, port >0x1000, unaligned ports and garbage strings
 		 * are rejected.
 		 */
@@ -178,7 +180,8 @@ static uint16_t it87spi_probe(uint16_t port)
 			msg_perr("Error: it87spiport specified, but no valid "
 				 "port specified.\nPort must be a multiple of "
 				 "0x8 and lie between 0x100 and 0xff8.\n");
-			free(portpos);
+			exit_conf_mode_ite(port);
+			free(param);
 			return 1;
 		} else {
 			flashport = (uint16_t)forced_flashport;
@@ -188,7 +191,7 @@ static uint16_t it87spi_probe(uint16_t port)
 			sio_write(port, 0x65, (flashport & 0xff));
 		}
 	}
-	free(portpos);
+	free(param);
 	exit_conf_mode_ite(port);
 	it8716f_flashport = flashport;
 	if (internal_buses_supported & BUS_SPI)
@@ -200,7 +203,9 @@ static uint16_t it87spi_probe(uint16_t port)
 
 int init_superio_ite(void)
 {
-	int i, ret, chips_found = 0;
+	int i;
+	int ret = 0;
+	int chips_found = 0;
 
 	for (i = 0; i < superio_count; i++) {
 		if (superios[i].vendor != SUPERIO_VENDOR_ITE)
@@ -235,9 +240,8 @@ int init_superio_ite(void)
 				chips_found++;
 			break;
 		default:
-			msg_pdbg("Super I/O ID 0x%04hx is not on the list of "
-				 "flash capable controllers.\n",
-				 superios[i].model);
+			msg_pdbg2("Super I/O ID 0x%04hx is not on the list of flash-capable controllers.\n",
+				  superios[i].model);
 		}
 	}
 
@@ -377,6 +381,7 @@ static int it8716f_spi_chip_read(struct flashctx *flash, uint8_t *buf,
 static int it8716f_spi_chip_write_256(struct flashctx *flash, const uint8_t *buf,
 				      unsigned int start, unsigned int len)
 {
+	const struct flashchip *chip = flash->chip;
 	/*
 	 * IT8716F only allows maximum of 512 kb SPI chip size for memory
 	 * mapped access. It also can't write more than 1+3+256 bytes at once,
@@ -387,29 +392,27 @@ static int it8716f_spi_chip_write_256(struct flashctx *flash, const uint8_t *buf
 	 * the mainboard does not use IT87 SPI translation. This should be done
 	 * via a programmer parameter for the internal programmer.
 	 */
-	if ((flash->chip->total_size * 1024 > 512 * 1024) ||
-	    (flash->chip->page_size > 256)) {
+	if ((chip->total_size * 1024 > 512 * 1024) || (chip->page_size > 256)) {
 		spi_chip_write_1(flash, buf, start, len);
 	} else {
 		unsigned int lenhere;
 
-		if (start % flash->chip->page_size) {
+		if (start % chip->page_size) {
 			/* start to the end of the page or to start + len,
 			 * whichever is smaller.
 			 */
-			lenhere = min(len,
-				      flash->chip->page_size - start % flash->chip->page_size);
+			lenhere = min(len, chip->page_size - start % chip->page_size);
 			spi_chip_write_1(flash, buf, start, lenhere);
 			start += lenhere;
 			len -= lenhere;
 			buf += lenhere;
 		}
 
-		while (len >= flash->chip->page_size) {
+		while (len >= chip->page_size) {
 			it8716f_spi_page_program(flash, buf, start);
-			start += flash->chip->page_size;
-			len -= flash->chip->page_size;
-			buf += flash->chip->page_size;
+			start += chip->page_size;
+			len -= chip->page_size;
+			buf += chip->page_size;
 		}
 		if (len)
 			spi_chip_write_1(flash, buf, start, len);
