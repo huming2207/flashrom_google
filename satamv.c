@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include "flash.h"
 #include "programmer.h"
+#include "hwaccess.h"
 
 uint8_t *mv_bar;
 uint16_t mv_iobar;
@@ -92,7 +93,7 @@ int satamv_init(void)
 
 	mv_bar = rphysmap("Marvell 88SX7042 registers", addr, 0x20000);
 	if (mv_bar == ERROR_PTR)
-		goto error_out;
+		return 1;
 
 	tmp = pci_mmio_readl(mv_bar + FLASH_PARAM);
 	msg_pspew("Flash Parameters:\n");
@@ -137,13 +138,15 @@ int satamv_init(void)
 	pci_rmmio_writel(tmp, mv_bar + GPIO_PORT_CONTROL);
 
 	/* Get I/O BAR location. */
-	tmp = pci_read_long(dev, PCI_BASE_ADDRESS_2) &
-	      PCI_BASE_ADDRESS_IO_MASK;
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_2);
+	if (!addr)
+		return 1;
+
 	/* Truncate to reachable range.
 	 * FIXME: Check if the I/O BAR is actually reachable.
 	 * This is an arch specific check.
 	 */
-	mv_iobar = tmp & 0xffff;
+	mv_iobar = addr & 0xffff;
 	msg_pspew("Activating I/O BAR at 0x%04x\n", mv_iobar);
 
 	/* 512 kByte with two 8-bit latches, and
@@ -152,9 +155,6 @@ int satamv_init(void)
 	register_par_master(&par_master_satamv, BUS_PARALLEL);
 
 	return 0;
-
-error_out:
-	return 1;
 }
 
 /* BAR2 (MEM) can map NVRAM and flash. We set it to flash in the init function.
