@@ -308,7 +308,7 @@ static int __enable_flash_ich(void *dev, const char *name, int bios_cntl,
 	if (old & (1 << 5)) {
 		msg_pdbg("WARNING: BIOS region SMM protection is enabled!\n");
 		msg_pdbg("Trying to clear BIOS region SMM protection.\n");
-		wanted &= ~(1 << 5);
+		return -1;
 	}
 
 	wanted |= (1 << 0);
@@ -352,7 +352,7 @@ static int apl_write_bios_cntl(struct pci_dev *dev, int offset, uint8_t val)
 static int enable_flash_ich_apl(void *dev, const char *name, int bios_cntl)
 {
 	return __enable_flash_ich(dev, name, bios_cntl, apl_read_bios_cntl,
-				  apl_write_bios_cntl);
+				  apl_write_bios_cntl) ? ERROR_FATAL : 0;
 }
 
 static int enable_flash_ich_4e(struct pci_dev *dev, const char *name)
@@ -1831,6 +1831,7 @@ const struct penable chipset_enables[] = {
 	 * SPI PCI device and work with it.
 	 */
 	{0x8086, 0x5af0, OK, "Intel", "Apollolake", enable_flash_apl},
+	{0x8086, 0x31f0, OK, "Intel", "Geminilake", enable_flash_apl},
 #endif
 	{0},
 };
