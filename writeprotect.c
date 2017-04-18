@@ -1467,11 +1467,11 @@ struct generic_range gd25q32_cmp0_ranges[] = {
 };
 
 struct generic_range gd25q32_cmp1_ranges[] = {
-	/* none, bp4 and bp3 => don't care */
-	{ { }, 0x00, {0, 0} },
-	{ { }, 0x08, {0, 0} },
-	{ { }, 0x10, {0, 0} },
-	{ { }, 0x18, {0, 0} },
+	/* All, bp4 and bp3 => don't care */
+	{ { }, 0x00, {0x000000, 4096 * 1024} }, /* All */
+	{ { }, 0x08, {0x000000, 4096 * 1024} },
+	{ { }, 0x10, {0x000000, 4096 * 1024} },
+	{ { }, 0x18, {0x000000, 4096 * 1024} },
 
 	{ { }, 0x01, {0x000000, 4032 * 1024} },
 	{ { }, 0x02, {0x000000, 3968 * 1024} },
@@ -1487,11 +1487,11 @@ struct generic_range gd25q32_cmp1_ranges[] = {
 	{ { }, 0x0d, {0x100000, 3 * 1024 * 1024} },
 	{ { }, 0x0e, {0x200000, 2 * 1024 * 1024} },
 
-	/* all, bp4 and bp3 => don't care */
-	{ { }, 0x07, {0x000000, 4096 * 1024} },
-	{ { }, 0x0f, {0x000000, 4096 * 1024} },
-	{ { }, 0x17, {0x000000, 4096 * 1024} },
-	{ { }, 0x1f, {0x000000, 4096 * 1024} },
+	/* None, bp4 and bp3 => don't care */
+	{ { }, 0x07, {0, 0} }, /* None */
+	{ { }, 0x0f, {0, 0} },
+	{ { }, 0x17, {0, 0} },
+	{ { }, 0x1f, {0, 0} },
 
 	{ { }, 0x11, {0x000000, 4092 * 1024} },
 	{ { }, 0x12, {0x000000, 4088 * 1024} },
@@ -1758,6 +1758,7 @@ static int generic_range_table(const struct flashctx *flash,
 	case GIGADEVICE_ID:
 		switch(flash->chip->model_id) {
 
+		case GIGADEVICE_GD25LQ32:
 		case GIGADEVICE_GD25Q32: {
 			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q32_wp;
