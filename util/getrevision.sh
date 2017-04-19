@@ -19,8 +19,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 #
-# getversion.sh: Get version / revision info. Currently, only Git and Subversion
-# are supported.
+# getrevision.sh: Get version / revision info. Currently, only Git
+# and Subversion are supported.
 #
 # *_revision:   Echo the latest source code revision (git hash or svn revision).
 #
@@ -136,7 +136,7 @@ get_timestamp() {
 }
 
 show_help() {
-  echo "Usage: getversion.sh <options>"
+  echo "Usage: getrevision.sh <options>"
   echo ""
   echo "Options:"
   echo -e "\t-r | --revision     Revision (SVN), commit hash (Git)"
