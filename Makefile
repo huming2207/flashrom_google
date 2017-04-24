@@ -596,8 +596,7 @@ endif
 ifeq ($(CONFIG_RAYER_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_RAYER_SPI=1'
 PROGRAMMER_OBJS += rayer_spi.o
-# Actually, NEED_LIBPCI is wrong. NEED_IOPORT_ACCESS would be more correct.
-NEED_LIBPCI += CONFIG_RAYER_SPI
+NEED_RAW_ACCESS += CONFIG_RAYER_SPI
 endif
 
 ifeq ($(CONFIG_PONY_SPI), yes)
@@ -726,7 +725,7 @@ endif
 ifeq ($(CONFIG_RAIDEN_DEBUG_SPI), yes)
 FEATURE_CFLAGS += -D'CONFIG_RAIDEN_DEBUG_SPI=1'
 PROGRAMMER_OBJS += raiden_debug_spi.o usb_device.o
-NEED_USB := yes
+NEED_LIBUSB1 += CONFIG_RAIDEN_DEBUG_SPI
 endif
 
 ifeq ($(CONFIG_LINUX_I2C), yes)
@@ -741,8 +740,8 @@ endif
 
 ifeq ($(CONFIG_DEDIPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_DEDIPROG=1'
-FEATURE_LIBS += -lusb
 PROGRAMMER_OBJS += dediprog.o
+NEED_LIBUSB1 += CONFIG_DEDIPROG
 endif
 
 ifeq ($(CONFIG_SATAMV), yes)
@@ -768,35 +767,65 @@ endif
 
 ifneq ($(NEED_LIBPCI), )
 CHECK_LIBPCI = yes
+# This is a dirty hack, but it saves us from checking all PCI drivers and all platforms manually.
+# libpci may need raw memory, MSR or PCI port I/O on some platforms.
+# Individual drivers might have the same needs as well.
+NEED_RAW_ACCESS += $(NEED_LIBPCI)
 FEATURE_CFLAGS += -D'NEED_PCI=1'
-PROGRAMMER_OBJS += pcidev.o physmap.o hwaccess.o
+FEATURE_CFLAGS += $(call debug_shell,grep -q "OLD_PCI_GET_DEV := yes" .libdeps && printf "%s" "-D'OLD_PCI_GET_DEV=1'")
+
+PROGRAMMER_OBJS += pcidev.o
 ifeq ($(TARGET_OS), NetBSD)
 # The libpci we want is called libpciutils on NetBSD and needs NetBSD libpci.
-LIBS += -lpciutils -lpci
-# For (i386|x86_64)_iopl(2).
-LIBS += -l$(shell uname -p)
+PCILIBS += -lpciutils -lpci
 else
-ifeq ($(TARGET_OS), DOS)
-# FIXME There needs to be a better way to do this
-LIBS += ../libpci/lib/libpci.a
-else
-ifeq ($(CONFIG_STATIC), yes)
-LIBS_PCI := $(shell $(PKG_CONFIG) --libs --static libpci)
-LIBS += -static $(LIBS_PCI)
-else
-LIBS += -lpci
+PCILIBS += -lpci
 endif
+endif
+
+ifneq ($(NEED_RAW_ACCESS), )
+# Raw memory, MSR or PCI port I/O access.
+FEATURE_CFLAGS += -D'NEED_RAW_ACCESS=1'
+PROGRAMMER_OBJS += physmap.o hwaccess.o
+
+ifeq ($(TARGET_OS), NetBSD)
+# For (i386|x86_64)_iopl(2).
+PCILIBS += -l$(shell uname -p)
+else
 ifeq ($(TARGET_OS), OpenBSD)
 # For (i386|amd64)_iopl(2).
-LIBS += -l$(shell uname -m)
-endif
+PCILIBS += -l$(shell uname -m)
+else
+ifeq ($(TARGET_OS), Darwin)
+# DirectHW framework can be found in the DirectHW library.
+PCILIBS += -framework IOKit -framework DirectHW
 endif
 endif
 endif
 
-ifeq ($(NEED_USB),yes)
-FEATURE_CFLAGS += $(shell $(PKG_CONFIG) --cflags libusb-1.0)
-FEATURE_LIBS   += $(shell $(PKG_CONFIG) --libs libusb-1.0)
+endif
+
+ifneq ($(NEED_LIBUSB0), )
+CHECK_LIBUSB0 = yes
+FEATURE_CFLAGS += -D'NEED_LIBUSB0=1'
+USBLIBS := $(call debug_shell,[ -n "$(PKG_CONFIG_LIBDIR)" ] && export PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)" ; $(PKG_CONFIG) --libs libusb || printf "%s" "-lusb")
+endif
+
+ifneq ($(NEED_LIBUSB1), )
+CHECK_LIBUSB1 = yes
+FEATURE_CFLAGS += -D'NEED_LIBUSB1=1'
+# FreeBSD and DragonflyBSD use a reimplementation of libusb-1.0 that is simply called libusb
+ifeq ($(TARGET_OS),$(filter $(TARGET_OS),FreeBSD DragonFlyBSD))
+USB1LIBS += -lusb
+else
+ifeq ($(TARGET_OS),NetBSD)
+override CPPFLAGS += -I/usr/pkg/include/libusb-1.0
+USB1LIBS += -lusb-1.0
+else
+USB1LIBS += $(call debug_shell,[ -n "$(PKG_CONFIG_LIBDIR)" ] && export PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)"; $(PKG_CONFIG) --libs libusb-1.0  || printf "%s" "-lusb-1.0")
+override CPPFLAGS += $(call debug_shell,[ -n "$(PKG_CONFIG_LIBDIR)" ] && export PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)"; $(PKG_CONFIG) --cflags-only-I libusb-1.0  || printf "%s" "-I/usr/include/libusb-1.0")
+endif
+endif
 endif
 
 ifeq ($(CONFIG_PRINT_WIKI), yes)
@@ -824,7 +853,7 @@ ifeq ($(ARCH), x86)
 endif
 
 $(PROGRAM)$(EXEC_SUFFIX): $(OBJS)
-	$(CC) $(LDFLAGS) -o $(PROGRAM)$(EXEC_SUFFIX) $(OBJS) $(FEATURE_LIBS) $(LIBS)
+	$(CC) $(LDFLAGS) -o $(PROGRAM)$(EXEC_SUFFIX) $(OBJS) $(LIBS) $(PCILIBS) $(FEATURE_LIBS) $(USBLIBS) $(USB1LIBS)
 
 libflashrom.a: $(LIBFLASHROM_OBJS)
 	$(AR) rcs $@ $^
