@@ -654,15 +654,20 @@ NEED_LIBPCI += CONFIG_IT8212
 endif
 
 ifeq ($(CONFIG_FT2232_SPI), yes)
-FTDILIBS := $(shell $(PKG_CONFIG) --libs libftdi1 2>/dev/null ||	\
-		    $(PKG_CONFIG) --libs libftdi 2>/dev/null || echo "-lftdi -lusb")
-FTDICFLAGS := $(shell $(PKG_CONFIG) --cflags libftdi1 2>/dev/null ||	\
-		      $(PKG_CONFIG) --cflags libftdi 2>/dev/null)
 # This is a totally ugly hack.
-FEATURE_CFLAGS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDICFLAGS) -D'CONFIG_FT2232_SPI=1'")
-FEATURE_LIBS += $(shell LC_ALL=C grep -q "FTDISUPPORT := yes" .features && echo "$(FTDILIBS)")
+FEATURE_CFLAGS += $(call debug_shell,grep -q "FTDISUPPORT := yes" .features && printf "%s" "-D'CONFIG_FT2232_SPI=1'")
+NEED_LIBFTDI += CONFIG_FT2232_SPI
 PROGRAMMER_OBJS += ft2232_spi.o
-NEED_USB := yes
+endif
+
+ifneq ($(NEED_LIBFTDI), )
+FTDILIBS := $(call debug_shell,[ -n "$(PKG_CONFIG_LIBDIR)" ] && export PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)" ; $(PKG_CONFIG) --libs libftdi1 || $(PKG_CONFIG) --libs libftdi || printf "%s" "-lftdi -lusb")
+FEATURE_CFLAGS += $(call debug_shell,grep -q "FT232H := yes" .features && printf "%s" "-D'HAVE_FT232H=1'")
+FTDI_INCLUDES := $(call debug_shell,[ -n "$(PKG_CONFIG_LIBDIR)" ] && export PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)" ; $(PKG_CONFIG) --cflags-only-I libftdi1)
+FEATURE_CFLAGS += $(FTDI_INCLUDES)
+FEATURE_LIBS += $(call debug_shell,grep -q "FTDISUPPORT := yes" .features && printf "%s" "$(FTDILIBS)")
+# We can't set NEED_LIBUSB0 here because that would transform libftdi auto-enabling
+# into a hard requirement for libusb, defeating the purpose of auto-enabling.
 endif
 
 ifeq ($(CONFIG_DUMMY), yes)
@@ -1103,7 +1108,7 @@ export LINUX_I2C_TEST
 
 features: compiler
 	@echo "FEATURES := yes" > .features.tmp
-ifeq ($(CONFIG_FT2232_SPI), yes)
+ifneq ($(NEED_LIBFTDI), )
 	@printf "Checking for FTDI support... " | tee -a $(BUILD_DETAILS_FILE)
 	@echo "$$FTDI_TEST" > .featuretest.c
 	@printf "\nexec: %s\n" "$(CC) $(CPPFLAGS) $(CFLAGS) $(FTDI_INCLUDES) $(LDFLAGS) .featuretest.c -o .featuretest$(EXEC_SUFFIX) $(FTDILIBS) $(LIBS)" >>$(BUILD_DETAILS_FILE)
