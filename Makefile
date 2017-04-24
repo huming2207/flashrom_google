@@ -1081,7 +1081,12 @@ endif
 # If a user does not explicitly request a non-working feature, we should
 # silently disable it. However, if a non-working (does not compile) feature
 # is explicitly requested, we should bail out with a descriptive error message.
+# We also have to check that at least one programmer driver is enabled.
 featuresavailable:
+ifeq ($(PROGRAMMER_OBJS),)
+	@echo "You have to enable at least one programmer driver!"
+	@false
+endif
 ifneq ($(UNSUPPORTED_FEATURES), )
 	@echo "The following features are unavailable on your machine: $(UNSUPPORTED_FEATURES)"
 	@false
