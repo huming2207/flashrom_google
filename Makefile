@@ -1149,10 +1149,9 @@ endif
 $(PROGRAM).8.html: $(PROGRAM).8
 	@groff -mandoc -Thtml $< >$@
 
-MAN_DATE := $(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)
 $(PROGRAM).8: $(PROGRAM).8.tmpl
 	@# Add the man page change date and version to the man page
-	@sed -e 's#.TH FLASHROM 8 .*#.TH FLASHROM 8 "$(MAN_DATE)" "$(VERSION)" "$(MAN_DATE)"#' <$< >$@
+	@sed -e 's#.TH FLASHROM 8 ".*".*#.TH FLASHROM 8 "$(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)" "$(VERSION)"#' <$< >$@
 
 install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
@@ -1160,38 +1159,25 @@ install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin
 	$(INSTALL) -m 0644 $(PROGRAM).8 $(DESTDIR)$(MANDIR)/man8
 
-_export: $(PROGRAM).8
-	@rm -rf "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
-	@mkdir -p "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
-	@git archive HEAD | tar -x -C "$(EXPORTDIR)/flashrom-$(RELEASENAME)"
-	@sed	-e  's/^VERSION :=.*/VERSION := $(VERSION)/' \
-		-e 's/^MAN_DATE :=.*/MAN_DATE := $(MAN_DATE)/' \
-		-e 's#./util/getrevision.sh -c#false#' \
-		Makefile >"$(EXPORTDIR)/flashrom-$(RELEASENAME)/Makefile"
-#	Restore modification date of all tracked files not marked 'export-ignore' in .gitattributes.
-#	sed is required to filter out file names having the attribute set.
-	@git ls-tree -r -z -t --full-name --name-only HEAD | \
-		git check-attr -z --stdin export-ignore | \
-		sed -zne 'x;n;n;s/^set$$//;t;x;p' | \
-		xargs -0 sh -c 'for f; do \
-			touch -d $$(git log --pretty=format:%cI -1 HEAD -- "$$f") \
-				"$(EXPORTDIR)/flashrom-$(RELEASENAME)/$$f"; \
-		done'
-
-export: _export
-	@echo "Exported $(EXPORTDIR)/flashrom-$(RELEASENAME)/"
-
-tarball: _export
-	@tar -cz --format=ustar -f $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.gz -C $(EXPORTDIR)/ \
-		$(TAROPTIONS) flashrom-$(RELEASENAME)/
-#	Delete the exported directory again because it is most likely what's expected by the user.
+export: $(PROGRAM).8
 	@rm -rf $(EXPORTDIR)/flashrom-$(RELEASENAME)
-	@echo Created $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.gz
+	@svn export -r BASE . $(EXPORTDIR)/flashrom-$(RELEASENAME)
+	@sed "s/^SVNVERSION.*/SVNVERSION := $(SVNVERSION)/" Makefile >$(EXPORTDIR)/flashrom-$(RELEASENAME)/Makefile
+	@cp $(PROGRAM).8 "$(EXPORTDIR)/flashrom-$(RELEASENAME)/$(PROGRAM).8"
+	@svn log >$(EXPORTDIR)/flashrom-$(RELEASENAME)/ChangeLog
+	@echo Exported $(EXPORTDIR)/flashrom-$(RELEASENAME)/
 
+tarball: export
+	@tar cjf $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.bz2 -C $(EXPORTDIR)/ $(TAROPTIONS) flashrom-$(RELEASENAME)/
+	@rm -rf $(EXPORTDIR)/flashrom-$(RELEASENAME)
+	@echo Created $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.bz2
+
+djgpp-dos: clean
+	make CC=i586-pc-msdosdjgpp-gcc STRIP=i586-pc-msdosdjgpp-strip
 libpayload: clean
 	make CC="CC=i386-elf-gcc lpgcc" AR=i386-elf-ar RANLIB=i386-elf-ranlib
 
-.PHONY: all install clean distclean compiler hwlibs features _export export tarball featuresavailable libpayload
+.PHONY: all install clean distclean compiler hwlibs features export tarball djgpp-dos featuresavailable libpayload
 
 # Disable implicit suffixes and built-in rules (for performance and profit)
 .SUFFIXES:
