@@ -433,17 +433,26 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-# Set the flashrom version string from the highest revision number
-# of the checked out flashrom files.
+# Set the flashrom version string from the highest revision number of the checked out flashrom files.
 # Note to packagers: Any tree exported with "make export" or "make tarball"
 # will not require subversion. The downloadable snapshots are already exported.
-SVNVERSION := $(shell ./util/getrevision.sh)
+SVNVERSION := $(shell ./util/getrevision.sh 2>/dev/null )
 
-RELEASE := 0.9.4
+RELEASE := 0.9.9
 VERSION := $(RELEASE) $(SVNVERSION)
 RELEASENAME ?= $(VERSION)
 
 SVNDEF := -D'FLASHROM_VERSION="$(VERSION)"'
+
+# Inform user if there is no meaningful version string. If there is version information from a VCS print
+# something anyway because $(info...) will print a line break in any case which would look suspicious.
+# The && between the echos is a workaround for old versions of GNU make that issue the error "unterminated
+# variable reference" if a semicolon is used instead.
+$(info $(shell ./util/getrevision.sh -c 2>/dev/null || echo "Files don't seem to be under version control." && \
+	echo "Replacing all version templates with $(VERSION)." ))
+
+###############################################################################
+# Default settings of CONFIG_* variables.
 
 # Always enable internal/onboard support for now.
 CONFIG_INTERNAL ?= yes
