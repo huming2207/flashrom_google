@@ -171,7 +171,10 @@ endif
 ifeq ($(TARGET_OS), MinGW)
 EXEC_SUFFIX := .exe
 # MinGW doesn't have the ffs() function, but we can use gcc's __builtin_ffs().
-CFLAGS += -Dffs=__builtin_ffs
+FLASHROM_CFLAGS += -Dffs=__builtin_ffs
+# Some functions provided by Microsoft do not work as described in C99 specifications. This macro fixes that
+# for MinGW. See http://sourceforge.net/p/mingw-w64/wiki2/printf%20and%20scanf%20family/ */
+FLASHROM_CFLAGS += -D__USE_MINGW_ANSI_STDIO=1
 # libusb-win32/libftdi stuff is usually installed in /usr/local.
 CPPFLAGS += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib
@@ -274,7 +277,7 @@ ifeq ($(MAKECMDGOALS),)
 .DEFAULT_GOAL := libflashrom.a
 $(info Setting default goal to libflashrom.a)
 endif
-CPPFLAGS += -DSTANDALONE
+FLASHROM_CFLAGS += -DSTANDALONE
 ifeq ($(CONFIG_DUMMY), yes)
 UNSUPPORTED_FEATURES += CONFIG_DUMMY=yes
 else
@@ -819,7 +822,7 @@ libflashrom.a: $(LIBFLASHROM_OBJS)
 TAROPTIONS = $(shell LC_ALL=C tar --version|grep -q GNU && echo "--owner=root --group=root")
 
 %.o: %.c .features
-	$(CC) -MMD $(CFLAGS) $(CPPFLAGS) $(FEATURE_CFLAGS) $(SVNDEF) -o $@ -c $<
+	$(CC) -MMD $(CFLAGS) $(CPPFLAGS) $(FLASHROM_CFLAGS) $(FEATURE_CFLAGS) $(SVNDEF) -o $@ -c $<
 
 # Make sure to add all names of generated binaries here.
 # This includes all frontends and libflashrom.
