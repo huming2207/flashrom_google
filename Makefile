@@ -526,6 +526,16 @@ CONFIG_PRINT_WIKI ?= no
 # Support for reading a flashmap from a device tree in the image
 CONFIG_FDTMAP ?= no
 
+# Disable all features if CONFIG_NOTHING=yes is given unless CONFIG_EVERYTHING was also set
+ifeq ($(CONFIG_NOTHING), yes)
+  ifeq ($(CONFIG_EVERYTHING), yes)
+    $(error Setting CONFIG_NOTHING=yes and CONFIG_EVERYTHING=yes does not make sense)
+  endif
+  $(foreach var, $(filter CONFIG_%, $(.VARIABLES)),\
+    $(if $(filter yes, $($(var))),\
+      $(eval $(var)=no)))
+endif
+
 # Enable all features if CONFIG_EVERYTHING=yes is given
 ifeq ($(CONFIG_EVERYTHING), yes)
 $(foreach var, $(filter CONFIG_%, $(.VARIABLES)),\
