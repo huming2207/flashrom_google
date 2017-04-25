@@ -175,15 +175,6 @@ FLASHROM_CFLAGS += -Dffs=__builtin_ffs
 # Some functions provided by Microsoft do not work as described in C99 specifications. This macro fixes that
 # for MinGW. See http://sourceforge.net/p/mingw-w64/wiki2/printf%20and%20scanf%20family/ */
 FLASHROM_CFLAGS += -D__USE_MINGW_ANSI_STDIO=1
-# libusb-win32/libftdi stuff is usually installed in /usr/local.
-CPPFLAGS += -I/usr/local/include
-LDFLAGS += -L/usr/local/lib
-# Serprog is not supported under Windows/MinGW (missing sockets support).
-ifeq ($(CONFIG_SERPROG), yes)
-UNSUPPORTED_FEATURES += CONFIG_SERPROG=yes
-else
-override CONFIG_SERPROG = no
-endif
 # For now we disable all PCI-based programmers on Windows/MinGW (no libpci).
 ifeq ($(CONFIG_INTERNAL), yes)
 UNSUPPORTED_FEATURES += CONFIG_INTERNAL=yes
@@ -761,7 +752,8 @@ NEED_LIBPCI += CONFIG_SATAMV
 endif
 
 ifeq ($(CONFIG_LINUX_SPI), yes)
-FEATURE_CFLAGS += -D'CONFIG_LINUX_SPI=1'
+# This is a totally ugly hack.
+FEATURE_CFLAGS += $(call debug_shell,grep -q "LINUX_SPI_SUPPORT := yes" .features && printf "%s" "-D'CONFIG_LINUX_SPI=1'")
 PROGRAMMER_OBJS += linux_spi.o
 endif
 
