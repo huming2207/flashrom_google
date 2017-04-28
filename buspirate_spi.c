@@ -92,7 +92,7 @@ static int buspirate_spi_send_command(const struct flashctx *flash,
 				      const unsigned char *writearr,
 				      unsigned char *readarr);
 
-static const struct spi_programmer spi_programmer_buspirate = {
+static const struct spi_master spi_master_buspirate = {
 	.type		= SPI_CONTROLLER_BUSPIRATE,
 	.max_data_read	= 12,
 	.max_data_write	= 12,
@@ -289,7 +289,7 @@ int buspirate_spi_init(void)
 		return 1;
 	}
 
-	register_spi_programmer(&spi_programmer_buspirate);
+	register_spi_master(&spi_master_buspirate);
 
 	return 0;
 }

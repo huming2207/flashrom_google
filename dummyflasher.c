@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
@@ -84,7 +85,7 @@ static unsigned long int delay_us = 0;
 
 static int dummy_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len);
 static void dummy_chip_writeb(const struct flashctx *flash, uint8_t val,
 			      chipaddr addr);
@@ -103,7 +104,7 @@ static uint32_t dummy_chip_readl(const struct flashctx *flash,
 static void dummy_chip_readn(const struct flashctx *flash, uint8_t *buf,
 			     const chipaddr addr, size_t len);
 
-static const struct spi_programmer spi_programmer_dummyflasher = {
+static const struct spi_master spi_master_dummyflasher = {
 	.type		= SPI_CONTROLLER_DUMMY,
 	.max_data_read	= MAX_DATA_READ_UNLIMITED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
@@ -113,7 +114,7 @@ static const struct spi_programmer spi_programmer_dummyflasher = {
 	.write_256	= dummy_spi_write_256,
 };
 
-static const struct par_programmer par_programmer_dummy = {
+static const struct par_master par_master_dummy = {
 		.chip_readb		= dummy_chip_readb,
 		.chip_readw		= dummy_chip_readw,
 		.chip_readl		= dummy_chip_readl,
@@ -477,19 +478,19 @@ dummy_init_out:
 		return 1;
 	}
 	if (dummy_buses_supported & (BUS_PARALLEL | BUS_LPC | BUS_FWH))
-		register_par_programmer(&par_programmer_dummy,
+		register_par_master(&par_master_dummy,
 					dummy_buses_supported &
 						(BUS_PARALLEL | BUS_LPC |
 						 BUS_FWH));
 	if (dummy_buses_supported & BUS_SPI)
-		register_spi_programmer(&spi_programmer_dummyflasher);
+		register_spi_master(&spi_master_dummyflasher);
 
 	return 0;
 }
 
-void *dummy_map(const char *descr, unsigned long phys_addr, size_t len)
+void *dummy_map(const char *descr, uintptr_t phys_addr, size_t len)
 {
-	msg_pspew("%s: Mapping %s, 0x%lx bytes at 0x%08lx\n",
+	msg_pspew("%s: Mapping %s, 0x%lx bytes at %" PRIxPTR "\n",
 		  __func__, descr, (unsigned long)len, phys_addr);
 	return (void *)phys_addr;
 }
@@ -818,7 +819,7 @@ static int dummy_spi_send_command(const struct flashctx *flash, unsigned int wri
 	return 0;
 }
 
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len)
 {
 	return spi_write_chunked(flash, buf, start, len,
@@ -848,16 +849,16 @@ int probe_variable_size(struct flashctx *flash)
 	if (emu_chip_size % 1024)
 		msg_perr("%s: emu_chip_size is not multipler of 1024.\n",
 		         __func__);
-	flash->total_size = emu_chip_size / 1024;
+	flash->chip->total_size = emu_chip_size / 1024;
 	msg_cdbg("%s: set flash->total_size to %dK bytes.\n", __func__,
-	         flash->total_size);
+	         flash->chip->total_size);
 
 	if (erase_to_zero)
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	/* Update eraser count */
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
-		struct block_eraser *eraser = &flash->block_erasers[i];
+		struct block_eraser *eraser = &flash->chip->block_erasers[i];
 		if (eraser->block_erase == NULL)
 			break;
 

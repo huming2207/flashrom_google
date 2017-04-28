@@ -32,9 +32,10 @@
 /* Mask to restrict flash accesses to the 128kB memory window. */
 #define DRKAISER_MEMMAP_MASK		((1 << 17) - 1)
 
-const struct pcidev_status drkaiser_pcidev[] = {
+const struct dev_entry drkaiser_pcidev[] = {
 	{0x1803, 0x5057, OK, "Dr. Kaiser", "PC-Waechter (Actel FPGA)"},
-	{},
+
+	{0},
 };
 
 static uint8_t *drkaiser_bar;
@@ -43,8 +44,7 @@ static void drkaiser_chip_writeb(const struct flashctx *flash, uint8_t val,
 				 chipaddr addr);
 static uint8_t drkaiser_chip_readb(const struct flashctx *flash,
 				   const chipaddr addr);
-
-static const struct par_programmer par_programmer_drkaiser = {
+static const struct par_master par_master_drkaiser = {
 		.chip_readb		= drkaiser_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -55,20 +55,12 @@ static const struct par_programmer par_programmer_drkaiser = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int drkaiser_shutdown(void *data)
-{
-	physunmap(drkaiser_bar, DRKAISER_MEMMAP_SIZE);
-	/* Flash write is disabled automatically by PCI restore. */
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 0;
-};
-
 int drkaiser_init(void)
 {
 	uint32_t addr;
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	addr = pcidev_init(PCI_BASE_ADDRESS_2, drkaiser_pcidev);
 
@@ -77,14 +69,12 @@ int drkaiser_init(void)
 			PCI_MAGIC_DRKAISER_VALUE);
 
 	/* Map 128kB flash memory window. */
-	drkaiser_bar = physmap("Dr. Kaiser PC-Waechter flash memory",
-			       addr, DRKAISER_MEMMAP_SIZE);
-
-	if (register_shutdown(drkaiser_shutdown, NULL))
+	drkaiser_bar = rphysmap("Dr. Kaiser PC-Waechter flash memory", addr, DRKAISER_MEMMAP_SIZE);
+	if (drkaiser_bar == ERROR_PTR)
 		return 1;
 
 	max_rom_decode.parallel = 128 * 1024;
-	register_par_programmer(&par_programmer_drkaiser, BUS_PARALLEL);
+	register_par_master(&par_master_drkaiser, BUS_PARALLEL);
 
 	return 0;
 }

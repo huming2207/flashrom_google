@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-//#include "platform.h"
+#include "platform.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -606,7 +606,7 @@ static int dediprog_spi_write(struct flashctx *flash, const uint8_t *buf,
 			      unsigned int start, unsigned int len, uint8_t dedi_spi_cmd)
 {
 	int ret;
-	const unsigned int chunksize = flash->page_size;
+	const unsigned int chunksize = flash->chip->page_size;
 	unsigned int residue = start % chunksize ? chunksize - start % chunksize : 0;
 	unsigned int bulklen;
 
@@ -654,8 +654,7 @@ static int dediprog_spi_write(struct flashctx *flash, const uint8_t *buf,
 	return 0;
 }
 
-//static int dediprog_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
-static int dediprog_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+static int dediprog_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	return dediprog_spi_write(flash, buf, start, len, WRITE_MODE_PAGE_PGM);
 }
@@ -823,8 +822,8 @@ static int dediprog_set_spi_flash_voltage_auto(void)
 					break;
 				}
 
-				if ((dummy.manufacture_id == GENERIC_MANUF_ID) ||
-					(dummy.model_id == GENERIC_DEVICE_ID)) {
+				if ((dummy.chip->manufacture_id == GENERIC_MANUF_ID) ||
+					(dummy.chip->model_id == GENERIC_DEVICE_ID)) {
 					break;
 				}
 
@@ -970,7 +969,7 @@ static const struct spi_master spi_master_dediprog = {
 	.write_aai	= dediprog_spi_write_aai,
 };
 #endif
-static const struct spi_programmer spi_programmer_dediprog = {
+static const struct spi_master spi_master_dediprog = {
 	.type		= SPI_CONTROLLER_DEDIPROG,
 	.max_data_read	= MAX_DATA_UNSPECIFIED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
@@ -1141,7 +1140,7 @@ int dediprog_init(void)
 	dediprog_set_leds(LED_PASS | LED_BUSY);
 
 	/* FIXME: need to do this so buses_supported gets SPI */
-	register_spi_programmer(&spi_programmer_dediprog);
+	register_spi_master(&spi_master_dediprog);
 
 	/* Select target/socket, frequency and VCC. */
 	if (set_target_flash(FLASH_TYPE_APPLICATION_FLASH_1) ||

@@ -52,6 +52,9 @@
 #include <unistd.h>
 
 struct cros_ec_priv *cros_ec_priv;
+static int ignore_wp_range_command = 0;
+
+static int set_wp(int enable);	/* FIXME: move set_wp() */
 
 struct wp_data {
 	int enable;
@@ -93,6 +96,7 @@ static const char *ec_type[] = {
 	[0] = "ec",
 	[1] = "pd",
 	[2] = "sh",
+	[3] = "fp",
 };
 
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
@@ -322,15 +326,78 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 	return rc;
 }
 
+static int cros_ec_restore_wp(void *data)
+{
+	msg_pdbg("Restoring EC soft WP.\n");
+	return set_wp(1);
+}
 
-/* Given an image, this function parses FMAP and recognize the firmware
- * ranges.
+static int cros_ec_wp_is_enabled(void)
+{
+	struct ec_params_flash_protect p;
+	struct ec_response_flash_protect r;
+	int rc;
+
+	memset(&p, 0, sizeof(p));
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
+			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("FAILED: Cannot get the write protection status: %d\n",
+			 rc);
+		return -1;
+	} else if (rc < sizeof(r)) {
+		msg_perr("FAILED: Too little data returned (expected:%zd, "
+			 "actual:%d)\n", sizeof(r), rc);
+		return -1;
+	}
+
+	if (r.flags & (EC_FLASH_PROTECT_RO_NOW | EC_FLASH_PROTECT_ALL_NOW))
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Prepare EC for update:
+ * - Disable soft WP if needed.
+ * - Parse flashmap.
+ * - Jump to RO firmware.
  */
 int cros_ec_prepare(uint8_t *image, int size) {
 	struct fmap *fmap;
-	int i, j;
+	int i, j, wp_status;
 
 	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
+
+	/*
+	 * If HW WP is disabled we may still need to disable write protection
+	 * that is active on the EC. Otherwise the EC can reject erase/write
+	 * commands.
+	 *
+	 * Failure is OK since HW WP might be enabled or the EC needs to be
+	 * rebooted for the change to take effect. We can still update RW
+	 * portions.
+	 *
+	 * If disabled here, EC WP will be restored at the end so that
+	 * "--wp-enable" does not need to be run later. This greatly
+	 * simplifies logic for developers and scripts.
+	 */
+	wp_status = cros_ec_wp_is_enabled();
+	if (wp_status < 0) {
+		return 1;
+	} else if (wp_status == 1) {
+		msg_pdbg("Attempting to disable EC soft WP.\n");
+		if (!set_wp(0)) {
+			msg_pdbg("EC soft WP disabled successfully.\n");
+			if (register_shutdown(cros_ec_restore_wp, NULL))
+				return 1;
+		} else {
+			msg_pdbg("Failed. Hardware WP might in effect or EC "
+				"needs to be rebooted first.\n");
+		}
+	} else {
+		msg_pdbg("EC soft WP is already disabled.\n");
+	}
 
 	// Parse the fmap in the image file and cache the firmware ranges.
 	fmap = fmap_find_in_memory(image, size);
@@ -484,7 +551,7 @@ int cros_ec_block_erase(struct flashctx *flash,
 }
 
 
-int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0, real_write_size;
@@ -728,6 +795,8 @@ static int cros_ec_set_range(const struct flashctx *flash,
 		return 1;
 	}
 
+	if (ignore_wp_range_command)
+		return 0;
 	return set_wp(!!len);
 }
 
@@ -752,6 +821,9 @@ static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 
 
 static int cros_ec_disable_writeprotect(const struct flashctx *flash) {
+	/* --wp-range implicitly enables write protection on CrOS EC, so force
+	   it not to if --wp-disable is what the user really wants. */
+	ignore_wp_range_command = 1;
 	return set_wp(0);
 }
 
@@ -938,6 +1010,7 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 int cros_ec_probe_size(struct flashctx *flash) {
 	int rc;
 	struct ec_response_flash_info info;
+	struct ec_response_flash_spi_info spi_info;
 	struct ec_response_get_chip_info chip_info;
 	struct block_eraser *eraser;
 	static struct wp wp = {
@@ -963,10 +1036,9 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	cros_ec_priv->current_image = rc;
 	cros_ec_priv->region = &regions[0];
 
-	flash->total_size = info.flash_size / 1024;
-	flash->page_size = opaque_programmer->max_data_read;
-	flash->tested = TEST_OK_PREW;
-	eraser = &flash->block_erasers[0];
+	flash->chip->total_size = info.flash_size / 1024;
+	flash->chip->page_size = opaque_programmer->max_data_read;
+	eraser = &flash->chip->block_erasers[0];
 
 	/* Allow overriding the erase block size in case EC is incorrect */
 	if (cros_ec_priv->erase_block_size > 0)
@@ -976,7 +1048,7 @@ int cros_ec_probe_size(struct flashctx *flash) {
 
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
-	flash->wp = &wp;
+	flash->chip->wp = &wp;
 
 	/*
 	 * Some STM32 variants erase bits to 0. For now, assume that this
@@ -991,13 +1063,42 @@ int cros_ec_probe_size(struct flashctx *flash) {
 		msg_perr("%s(): CHIP_INFO returned %d.\n", __func__, rc);
 		return 0;
 	}
-	if (!strncmp(chip_info.name, "stm32l", 6))
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+	if (!strncmp(chip_info.name, "stm32l1", 7))
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	rc = set_ideal_write_size();
 	if (rc < 0) {
 		msg_perr("%s(): Unable to set write size\n", __func__);
 		return 0;
+	}
+
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_SPI_INFO,
+				0, NULL, 0, &spi_info, sizeof(spi_info));
+	if (rc < 0) {
+		static char chip_vendor[32];
+		static char chip_name[32];
+
+		memcpy(chip_vendor, chip_info.vendor, sizeof(chip_vendor));
+		memcpy(chip_name, chip_info.name, sizeof(chip_name));
+		flash->chip->vendor = chip_vendor;
+		flash->chip->name = chip_name;
+		flash->chip->tested = TEST_OK_PREWU;
+	} else {
+		const struct flashchip *f;
+		uint32_t mfg = spi_info.jedec[0];
+		uint32_t model = (spi_info.jedec[1] << 8) | spi_info.jedec[2];
+
+		for (f = flashchips; f && f->name; f++) {
+			if (f->bustype != BUS_SPI)
+				continue;
+			if ((f->manufacture_id == mfg) &&
+				f->model_id == model) {
+				flash->chip->vendor = f->vendor;
+				flash->chip->name = f->name;
+				flash->chip->tested = f->tested;
+				break;
+			}
+		}
 	}
 
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,

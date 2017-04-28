@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+#
+# Documentation for this script currently resides at: https://goo.gl/qNwdmm
 
 EXIT_SUCCESS=0
 EXIT_FAILURE=1
@@ -40,10 +42,6 @@ UPLOAD_RESULTS=0
 # By default this will be set to the result of `which flashrom`.
 LOCAL_FLASHROM=""
 
-# Primary/Secondary programmer names
-PRIMARY_PROG=""
-SECONDARY_PROG=""
-
 # Primary/Secondary programmer options
 PRIMARY_OPTS=""
 SECONDARY_OPTS=""
@@ -52,7 +50,7 @@ SECONDARY_OPTS=""
 CUSTOM_HOOKS_FILENAME=""
 
 # if doing wp test, we require the commands that the programmer uses to enable/disable wp
-WP_HOOKS_FILENAME="";
+WP_HOOKS_FILENAME=""
 
 # logfile to store the script's output
 SCRIPT_LOGFILE="flashrom-test_script_output.txt"
@@ -105,7 +103,7 @@ if [ "$(id -u)" -ne "0" ]; then
 fi
 
 # 1KB
-K="1024"
+K=1024
 
 show_help() {
 	printf "Usage:
@@ -134,6 +132,8 @@ General options:
     	Test type (single, endurance, writeprotect).
     -u, --upload-results
         Upload results to flashrom.org.
+    -v, --voltage
+        Chip voltage in millivolts (usually 1800 or 3300).
 
 Long options:
     --custom-hooks <filename>
@@ -175,7 +175,7 @@ fi
 LONGOPTS="backup-image:,help,,new:,old:,remote-host:,upload-results:"
 LONGOPTS="${LONGOPTS},primary-programmer:,secondary-programmer:,local-flashrom:"
 LONGOPTS="${LONGOPTS},custom-hooks:,mode:,skip-consistency-check,small-region"
-LONGOPTS="${LONGOPTS},wp-hooks:,type:"
+LONGOPTS="${LONGOPTS},wp-hooks:,type:,voltage:"
 LONGOPTS="${LONGOPTS},layout-file:,descriptor-region:,flashmap-region:,layout-region:"
 LONGOPTS="${LONGOPTS},no-clean"
 LONGOPTS="${LONGOPTS},ssh-port:"
@@ -250,6 +250,10 @@ while true ; do
 		-u|--upload-results)
 			UPLOAD_RESULTS=1
 			;;
+		-v|--voltage)
+			shift
+			VOLTAGE="$1"
+			;;
 
 		# Longopts only
 		--custom-hooks)
@@ -277,6 +281,9 @@ while true ; do
 			;;
 		--skip-consistency-check)
 			SKIP_CONSISTENCY_CHECK=1
+			;;
+		--small-region)
+			SMALL_REGION=1
 			;;
 		--wp-hooks)
 			shift
@@ -316,8 +323,40 @@ fi
 #
 export REMOTE_HOST REMOTE_PORT_OPTION
 export LOCAL REMOTE FATAL NONFATAL EXIT_SUCCESS EXIT_FAILURE
-export CUSTOM_HOOKS_FILENAME SUDO_CMD
+export CUSTOM_HOOKS_FILENAME SUDO_CMD VOLTAGE
 . "$(pwd)/tests/tests_v2/cmd.sh"
+
+# We will set up a logs directory within the tmpdirs to store
+# all output logs.
+LOGS="logs"
+
+# Setup temporary working directories:
+# LOCAL_TMPDIR:  Working directory on local host.
+# REMOTE_TMPDIR: Working directory on remote host.
+# TMPDIR:        The temporary directy in which we do most of the work. This is
+#                convenient for commands that depend on $DO_REMOTE.
+LOCAL_TMPDIR=$(mktemp -d --tmpdir flashrom_test.XXXXXXXX)
+if [ $? -ne 0 ] ; then
+	printf "Could not create temporary directory\n"
+	exit $EXIT_FAILURE
+fi
+mkdir "${LOCAL_TMPDIR}/${LOGS}"
+
+if [ $DO_REMOTE -eq 1 ]; then
+	REMOTE_TMPDIR=$(ssh root@${REMOTE_HOST} mktemp -d --tmpdir flashrom_test.XXXXXXXX)
+	if [ $? -ne 0 ] ; then
+		printf "Could not create temporary directory\n"
+		exit $EXIT_FAILURE
+	fi
+	scmd $REMOTE "mkdir ${REMOTE_TMPDIR}/${LOGS}"
+fi
+
+if [ $DO_REMOTE -eq 0 ]; then
+	TMPDIR="$LOCAL_TMPDIR"
+else
+	TMPDIR="$REMOTE_TMPDIR"
+fi
+
 #
 # Test command-line validity.
 #
@@ -354,7 +393,27 @@ elif [ $TEST_TYPE -eq $TEST_TYPE_WRITEPROTECT ]; then
 		printf "Must specify a wp hooks file when doing a write-protect test.\n"
 		exit $EXIT_FAILURE
 	fi
+
+	if [ -z "$VOLTAGE" ]; then
+		printf "Voltage (mV) must be specified when testing write protection.\n"
+		exit $EXIT_FAILURE
+	fi
+
 	. "$WP_HOOKS_FILENAME"
+
+	wp_sanity_check
+	if [ $? -ne $EXIT_SUCCESS ]; then
+		printf "Write-protect sanity check failed.\n"
+		exit $EXIT_FAILURE
+	fi
+fi
+
+if [ -n "$VOLTAGE" ]; then
+	echo "$VOLTAGE" | grep -q '[^0-9]'
+	if [ $? -ne 1 ]; then
+		printf "Voltage must be an integer with units of millivolts."
+		exit $EXIT_FAILURE
+	fi
 fi
 
 if [ $DO_REMOTE -eq 1 ]; then
@@ -419,37 +478,6 @@ if [ $? -ne 0 ]; then
 	exit $EXIT_FAILURE
 fi
 
-# We will set up a logs directory within the tmpdirs to store
-# all output logs.
-LOGS="logs"
-
-# Setup temporary working directories:
-# LOCAL_TMPDIR:  Working directory on local host.
-# REMOTE_TMPDIR: Working directory on remote host.
-# TMPDIR:        The temporary directy in which we do most of the work. This is
-#                convenient for commands that depend on $DO_REMOTE.
-LOCAL_TMPDIR=$(mktemp -d --tmpdir flashrom_test.XXXXXXXX)
-if [ $? -ne 0 ] ; then
-	printf "Could not create temporary directory\n"
-	exit $EXIT_FAILURE
-fi
-mkdir "${LOCAL_TMPDIR}/${LOGS}"
-
-if [ $DO_REMOTE -eq 1 ]; then
-	REMOTE_TMPDIR=$(ssh root@${REMOTE_HOST} mktemp -d --tmpdir flashrom_test.XXXXXXXX)
-	if [ $? -ne 0 ] ; then
-		printf "Could not create temporary directory\n"
-		exit $EXIT_FAILURE
-	fi
-	scmd $REMOTE "mkdir ${REMOTE_TMPDIR}/${LOGS}"
-fi
-
-if [ $DO_REMOTE -eq 0 ]; then
-	TMPDIR="$LOCAL_TMPDIR"
-else
-	TMPDIR="$REMOTE_TMPDIR"
-fi
-
 # Check if both flashrom binaries support logging
 scmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --flash-name -o ${TMPDIR}/flash_name.txt"
 if [ $? -ne 0 ]; then
@@ -486,19 +514,24 @@ copy_from_remote()
 }
 
 # A wrapper for scmd calls to flashrom when we want to log the output
-# $1 and $2 are the arguments to be passed into scmd
-# $3 is the context of the flashrom call (to be used in the logfile)
+# $1: 0 ($LOCAL) to run command locally,
+#     1 ($REMOTE) to run remotely if remote host defined
+# $2: arguments to be passed into scmd
+# $3: context of the flashrom call (to be used in the logfile)
 flashrom_log_scmd()
 {
 	local logfile="flashrom-${3}.txt"
-	tmpdir=$LOCAL_TMPDIR
+	local rc
+
 	if [ $1 -eq $REMOTE ]; then
 		tmpdir=$REMOTE_TMPDIR
+	else
+		tmpdir=$LOCAL_TMPDIR
 	fi
 
-	scmd $1 "$2 -o ${tmpdir}/${LOGS}/${logfile}"
+	scmd $1 "$2 -o ${tmpdir}/${LOGS}/${logfile}"; rc=$?
 	# if the call was successful, we don't want to save the log (only save failure logs)
-	if [ $? -eq $EXIT_SUCCESS ]; then
+	if [ $rc -eq $EXIT_SUCCESS ]; then
 		scmd $1 "rm -f ${tmpdir}/${LOGS}/${logfile}"
 	else
 		# if the log was stored remotely, we want to copy it over to local tmpdir
@@ -506,6 +539,8 @@ flashrom_log_scmd()
 			scp root@"${REMOTE_HOST}:${REMOTE_TMPDIR}/${LOGS}/${logfile}" "${LOCAL_TMPDIR}/${LOGS}" 2>&1 >/dev/null
 		fi
 	fi
+
+	return $rc
 }
 
 # Read current image as backup in case one hasn't already been specified.
@@ -517,6 +552,7 @@ if [ -z "$BACKUP_IMAGE" ]; then
 		BACKUP_IMAGE="${LOCAL_TMPDIR}/${backup_file}"
 	fi
 
+	print_and_log "Reading backup image..."
 	flashrom_log_scmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS -r $BACKUP_IMAGE" "read_backup"
 
 	if [ $? -ne 0 ]; then
@@ -598,7 +634,7 @@ do_cleanup()
 test_fail()
 {
 	print_and_log "$1\n"
-	do_cleanup
+	printf "Skipping cleanup (logs saved).\n"
 	exit $EXIT_FAILURE
 }
 
@@ -615,24 +651,16 @@ save_wp_state()
 		cmd $DO_REMOTE "crossystem wpsw_cur" "${LOCAL_TMPDIR}/hw_wp_state.txt"
 		HW_WP_STATE=$(cat ${LOCAL_TMPDIR}/hw_wp_state.txt )
 	fi
-	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status | grep -E -o 'enabled|disabled'" "${LOCAL_TMPDIR}/sw_wp_state.txt"
-	sw_wp_str=$( cat ${LOCAL_TMPDIR}/sw_wp_state.txt )
-	if [ "$sw_wp_str" = "enabled" ]; then
+
+	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status" "${LOCAL_TMPDIR}/wp_range.txt"
+	if grep -q 'enabled' "${LOCAL_TMPDIR}/wp_range.txt"; then
 		SW_WP_STATE=1
-	elif [ "$sw_wp_str" = "disabled" ]; then
+	else
 		SW_WP_STATE=0
 	fi
 
-	cmd $DO_REMOTE "$OLD_FLASHROM $PRIMARY_OPTS --wp-status | grep -o -E '0x[0-9]{8}'" "${LOCAL_TMPDIR}/wp_range.txt"
-	for count in 1 2; do
-		read -r line
-		dec_val=$(printf "%d\n" $line )
-		if [ $count -eq 1 ]; then
-			WP_RANGE_START=$dec_val
-		elif [ $count -eq 2 ]; then
-			WP_RANGE_LEN=$dec_val
-		fi
-	done < ${LOCAL_TMPDIR}/wp_range.txt
+	WP_RANGE_START=$(grep 'range' "${LOCAL_TMPDIR}/wp_range.txt" | grep -o -E 'start=0x[0-9]*' | cut -d '=' -f 2-)
+	WP_RANGE_LEN=$(grep 'range' "${LOCAL_TMPDIR}/wp_range.txt" | grep -o -E 'len=0x[0-9]*' | cut -d '=' -f 2-)
 }
 
 restore_wp_state()
@@ -646,8 +674,6 @@ restore_wp_state()
 		restore_opts="--wp-disable $restore_opts"
 	fi
 
-	# TODO: move these dut-control commands into functions from an external
-	# script, similar to the custom hooks
 	wp_enable_hook
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $restore_opts"
@@ -672,8 +698,6 @@ set_wp_state()
 		return $EXIT_FAILURE
 	fi
 
-	# TODO: move these dut-control commands into functions from an external
-	# script, similar to the custom hooks
 	wp_enable_hook
 	wp_off_hook
 	scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS $wp_opts"
@@ -699,13 +723,15 @@ double_read_test()
 	local cmp1="${TMPDIR}/cmp1.bin"
 	local cmp2="${TMPDIR}/cmp2.bin"
 	local layout="double_read_test_layout.txt"
+	local len=$(($2 / $K))
 
-	print_and_log "Doing double read test, size: %u KiB\n" $(($2 / $K))
+	print_and_log "Doing double read test, size: $len KiB\n"
 	# FIXME: Figure out how to do printf remotely...
 	printf "%06x:%06x region\n" $1 $(($1 + $2 - 1)) > "${LOCAL_TMPDIR}/${layout}"
 	if [ $DO_REMOTE -eq 1 ]; then copy_to_remote "$layout" ; fi
 
 	flashrom_log_scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS -r -l ${TMPDIR}/${layout} --ignore-fmap -i region:${cmp1}" "double_read_1"
+	# FIXME: second (or maybe third?) read should be done using secondary programmer, if applicable.
 	flashrom_log_scmd $DO_REMOTE "$NEW_FLASHROM $PRIMARY_OPTS -r -l ${TMPDIR}/${layout} --ignore-fmap -i region:${cmp2}" "double_read_2"
 	scmd $DO_REMOTE "cmp $cmp1 $cmp2"
 	if [ $? -ne 0 ]; then
@@ -745,6 +771,7 @@ partial_write_test_helper()
 partial_write_test()
 {
 	local opts="--fast-verify"
+	local secondary_opts=""		# for secondary programmer
 	local region_name="$1"
 	local filename=""
 	local test_num=0
@@ -757,11 +784,13 @@ partial_write_test()
 	if [ $TEST_TYPE -eq $TEST_TYPE_SINGLE ]; then
 		if [ $REGION_MODE -eq $REGION_MODE_LAYOUT ]; then
 			opts="$opts -l $LAYOUT_FILE"
+			secondary_opts="$opts"
 		elif [ $REGION_MODE -eq $REGION_MODE_CLOBBER ]; then
 			printf "000000:%06x RW\n" $(($CHIP_SIZE - 1)) > "${LOCAL_TMPDIR}/clobber_mode_layout.txt"
 			if [ $DO_REMOTE -eq 1 ]; then
 				copy_to_remote "clobber_mode_layout.txt"
 			fi
+			secondary_opts="$opts -l ${LOCAL_TMPDIR}/clobber_mode_layout.txt"
 			opts="$opts -l ${TMPDIR}/clobber_mode_layout.txt"
 		fi
 	fi
@@ -841,7 +870,7 @@ partial_write_test()
 		fi
 
 		if [ -n "$SECONDARY_OPTS" ]; then
-			flashrom_log_scmd $LOCAL "$OLD_FLASHROM $SECONDARY_OPTS $opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
+			flashrom_log_scmd $LOCAL "$LOCAL_FLASHROM $SECONDARY_OPTS $secondary_opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
 			if [ $? -ne 0 ]; then
 				test_fail "Failed to verify write of $filename to $region_name using secondary programmer"
 			fi
@@ -893,7 +922,7 @@ partial_write_test()
 		fi
 
 		if [ -n "$SECONDARY_OPTS" ]; then
-			flashrom_log_scmd $LOCAL "$OLD_FLASHROM $SECONDARY_OPTS $opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
+			flashrom_log_scmd $LOCAL "$LOCAL_FLASHROM $SECONDARY_OPTS $secondary_opts -v -i ${region_name}:${LOCAL_TMPDIR}/${filename}" "verify_secondary_${filename}"
 			if [ $? -ne 0 ]; then
 				test_fail "Failed to verify write of $filename to $region_name using secondary programmer"
 			fi
@@ -953,20 +982,22 @@ if [ $TEST_TYPE -eq $TEST_TYPE_SINGLE ]; then
 		addr=""
 		end=""
 		size=""
+		size_kb=""
 
-		# Look for a region named "RW" with any amount of leading whitespace
+		# Look for a region name with any amount of leading whitespace
 		# and no trailing whitespace or characters.
-		rw_layout=$(grep "\s${LAYOUT_REGION}$" $LAYOUT_FILE | head -n 1)
+		rw_layout=$(grep "\s${LAYOUT_REGION}$" "${LOCAL_TMPDIR}/$(basename $LAYOUT_FILE)" | head -n 1)
 		if [ -z "$rw_layout" ]; then
-			print_and_log "No region matching \"${LAYOUT_REGION}\" found layout file \"%s\"\n" "$LAYOUT_FILE"
+			print_and_log "No region matching \"${LAYOUT_REGION}\" found layout file \"${LAYOUT_FILE}\"\n"
 			test_fail ""
 		fi
 
 		addr="0x$(echo "$rw_layout" | cut -d ' ' -f -1 | awk -F ':' '{ print $1 }')"
 		end="0x$(echo "$rw_layout" | cut -d ' ' -f -1 | awk -F ':' '{ print $2 }')"
 		size="$(($end - $addr + 1))"
+		size_kb="$(($size / $K))"
 
-		print_and_log "\"$LAYOUT_REGION\" region address: ${addr}, size: %u KiB\n" $(($size / $K))
+		print_and_log "\"$LAYOUT_REGION\" region address: ${addr}, size: $size_kb KiB\n"
 		partial_write_test "$LAYOUT_REGION"
 		if [ $? -ne 0 ]; then
 			print_and_log "Layout mode test failed\n"

@@ -30,10 +30,10 @@
 #define BIOS_ROM_ADDR		0xD4
 #define BIOS_ROM_DATA		0xD7
 
-const struct pcidev_status nics_realtek[] = {
+const struct dev_entry nics_realtek[] = {
 	{0x10ec, 0x8139, OK, "Realtek", "RTL8139/8139C/8139C+"},
 	{0x1113, 0x1211, OK, "SMC2", "1211TX"}, /* RTL8139 clone */
-	{},
+	{0},
 };
 
 static void nicrealtek_chip_writeb(const struct flashctx *flash, uint8_t val,
@@ -41,7 +41,7 @@ static void nicrealtek_chip_writeb(const struct flashctx *flash, uint8_t val,
 static uint8_t nicrealtek_chip_readb(const struct flashctx *flash,
 				     const chipaddr addr);
 
-static const struct par_programmer par_programmer_nicrealtek = {
+static const struct par_master par_master_nicrealtek = {
 		.chip_readb		= nicrealtek_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -55,21 +55,20 @@ static const struct par_programmer par_programmer_nicrealtek = {
 static int nicrealtek_shutdown(void *data)
 {
 	/* FIXME: We forgot to disable software access again. */
-	pci_cleanup(pacc);
-	release_io_perms();
 	return 0;
 }
 
 int nicrealtek_init(void)
 {
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_realtek);
 
 	if (register_shutdown(nicrealtek_shutdown, NULL))
 		return 1;
 
-	register_par_programmer(&par_programmer_nicrealtek, BUS_PARALLEL);
+	register_par_master(&par_master_nicrealtek, BUS_PARALLEL);
 
 	return 0;
 }

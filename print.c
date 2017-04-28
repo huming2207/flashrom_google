@@ -234,38 +234,38 @@ static void print_supported_chips(int host_controller)
 		for (i = curdevlen; i < maxchiplen; i++)
 			msg_ginfo(" ");
 
-		if ((f->tested & TEST_OK_PROBE))
+		if ((f->tested.probe == OK))
 			msg_ginfo("P");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_READ))
+		if ((f->tested.read == OK))
 			msg_ginfo("R");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_ERASE))
+		if ((f->tested.erase == OK))
 			msg_ginfo("E");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_OK_WRITE))
+		if ((f->tested.write == OK))
 			msg_ginfo("W");
 		else
 			msg_ginfo(" ");
 		for (i = 0; i < border; i++)
 			msg_ginfo(" ");
 
-		if ((f->tested & TEST_BAD_PROBE))
+		if ((f->tested.probe == BAD))
 			msg_ginfo("P");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_READ))
+		if ((f->tested.read == BAD))
 			msg_ginfo("R");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_ERASE))
+		if ((f->tested.erase == BAD))
 			msg_ginfo("E");
 		else
 			msg_ginfo(" ");
-		if ((f->tested & TEST_BAD_WRITE))
+		if ((f->tested.write == BAD))
 			msg_ginfo("W");
 		else
 			msg_ginfo(" ");
@@ -986,7 +986,7 @@ const struct board_info boards_known[] = {
         B("ZOTAC",	"ZBOX HD-ID11",		1, "http://pdde.zotac.com/index.php?page=shop.product_details&product_id=240&category_id=75", NULL),
 #endif
 
-	{},
+	{0},
 };
 
 /* Please keep this list alphabetically ordered by vendor/board. */
@@ -1008,6 +1008,6 @@ const struct board_info laptops_known[] = {
 	B("Lenovo",	"3000 V100 TF05Cxx",	1, "http://www5.pc.ibm.com/europe/products.nsf/products?openagent&brand=Lenovo3000Notebook&series=Lenovo+3000+V+Series#viewallmodelstop", NULL),
 #endif
 
-	{},
+	{0},
 };
 #endif

@@ -522,6 +522,11 @@ int cros_ec_probe_lpc(const char *name) {
 	if (cros_ec_parse_param(&cros_ec_lpc_priv))
 		return 1;
 
+	if (cros_ec_lpc_priv.dev && strcmp(cros_ec_lpc_priv.dev, "ec")) {
+		msg_pdbg("cros_ec_lpc only supports \"ec\" type devices.\n");
+		return 1;
+	}
+
 	if (detect_ec(&cros_ec_lpc_priv))
 		return 1;
 

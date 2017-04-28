@@ -28,10 +28,10 @@
 
 #define SATASII_MEMMAP_SIZE	0x100
 
-uint8_t *sii_bar;
+static uint8_t *sii_bar;
 static uint16_t id;
 
-const struct pcidev_status satas_sii[] = {
+const struct dev_entry satas_sii[] = {
 	{0x1095, 0x0680, OK, "Silicon Image", "PCI0680 Ultra ATA-133 Host Ctrl"},
 	{0x1095, 0x3112, OK, "Silicon Image", "SiI 3112 [SATALink/SATARaid] SATA Ctrl"},
 	{0x1095, 0x3114, OK, "Silicon Image", "SiI 3114 [SATALink/SATARaid] SATA Ctrl"},
@@ -39,15 +39,12 @@ const struct pcidev_status satas_sii[] = {
 	{0x1095, 0x3132, OK, "Silicon Image", "SiI 3132 SATA Raid II Ctrl"},
 	{0x1095, 0x3512, OK, "Silicon Image", "SiI 3512 [SATALink/SATARaid] SATA Ctrl"},
 
-	{},
+	{0},
 };
 
-static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val,
-				chipaddr addr);
-static uint8_t satasii_chip_readb(const struct flashctx *flash,
-				  const chipaddr addr);
-
-static const struct par_programmer par_programmer_satasii = {
+static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr);
+static uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr);
+static const struct par_master par_master_satasii = {
 		.chip_readb		= satasii_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -58,20 +55,13 @@ static const struct par_programmer par_programmer_satasii = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int satasii_shutdown(void *data)
-{
-	physunmap(sii_bar, SATASII_MEMMAP_SIZE);
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 0;
-}
-
 int satasii_init(void)
 {
 	uint32_t addr;
 	uint16_t reg_offset;
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	pcidev_init(PCI_BASE_ADDRESS_0, satas_sii);
 
@@ -85,22 +75,21 @@ int satasii_init(void)
 		reg_offset = 0x50;
 	}
 
-	sii_bar = physmap("SATA SIL registers", addr, SATASII_MEMMAP_SIZE) +
-		  reg_offset;
+	sii_bar = rphysmap("SATA SIL registers", addr, SATASII_MEMMAP_SIZE);
+	if (sii_bar == ERROR_PTR)
+		return 1;
+	sii_bar += reg_offset;
 
 	/* Check if ROM cycle are OK. */
 	if ((id != 0x0680) && (!(pci_mmio_readl(sii_bar) & (1 << 26))))
 		msg_pinfo("Warning: Flash seems unconnected.\n");
 
-	if (register_shutdown(satasii_shutdown, NULL))
-		return 1;
-
-	register_par_programmer(&par_programmer_satasii, BUS_PARALLEL);
+	register_par_master(&par_master_satasii, BUS_PARALLEL);
 
 	return 0;
 }
 
-void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
 {
 	uint32_t ctrl_reg, data_reg;
 
@@ -117,7 +106,7 @@ void satasii_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr add
 	while (pci_mmio_readl(sii_bar) & (1 << 25)) ;
 }
 
-uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t satasii_chip_readb(const struct flashctx *flash, const chipaddr addr)
 {
 	uint32_t ctrl_reg;
 

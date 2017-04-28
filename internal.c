@@ -145,7 +145,7 @@ static void internal_chip_readn(const struct flashctx *flash, uint8_t *buf,
 				const chipaddr addr, size_t len);
 
 #if __FLASHROM_LITTLE_ENDIAN__
-static const struct par_programmer par_programmer_internal = {
+static const struct par_master par_master_internal = {
 		.chip_readb		= internal_chip_readb,
 		.chip_readw		= internal_chip_readw,
 		.chip_readl		= internal_chip_readl,
@@ -161,7 +161,6 @@ enum chipbustype internal_buses_supported = BUS_NONE;
 
 static int internal_shutdown(void *data)
 {
-	release_io_perms();
 	return 0;
 }
 enum chipbustype target_bus;
@@ -302,7 +301,8 @@ int internal_init(void)
 #endif
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 	if (register_shutdown(internal_shutdown, NULL))
 		return 1;
 
@@ -464,7 +464,7 @@ int internal_init(void)
 	} else if (ret == ERROR_FATAL)
 		return ret;
 
-	register_par_programmer(&par_programmer_internal, internal_buses_supported);
+	register_par_master(&par_master_internal, internal_buses_supported);
 #if defined(__i386__) || defined(__x86_64__)
 
 	/* probe for programmers that bridge LPC <--> SPI */

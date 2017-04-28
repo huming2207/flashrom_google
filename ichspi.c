@@ -170,10 +170,10 @@
 #define ICH7_REG_OPTYPE		0x56	/* 16 Bits */
 #define ICH7_REG_OPMENU		0x58	/* 64 Bits */
 
-/*SUNRISE point*/
+/* Sunrise Point (100-series PCH) */
 /* 32 Bits Hardware Sequencing Flash Status */
 #define PCH100_REG_HSFSC	0x04
-/*Status bits*/
+/* Status bits */
 #define HSFSC_FDONE_OFF		0	/* 0: Flash Cycle Done */
 #define HSFSC_FDONE		(0x1 << HSFSC_FDONE_OFF)
 #define HSFSC_FCERR_OFF		1	/* 1: Flash Cycle Error */
@@ -195,12 +195,12 @@
 #define HSFSC_FDV		(0x1 << HSFSC_FDV_OFF)
 #define HSFSC_FLOCKDN_OFF	15	/* 11: Flash Configuration Lock-Down */
 #define HSFSC_FLOCKDN		(0x1 << HSFSC_FLOCKDN_OFF)
-/*Control bits*/
-#define HSFSC_FGO_OFF		0	/* 0: Flash Cycle Go */
+/* Control bits */
+#define HSFSC_FGO_OFF		16	/* 0: Flash Cycle Go */
 #define HSFSC_FGO		(0x1 << HSFSC_FGO_OFF)
-#define HSFSC_FCYCLE_OFF	1	/* 1-3: FLASH Cycle */
+#define HSFSC_FCYCLE_OFF	17	/* 17-20: FLASH Cycle */
 #define HSFSC_FCYCLE		(0xf << HSFSC_FCYCLE_OFF)
-#define HSFSC_FDBC_OFF		8	/*8-13 : Flash Data Byte Count */
+#define HSFSC_FDBC_OFF		24	/* 24-29 : Flash Data Byte Count */
 #define HSFSC_FDBC		(0x3f << HSFSC_FDBC_OFF)
 
 #define PCH100_REG_FADDR	0x08	/* 32 Bits */
@@ -665,7 +665,7 @@ static void ich_set_bbar(uint32_t min_addr)
 		bbar_off = ICH9_REG_BBAR;
 		break;
 	}
-	
+
 	ichspi_bbar = mmio_readl(ich_spibar + bbar_off) & ~BBAR_MASK;
 	if (ichspi_bbar) {
 		msg_pdbg("Reserved bits in BBAR not zero: 0x%08x\n",
@@ -686,7 +686,7 @@ static void ich_set_bbar(uint32_t min_addr)
 
 /* Read len bytes from the fdata/spid register into the data array.
  *
- * Note that using len > spi_programmer->max_data_read will return garbage or
+ * Note that using len > spi_master->max_data_read will return garbage or
  * may even crash.
  */
  static void ich_read_data(uint8_t *data, int len, int reg0_off)
@@ -704,7 +704,7 @@ static void ich_set_bbar(uint32_t min_addr)
 
 /* Fill len bytes from the data array into the fdata/spid registers.
  *
- * Note that using len > spi_programmer->max_data_write will trash the registers
+ * Note that using len > spi_master->max_data_write will trash the registers
  * following the data registers.
  */
 static void ich_fill_data(const uint8_t *data, int len, int reg0_off)
@@ -1017,9 +1017,9 @@ static int run_opcode(const struct flashctx *flash, OPCODE op, uint32_t offset,
 		      uint8_t datalength, uint8_t * data)
 {
 	/* max_data_read == max_data_write for all Intel/VIA SPI masters */
-	uint8_t maxlength = spi_programmer->max_data_read;
+	uint8_t maxlength = spi_master->max_data_read;
 
-	if (spi_programmer->type == SPI_CONTROLLER_NONE) {
+	if (spi_master->type == SPI_CONTROLLER_NONE) {
 		msg_perr("%s: unsupported chipset\n", __func__);
 		return -1;
 	}
@@ -1388,9 +1388,9 @@ int ich_hwseq_probe(struct flashctx *flash)
 	else
 		msg_cdbg(" with a");
 	msg_cdbg(" density of %d kB.\n", total_size / 1024);
-	flash->total_size = total_size / 1024;
+	flash->chip->total_size = total_size / 1024;
 
-	eraser = &(flash->block_erasers[0]);
+	eraser = &(flash->chip->block_erasers[0]);
 	boundary = (REGREAD32(ICH9_REG_FPB) & FPB_FPBA) << 12;
 	size_high = total_size - boundary;
 	erase_size_high = ich_hwseq_get_erase_block_size(boundary);
@@ -1423,7 +1423,6 @@ int ich_hwseq_probe(struct flashctx *flash)
 		msg_cdbg("In that range are %d erase blocks with %d B each.\n",
 			 size_high / erase_size_high, erase_size_high);
 	}
-	flash->tested = TEST_OK_PREW;
 	return 1;
 }
 
@@ -1452,14 +1451,14 @@ int ich_hwseq_block_erase(struct flashctx *flash,
 		return -1;
 	}
 
-	if (addr + len > flash->total_size * 1024) {
+	if (addr + len > flash->chip->total_size * 1024) {
 		msg_perr("Request to erase some inaccessible memory address(es)"
 			 " (addr=0x%x, len=%d). "
 			 "Not erasing anything.\n", addr, len);
 		return -1;
 	}
 
-	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Erasing %d bytes starting at 0x%06x.\n", len, addr);
 
 	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
@@ -1468,7 +1467,7 @@ int ich_hwseq_block_erase(struct flashctx *flash,
 	hsfc &= ~HSFC_FCYCLE; /* clear operation */
 	hsfc |= (0x3 << HSFC_FCYCLE_OFF); /* set erase operation */
 	hsfc |= HSFC_FGO; /* start */
-	msg_pdbg("HSFC used for block erasing: ");
+	msg_pspew("HSFC used for block erasing: ");
 	prettyprint_ich9_reg_hsfc(hsfc);
 	REGWRITE16(ICH9_REG_HSFC, hsfc);
 
@@ -1484,13 +1483,13 @@ int ich_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 
-	if ((addr + len) > (flash->total_size * 1024)) {
+	if ((addr + len) > (flash->chip->total_size * 1024)) {
 		msg_perr("Request to read from an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
 	}
 
-	msg_pdbg("Reading %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Reading %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
 
@@ -1515,20 +1514,20 @@ int ich_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	return 0;
 }
 
-static int ich_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+static int ich_hwseq_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
 		    unsigned int len)
 {
 	uint16_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 
-	if ((addr + len) > (flash->total_size * 1024)) {
+	if ((addr + len) > (flash->chip->total_size * 1024)) {
 		msg_perr("Request to write to an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
 	}
 
-	msg_pdbg("Writing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Writing %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 	REGWRITE16(ICH9_REG_HSFS, REGREAD16(ICH9_REG_HSFS));
 
@@ -1557,7 +1556,7 @@ static int ich_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int ad
 /* Routines for PCH */
 
 /* Sets FLA in FADDR to (addr & 0x07FFFFFF) without touching other bits. */
-static void pch_hwseq_set_addr(uint32_t addr)
+static void pch100_hwseq_set_addr(uint32_t addr)
 {
 	uint32_t addr_old = REGREAD32(PCH100_REG_FADDR) & ~0x07FFFFFF;
 	REGWRITE32(PCH100_REG_FADDR, (addr & 0x07FFFFFF) | addr_old);
@@ -1570,7 +1569,7 @@ static void pch_hwseq_set_addr(uint32_t addr)
  * by UVSCC and LVSCC respectively. An alternative to implement this method
  * would be by querying FPB and the respective VSCC register directly.
  */
-static uint32_t pch_hwseq_get_erase_block_size(unsigned int addr)
+static uint32_t pch100_hwseq_get_erase_block_size(unsigned int addr)
 {
 	static const uint32_t dec_berase[4] = {
 		256,
@@ -1578,7 +1577,7 @@ static uint32_t pch_hwseq_get_erase_block_size(unsigned int addr)
 		8 * 1024,
 		64 * 1024
 	};
-	pch_hwseq_set_addr(addr);
+	pch100_hwseq_set_addr(addr);
 	return dec_berase[ERASE_BLOCK_SIZE];
 }
 
@@ -1586,19 +1585,18 @@ static uint32_t pch_hwseq_get_erase_block_size(unsigned int addr)
    Resets all error flags in HSFS.
    Returns 0 if the cycle completes successfully without errors within
    timeout us, 1 on errors. */
-static int pch_hwseq_wait_for_cycle_complete(unsigned int timeout,
+static int pch100_hwseq_wait_for_cycle_complete(unsigned int timeout,
 					     unsigned int len)
 {
-	uint16_t hsfs;
-	uint32_t addr;
+	uint32_t hsfs, addr;
 
 	timeout /= 8; /* scale timeout duration to counter */
-	while ((((hsfs = REGREAD16(PCH100_REG_HSFSC)) &
+	while ((((hsfs = REGREAD32(PCH100_REG_HSFSC)) &
 		 (HSFSC_FDONE | HSFSC_FCERR)) == 0) &&
 	       --timeout) {
 		programmer_delay(8);
 	}
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 	if (!timeout) {
 		addr = REGREAD32(PCH100_REG_FADDR) & 0x07FFFFFF;
 		msg_perr("Timeout error between offset 0x%08x and "
@@ -1617,12 +1615,69 @@ static int pch_hwseq_wait_for_cycle_complete(unsigned int timeout,
 	return 0;
 }
 
+static int pch_hwseq_get_flash_id(struct flashctx *flash)
+{
+	uint32_t hsfsc, data, mfg_id, model_id;
+	const struct flashchip *entry;
+	const int len = sizeof(data);
 
-int pch_hwseq_probe(struct flashctx *flash)
+	/* make sure FDONE, FCERR, & AEL are cleared */
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
+
+	/* Set RDID as flash cycle and FGO */
+	hsfsc = REGREAD32(PCH100_REG_HSFSC);
+	hsfsc &= ~HSFSC_FCYCLE;
+	hsfsc &= ~HSFSC_FDBC;
+	hsfsc |= ((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC;
+	hsfsc |= (0x6 << HSFSC_FCYCLE_OFF) | HSFSC_FGO;
+	REGWRITE32(PCH100_REG_HSFSC, hsfsc);
+	/* poll for 100ms */
+	if (pch100_hwseq_wait_for_cycle_complete(100 * 1000, len)) {
+		msg_perr("Timed out waiting for RDID to complete.\n");
+		return 0;
+	}
+
+	/*
+	 * Data will appear in reverse order:
+	 * Byte 0: Manufacturer ID
+	 * Byte 1: Model ID (MSB)
+	 * Byte 2: Model ID (LSB)
+	 */
+	ich_read_data((uint8_t *)&data, len, PCH100_REG_FDATA0);
+	mfg_id = data & 0xff;
+	model_id = (data & 0xff00) | ((data >> 16) & 0xff);
+
+	entry = flash_id_to_entry(mfg_id, model_id);
+	if (entry == NULL) {
+		msg_perr("Unable to identify chip, mfg_id: 0x%02x, "
+				"model_id: 0x%02x\n", mfg_id, model_id);
+		return 0;
+	} else {
+		msg_pdbg("Chip identified: %s\n", entry->name);
+		/* Update informational flash chip entries only */
+		flash->chip->vendor = entry->vendor;
+		flash->chip->name = entry->name;
+		flash->chip->manufacture_id = entry->manufacture_id;
+		flash->chip->model_id = entry->model_id;
+		/* total_size read from flash descriptor */
+		flash->chip->page_size = entry->page_size;
+		flash->chip->feature_bits = entry->feature_bits;
+		flash->chip->tested = entry->tested;
+	}
+
+	return 1;
+}
+
+int pch100_hwseq_probe(struct flashctx *flash)
 {
 	uint32_t total_size, boundary = 0; /*There are no partitions in flash*/
 	uint32_t erase_size_high, size_high;
 	struct block_eraser *eraser;
+
+	if (pch_hwseq_get_flash_id(flash) != 1) {
+		msg_perr("Unable to read flash chip ID\n");
+		return 0;
+	}
 
 	total_size = hwseq_data.size_comp0 + hwseq_data.size_comp1;
 	msg_cdbg("Found %d attached SPI flash chip",
@@ -1632,29 +1687,28 @@ int pch_hwseq_probe(struct flashctx *flash)
 	else
 		msg_cdbg(" with a");
 	msg_cdbg(" density of %d kB.\n", total_size / 1024);
-	flash->total_size = total_size / 1024;
-	eraser = &(flash->block_erasers[0]);
+	flash->chip->total_size = total_size / 1024;
+	eraser = &(flash->chip->block_erasers[0]);
 	size_high = total_size - boundary;
-	erase_size_high = pch_hwseq_get_erase_block_size(boundary);
+	erase_size_high = pch100_hwseq_get_erase_block_size(boundary);
 	eraser->eraseblocks[0].size = erase_size_high;
 	eraser->eraseblocks[0].count = size_high / erase_size_high;
 	msg_cdbg("There are %d erase blocks with %d B each.\n",
 		size_high / erase_size_high, erase_size_high);
-	flash->tested = TEST_OK_PREW;
 	return 1;
 }
 
-int pch_hwseq_block_erase(struct flashctx *flash,
+int pch100_hwseq_block_erase(struct flashctx *flash,
 			  unsigned int addr,
 			  unsigned int len)
 {
 	uint32_t erase_block;
-	uint16_t hsfc;
+	uint32_t hsfc;
 	uint32_t timeout = 5000 * 1000; /* 5 s for max 64 kB */
 	int result;
 	int op_type;
 
-	erase_block = pch_hwseq_get_erase_block_size(addr);
+	erase_block = pch100_hwseq_get_erase_block_size(addr);
 	if (len != erase_block) {
 		msg_cerr("Erase block size for address 0x%06x is %d B, "
 			 "but requested erase block size is %d B. "
@@ -1671,7 +1725,7 @@ int pch_hwseq_block_erase(struct flashctx *flash,
 		return -1;
 	}
 
-	if (addr + len > flash->total_size * 1024) {
+	if (addr + len > flash->chip->total_size * 1024) {
 		msg_perr("Request to erase some inaccessible memory address(es)"
 			 " (addr=0x%x, len=%d). "
 			 "Not erasing anything.\n", addr, len);
@@ -1684,42 +1738,42 @@ int pch_hwseq_block_erase(struct flashctx *flash,
 	if (result)
 		return result;
 
-	msg_pdbg("Erasing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Erasing %d bytes starting at 0x%06x.\n", len, addr);
 
 	/* make sure FDONE, FCERR, AEL are cleared by writing 1 to them */
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 
-	hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+	hsfc = REGREAD32(PCH100_REG_HSFSC);
 	hsfc &= ~HSFSC_FCYCLE; /* clear operation */
 	hsfc |= (0x3 << HSFSC_FCYCLE_OFF); /* set erase operation */
 	hsfc |= HSFSC_FGO; /* start */
-	msg_pdbg("HSFC used for block erasing: ");
-	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+	msg_pspew("HSFC used for block erasing: ");
+	REGWRITE32(PCH100_REG_HSFSC, hsfc);
 
-	if (pch_hwseq_wait_for_cycle_complete(timeout, len))
+	if (pch100_hwseq_wait_for_cycle_complete(timeout, len))
 		return -1;
 	return 0;
 }
 
-int pch_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int pch100_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		   unsigned int len)
 {
-	uint16_t hsfc;
+	uint32_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 	int result = 0, chunk_status = 0;
 	int op_type;
 
-	if ((addr + len) > (flash->total_size * 1024)) {
+	if ((addr + len) > (flash->chip->total_size * 1024)) {
 		msg_perr("Request to read from an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
 	}
 
-	msg_pdbg("Reading %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Reading %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
 
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 
 	while (len > 0) {
 		block_len = min(len, opaque_programmer->max_data_read);
@@ -1737,16 +1791,16 @@ int pch_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 				return chunk_status;
 			}
 		} else {
-			pch_hwseq_set_addr(addr);
-			hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+			pch100_hwseq_set_addr(addr);
+			hsfc = REGREAD32(PCH100_REG_HSFSC);
 			hsfc &= ~HSFSC_FCYCLE; /* set read operation */
 			hsfc &= ~HSFSC_FDBC; /* clear byte count */
 			/* set byte count */
 			hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
 			hsfc |= HSFSC_FGO; /* start */
-			REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+			REGWRITE32(PCH100_REG_HSFSC, hsfc);
 
-			if (pch_hwseq_wait_for_cycle_complete(timeout, block_len))
+			if (pch100_hwseq_wait_for_cycle_complete(timeout, block_len))
 				return 1;
 			ich_read_data(buf, block_len, PCH100_REG_FDATA0);
 		}
@@ -1757,9 +1811,9 @@ int pch_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	return result;
 }
 
-uint8_t pch_hwseq_read_status(const struct flashctx *flash)
+uint8_t pch100_hwseq_read_status(const struct flashctx *flash)
 {
-	uint16_t hsfc;
+	uint32_t hsfc;
 	uint16_t timeout = 100 * 60;
 	int len = 1;
 	uint8_t buf;
@@ -1767,9 +1821,9 @@ uint8_t pch_hwseq_read_status(const struct flashctx *flash)
 	msg_pdbg("Reading Status register\n");
 
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 
-	hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+	hsfc = REGREAD32(PCH100_REG_HSFSC);
 	hsfc &= ~HSFSC_FCYCLE; /* set read operation */
 
 	/* read status register */
@@ -1779,8 +1833,8 @@ uint8_t pch_hwseq_read_status(const struct flashctx *flash)
 	/* set byte count */
 	hsfc |= (((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
 	hsfc |= HSFSC_FGO; /* start */
-	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
-	if (pch_hwseq_wait_for_cycle_complete(timeout, len)) {
+	REGWRITE32(PCH100_REG_HSFSC, hsfc);
+	if (pch100_hwseq_wait_for_cycle_complete(timeout, len)) {
 		msg_perr("Reading Status register failed\n!!");
 		return -1;
 	}
@@ -1788,27 +1842,27 @@ uint8_t pch_hwseq_read_status(const struct flashctx *flash)
 	return buf;
 }
 
-int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int pch100_hwseq_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
 		    unsigned int len)
 {
-	uint16_t hsfc;
+	uint32_t hsfc;
 	uint16_t timeout = 100 * 60;
 	uint8_t block_len;
 	int result;
 	int op_type;
 
-	if ((addr + len) > (flash->total_size * 1024)) {
+	if ((addr + len) > (flash->chip->total_size * 1024)) {
 		msg_perr("Request to write to an inaccessible memory address "
 			 "(addr=0x%x, len=%d).\n", addr, len);
 		return -1;
 	}
 
-	msg_pdbg("Writing %d bytes starting at 0x%06x.\n", len, addr);
+	msg_pspew("Writing %d bytes starting at 0x%06x.\n", len, addr);
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 
 	while (len > 0) {
-		pch_hwseq_set_addr(addr);
+		pch100_hwseq_set_addr(addr);
 		block_len = min(len, opaque_programmer->max_data_write);
 		/* Check flash region permissions before writing */
 		op_type = HWSEQ_WRITE;
@@ -1816,7 +1870,7 @@ int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		if (result)
 			return result;
 		ich_fill_data(buf, block_len, PCH100_REG_FDATA0);
-		hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+		hsfc = REGREAD32(PCH100_REG_HSFSC);
 		hsfc &= ~HSFSC_FCYCLE; /* clear operation */
 		/* set write operation */
 		hsfc |= (0x2 << HSFSC_FCYCLE_OFF);
@@ -1824,9 +1878,9 @@ int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		/* set byte count */
 		hsfc |= (((block_len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
 		hsfc |= HSFSC_FGO; /* start */
-		REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+		REGWRITE32(PCH100_REG_HSFSC, hsfc);
 
-		if (pch_hwseq_wait_for_cycle_complete(timeout, block_len))
+		if (pch100_hwseq_wait_for_cycle_complete(timeout, block_len))
 			return -1;
 		addr += block_len;
 		buf += block_len;
@@ -1835,9 +1889,9 @@ int pch_hwseq_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	return 0;
 }
 
-int pch_hwseq_write_status(const struct flashctx *flash, int status)
+int pch100_hwseq_write_status(const struct flashctx *flash, int status)
 {
-	uint16_t hsfc;
+	uint32_t hsfc;
 	uint16_t timeout = 100 * 60;
 	int len = 1;
 	uint8_t buf = status;
@@ -1845,10 +1899,10 @@ int pch_hwseq_write_status(const struct flashctx *flash, int status)
 	msg_pdbg("Writing status register\n");
 
 	/* clear FDONE, FCERR, AEL by writing 1 to them (if they are set) */
-	REGWRITE16(PCH100_REG_HSFSC, REGREAD16(PCH100_REG_HSFSC));
+	REGWRITE32(PCH100_REG_HSFSC, REGREAD32(PCH100_REG_HSFSC));
 
 	ich_fill_data(&buf, len, PCH100_REG_FDATA0);
-	hsfc = REGREAD16(PCH100_REG_HSFSC + 2);
+	hsfc = REGREAD32(PCH100_REG_HSFSC);
 	hsfc &= ~HSFSC_FCYCLE; /* clear operation */
 
 	/* write status register */
@@ -1858,9 +1912,9 @@ int pch_hwseq_write_status(const struct flashctx *flash, int status)
 	/* set byte count */
 	hsfc |= (((len - 1) << HSFSC_FDBC_OFF) & HSFSC_FDBC);
 	hsfc |= HSFSC_FGO; /* start */
-	REGWRITE16(PCH100_REG_HSFSC + 2, hsfc);
+	REGWRITE32(PCH100_REG_HSFSC, hsfc);
 
-	if (pch_hwseq_wait_for_cycle_complete(timeout, len)) {
+	if (pch100_hwseq_wait_for_cycle_complete(timeout, len)) {
 		msg_perr("Writing Status register failed\n!!");
 		return -1;
 	}
@@ -2018,7 +2072,7 @@ static void ich9_set_pr(int i, int read_prot, int write_prot, int chipset)
 	msg_gspew("resulted in 0x%08x.\n", mmio_readl(addr));
 }
 
-static const struct spi_programmer spi_programmer_ich7 = {
+static const struct spi_master spi_master_ich7 = {
 	.type = SPI_CONTROLLER_ICH7,
 	.max_data_read = 64,
 	.max_data_write = 64,
@@ -2028,7 +2082,7 @@ static const struct spi_programmer spi_programmer_ich7 = {
 	.write_256 = default_spi_write_256,
 };
 
-static const struct spi_programmer spi_programmer_ich9 = {
+static const struct spi_master spi_master_ich9 = {
 	.type = SPI_CONTROLLER_ICH9,
 	.max_data_read = 64,
 	.max_data_write = 64,
@@ -2038,15 +2092,15 @@ static const struct spi_programmer spi_programmer_ich9 = {
 	.write_256 = default_spi_write_256,
 };
 
-static struct opaque_programmer opaque_programmer_pch_hwseq = {
+static struct opaque_programmer opaque_programmer_pch100_hwseq = {
 	.max_data_read = 64,
 	.max_data_write = 64,
-	.probe = pch_hwseq_probe,
-	.read = pch_hwseq_read,
-	.write = pch_hwseq_write,
-	.read_status = pch_hwseq_read_status,
-	.write_status = pch_hwseq_write_status,
-	.erase = pch_hwseq_block_erase,
+	.probe = pch100_hwseq_probe,
+	.read = pch100_hwseq_read,
+	.write = pch100_hwseq_write,
+	.read_status = pch100_hwseq_read_status,
+	.write_status = pch100_hwseq_write_status,
+	.erase = pch100_hwseq_block_erase,
 };
 
 static struct opaque_programmer opaque_programmer_ich_hwseq = {
@@ -2141,7 +2195,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		}
 		ich_init_opcodes();
 		ich_set_bbar(0);
-		register_spi_programmer(&spi_programmer_ich7);
+		register_spi_master(&spi_master_ich7);
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 	case CHIPSET_APL:
@@ -2173,7 +2227,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		}
 		free(arg);
 		tmp = mmio_readl(ich_spibar + PCH100_REG_HSFSC);
-		msg_pdbg("0x04: 0x%04x (HSFSC)\n", tmp);
+		msg_pdbg("0x04: 0x%08x (HSFSC)\n", tmp);
 		if (tmp & HSFSC_FLOCKDN) {
 			msg_perr("WARNING: SPI Configuration "
 			 "Lockdown activated.\n");
@@ -2225,7 +2279,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		}
 		hwseq_data.size_comp0 = getFCBA_component_density(&desc, 0);
 		hwseq_data.size_comp1 = getFCBA_component_density(&desc, 1);
-		register_opaque_programmer(&opaque_programmer_pch_hwseq);
+		register_opaque_programmer(&opaque_programmer_pch100_hwseq);
 		break;
 	case CHIPSET_ICH8:
 	default:		/* Future version might behave the same */
@@ -2378,7 +2432,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 			hwseq_data.size_comp1 = getFCBA_component_density(&desc, 1);
 			register_opaque_programmer(&opaque_programmer_ich_hwseq);
 		} else {
-			register_spi_programmer(&spi_programmer_ich9);
+			register_spi_master(&spi_master_ich9);
 		}
 		break;
 	}
@@ -2409,7 +2463,7 @@ int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_via = {
+static const struct spi_master spi_master_via = {
 	.type = SPI_CONTROLLER_VIA,
 	.max_data_read = 16,
 	.max_data_write = 16,
@@ -2431,7 +2485,7 @@ int via_init_spi(struct pci_dev *dev)
 	/* Not sure if it speaks all these bus protocols. */
 	internal_buses_supported = BUS_LPC | BUS_FWH;
 	ich_generation = CHIPSET_ICH7;
-	register_spi_programmer(&spi_programmer_via);
+	register_spi_master(&spi_master_via);
 
 	msg_pdbg("0x00: 0x%04x     (SPIS)\n", mmio_readw(ich_spibar + 0));
 	msg_pdbg("0x02: 0x%04x     (SPIC)\n", mmio_readw(ich_spibar + 2));
@@ -2459,7 +2513,7 @@ int via_init_spi(struct pci_dev *dev)
 	msg_pdbg("0x6c: 0x%04x     (CLOCK/DEBUG)\n",
 		 mmio_readw(ich_spibar + 0x6c));
 	if (mmio_readw(ich_spibar) & (1 << 15)) {
-		msg_pinfo("WARNING: SPI Configuration Lockdown activated.\n");
+		msg_pdbg("WARNING: SPI Configuration Lockdown activated.\n");
 		ichspi_lock = 1;
 	}
 

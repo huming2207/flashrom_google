@@ -35,7 +35,7 @@
 static uint32_t internal_conf;
 static uint16_t id;
 
-const struct pcidev_status nics_3com[] = {
+const struct dev_entry nics_3com[] = {
 	/* 3C90xB */
 	{0x10b7, 0x9055, OK, "3COM", "3C90xB: PCI 10/100 Mbps; shared 10BASE-T/100BASE-TX"},
 	{0x10b7, 0x9001, NT, "3COM", "3C90xB: PCI 10/100 Mbps; shared 10BASE-T/100BASE-T4" },
@@ -52,15 +52,14 @@ const struct pcidev_status nics_3com[] = {
 	/* 3C980C */
 	{0x10b7, 0x9805, NT, "3COM", "3C980C: EtherLink Server 10/100 PCI (TX)" },
 
-	{},
+	{0},
 };
 
 static void nic3com_chip_writeb(const struct flashctx *flash, uint8_t val,
 				chipaddr addr);
 static uint8_t nic3com_chip_readb(const struct flashctx *flash,
 				  const chipaddr addr);
-
-static const struct par_programmer par_programmer_nic3com = {
+static const struct par_master par_master_nic3com = {
 		.chip_readb		= nic3com_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -81,14 +80,13 @@ static int nic3com_shutdown(void *data)
 		OUTL(internal_conf, io_base_addr + INTERNAL_CONFIG);
 	}
 
-	pci_cleanup(pacc);
-	release_io_perms();
 	return 0;
 }
 
 int nic3com_init(void)
 {
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_3com);
 
@@ -116,18 +114,20 @@ int nic3com_init(void)
 		return 1;
 
 	max_rom_decode.parallel = 128 * 1024;
-	register_par_programmer(&par_programmer_nic3com, BUS_PARALLEL);
+	register_par_master(&par_master_nic3com, BUS_PARALLEL);
 
 	return 0;
 }
 
-void nic3com_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void nic3com_chip_writeb(const struct flashctx *flash, uint8_t val,
+				chipaddr addr)
 {
 	OUTL((uint32_t)addr, io_base_addr + BIOS_ROM_ADDR);
 	OUTB(val, io_base_addr + BIOS_ROM_DATA);
 }
 
-uint8_t nic3com_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t nic3com_chip_readb(const struct flashctx *flash,
+				  const chipaddr addr)
 {
 	OUTL((uint32_t)addr, io_base_addr + BIOS_ROM_ADDR);
 	return INB(io_base_addr + BIOS_ROM_DATA);

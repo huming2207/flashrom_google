@@ -66,7 +66,7 @@ int read_opaque(struct flashctx *flash, uint8_t *buf, unsigned int start, unsign
 	return opaque_programmer->read(flash, buf, start, len);
 }
 
-int write_opaque(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int write_opaque(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
 	if (!opaque_programmer->write) {
 		msg_perr("%s called before register_opaque_programmer. "

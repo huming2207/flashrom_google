@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "flash.h"	/* for msg_* */
 #include "locks.h"	/* for SYSTEM_LOCKFILE_DIR */

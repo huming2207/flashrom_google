@@ -189,7 +189,8 @@ static int nuvoton_get_sio_index(uint16_t *port)
 		return 0;
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	for (i = 0; i < ARRAY_SIZE(ports); i++) {
 		uint8_t sid = sio_read(ports[i], NUVOTON_SIOCFG_SID);
@@ -412,9 +413,9 @@ int initflash_cfg_setup(struct flashctx *flash)
 	/* Set "sane" defaults. If the flash chip is known, then use parameters
 	   from it. */
 	initflash_cfg->read_device_id = JEDEC_RDID;
-	if (flash && (flash->feature_bits | FEATURE_WRSR_WREN))
+	if (flash && (flash->chip->feature_bits | FEATURE_WRSR_WREN))
 		initflash_cfg->write_status_enable = JEDEC_WREN;
-	else if (flash && (flash->feature_bits | FEATURE_WRSR_EWSR))
+	else if (flash && (flash->chip->feature_bits | FEATURE_WRSR_EWSR))
 		initflash_cfg->write_status_enable = JEDEC_EWSR;
 	else
 		initflash_cfg->write_status_enable = JEDEC_WREN;
@@ -431,7 +432,7 @@ int initflash_cfg_setup(struct flashctx *flash)
 	/* back to "sane" defaults... */
 	initflash_cfg->program_unit_size = 0x01;
 	if (flash)
-		initflash_cfg->page_size = logbase2(flash->page_size);
+		initflash_cfg->page_size = logbase2(flash->chip->page_size);
 	else
 		initflash_cfg->page_size = 0x08;
 	
@@ -715,17 +716,19 @@ int wpce775x_spi_read(struct flashctx *flash, uint8_t * buf,
 		initflash_cfg_setup(flash);
 		InitFlash();
 	}
-	return spi_read_chunked(flash, buf, start, len, flash->page_size);
+	return spi_read_chunked(flash, buf, start, len,
+				flash->chip->page_size);
 }
 
-int wpce775x_spi_write_256(struct flashctx *flash, uint8_t *buf,
+int wpce775x_spi_write_256(struct flashctx *flash, const uint8_t *buf,
                            unsigned int start, unsigned int len)
 {
 	if (!initflash_cfg) {
 		initflash_cfg_setup(flash);
 		InitFlash();
 	}
-	return spi_write_chunked(flash, buf, start, len, flash->page_size);
+	return spi_write_chunked(flash, buf, start, len,
+				 flash->chip->page_size);
 }
 
 int wpce775x_spi_read_status_register(unsigned int readcnt, uint8_t *readarr)
@@ -897,7 +900,7 @@ static int wpce775x_shutdown(void *data)
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_wpce775x = {
+static const struct spi_master spi_master_wpce775x = {
 	.type = SPI_CONTROLLER_WPCE775X,
 	.max_data_read = 256,	/* FIXME: should be MAX_DATA_READ_UNLIMITED? */
 	.max_data_write = 256,	/* FIXME: should be MAX_DATA_WRITE_UNLIMITED? */
@@ -961,7 +964,7 @@ int wpce775x_spi_common_init(void)
 	/* Add FWH | LPC to list of buses supported if they are not
 	 * both there already. */
 	buses_supported |= BUS_FWH | BUS_LPC;
-	register_spi_programmer(&spi_programmer_wpce775x);
+	register_spi_master(&spi_master_wpce775x);
 	msg_pdbg("%s(): successfully initialized wpce775x\n", __func__);
 	return 0;
 }
@@ -995,15 +998,31 @@ int wpce775x_probe_superio()
 /* Called by internal_init() */
 int wpce775x_probe_spi_flash(const char *name)
 {
+	int ret = 0;
+	char *p = NULL;
+
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
-	if (wpce775x_probe_superio())
-		return 1;
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("mec1308 only supports \"ec\" type devices\n");
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
 
-	if (wpce775x_spi_common_init())
-		return 1;
+	if (wpce775x_probe_superio()) {
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
 
-	return 0;
+	if (wpce775x_spi_common_init()) {
+		ret = 1;
+		goto wpce775x_probe_spi_flash_exit;
+	}
+
+wpce775x_probe_spi_flash_exit:
+	free(p);
+	return ret;
 }
 #endif

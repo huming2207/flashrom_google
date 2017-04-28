@@ -92,6 +92,7 @@ static const struct bitbang_spi_master bitbang_spi_master_rayer = {
 	.set_sck = rayer_bitbang_set_sck,
 	.set_mosi = rayer_bitbang_set_mosi,
 	.get_miso = rayer_bitbang_get_miso,
+	.half_period = 0,
 };
 
 int rayer_spi_init(void)
@@ -166,13 +167,13 @@ int rayer_spi_init(void)
 		rayer_miso_bit = 4;
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	/* Get the initial value before writing to any line. */
 	lpt_outbyte = INB(lpt_iobase);
 
-	/* Zero halfperiod delay. */
-	if (bitbang_spi_init(&bitbang_spi_master_rayer, 0))
+	if (register_spi_bitbang_master(&bitbang_spi_master_rayer))
 		return 1;
 
 	return 0;

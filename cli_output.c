@@ -36,7 +36,7 @@ int close_logfile(void)
 	if (fclose(logfile)) {
 		/* fclose returned an error. Stop writing to be safe. */
 		logfile = NULL;
-		msg_perr("Closing the log file returned error %s\n", strerror(errno));
+		msg_gerr("Closing the log file returned error %s\n", strerror(errno));
 		return 1;
 	}
 	logfile = NULL;
@@ -46,7 +46,7 @@ int close_logfile(void)
 int open_logfile(const char * const filename)
 {
 	if (!filename) {
-		msg_gerr("No filename specified.\n");
+		msg_gerr("No logfile name specified.\n");
 		return 1;
 	}
 	if ((logfile = fopen(filename, "w")) == NULL) {
@@ -60,24 +60,25 @@ void start_logging(void)
 {
 	int oldverbose_screen = verbose_screen;
 
-	/* make the console quieter. */
+	/* Shut up the console. */
 	verbose_screen = MSG_ERROR;
 	print_version();
 	verbose_screen = oldverbose_screen;
 }
 #endif /* !STANDALONE */
 
-int print(int type, const char *fmt, ...)
+/* Please note that level is the verbosity, not the importance of the message. */
+int print(enum msglevel level, const char *fmt, ...)
 {
 	va_list ap;
 	int ret;
 	FILE *output_type;
 
-	switch (type) {
+	switch (level) {
 	case MSG_ERROR:
 		output_type = stderr;
 		break;
-	case MSG_BARF:
+	case MSG_SPEW:
 		if (verbose_screen < 3)
 			return 0;
 	case MSG_DEBUG2:
@@ -98,14 +99,13 @@ int print(int type, const char *fmt, ...)
 	fflush(output_type);
 
 #ifndef STANDALONE
-	if ((type <= verbose_logfile) && logfile) {
+	if ((level <= verbose_logfile) && logfile) {
 		va_start(ap, fmt);
 		ret = vfprintf(logfile, fmt, ap);
 		va_end(ap);
-		if (type != MSG_BARF)
+		if (level != MSG_SPEW)
 			fflush(logfile);
 	}
 #endif /* !STANDALONE */
-
 	return ret;
 }

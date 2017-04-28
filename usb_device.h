@@ -89,6 +89,7 @@ struct usb_match {
 	struct usb_match_value address;
 	struct usb_match_value vid;
 	struct usb_match_value pid;
+	struct usb_match_value serial;
 	struct usb_match_value config;
 	struct usb_match_value interface;
 	struct usb_match_value altsetting;

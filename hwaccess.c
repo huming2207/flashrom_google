@@ -18,123 +18,128 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "platform.h"
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <sys/types.h>
 #if !defined (__DJGPP__) && !defined(__LIBPAYLOAD__)
+/* No file access needed/possible to get hardware access permissions. */
 #include <unistd.h>
 #include <fcntl.h>
 #endif
-#if !defined (__DJGPP__)
-#include <errno.h>
-#endif
 #include "flash.h"
+#include "hwaccess.h"
 
-#if defined(__i386__) || defined(__x86_64__)
+#if !(IS_LINUX || IS_MACOSX || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__) || defined(__DJGPP__) || defined(__LIBPAYLOAD__) || defined(__sun) || defined(__gnu_hurd__))
+#error "Unknown operating system"
+#endif
 
-/* sync primitive is not needed because x86 uses uncached accesses
- * which have a strongly ordered memory model.
- */
-static inline void sync_primitive(void)
-{
-}
+#if IS_LINUX || IS_MACOSX || defined(__NetBSD__) || defined(__OpenBSD__)
+#define USE_IOPL 1
+#else
+#define USE_IOPL 0
+#endif
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
+#define USE_DEV_IO 1
+#else
+#define USE_DEV_IO 0
+#endif
+#if defined(__gnu_hurd__)
+#define USE_IOPERM 1
+#else
+#define USE_IOPERM 0
+#endif
 
-#if defined(__FreeBSD__) || defined(__DragonFly__)
+#if USE_IOPERM
+#include <sys/io.h>
+#endif
+
+#if IS_X86 && USE_DEV_IO
 int io_fd;
 #endif
 
-void get_io_perms(void)
-{
-#if defined(__DJGPP__) || defined(__LIBPAYLOAD__)
-	/* We have full permissions by default. */
-	return;
-#else
-#if defined (__sun) && (defined(__i386) || defined(__amd64))
-	if (sysi86(SI86V86, V86SC_IOPL, PS_IOPL) != 0) {
-#elif defined(__FreeBSD__) || defined (__DragonFly__)
-	if ((io_fd = open("/dev/io", O_RDWR)) < 0) {
-#else 
-	if (iopl(3) != 0) {
-#endif
-		msg_perr("ERROR: Could not get I/O privileges (%s).\n"
-			"You need to be root.\n", strerror(errno));
-#if defined (__OpenBSD__)
-		msg_perr("Please set securelevel=-1 in /etc/rc.securelevel "
-			   "and reboot, or reboot into \n");
-		msg_perr("single user mode.\n");
-#endif
-		exit(1);
-	}
-#endif
-}
-
-void release_io_perms(void)
-{
-#if defined(__FreeBSD__) || defined(__DragonFly__)
-	close(io_fd);
-#endif
-}
-
-#elif defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__)
-
-static inline void sync_primitive(void)
-{
-	/* Prevent reordering and/or merging of reads/writes to hardware.
-	 * Such reordering and/or merging would break device accesses which
-	 * depend on the exact access order.
-	 */
-	asm("eieio" : : : "memory");
-}
-
-/* PCI port I/O is not yet implemented on PowerPC. */
-void get_io_perms(void)
-{
-}
-
-/* PCI port I/O is not yet implemented on PowerPC. */
-void release_io_perms(void)
-{
-}
-
-#elif defined (__mips) || defined (__mips__) || defined (_mips) || defined (mips)
-
-/* sync primitive is not needed because /dev/mem on MIPS uses uncached accesses
- * in mode 2 which has a strongly ordered memory model.
+/* Prevent reordering and/or merging of reads/writes to hardware.
+ * Such reordering and/or merging would break device accesses which depend on the exact access order.
  */
 static inline void sync_primitive(void)
 {
-}
-
-/* PCI port I/O is not yet implemented on MIPS. */
-void get_io_perms(void)
-{
-}
-
-/* PCI port I/O is not yet implemented on MIPS. */
-void release_io_perms(void)
-{
-}
-
-#elif defined (__arm__)
-
-static inline void sync_primitive(void)
-{
-}
-
-void get_io_perms(void)
-{
-}
-
-void release_io_perms(void)
-{
-}
-
+/* This is not needed for...
+ * - x86: uses uncached accesses which have a strongly ordered memory model.
+ * - MIPS: uses uncached accesses in mode 2 on /dev/mem which has also a strongly ordered memory model.
+ * - ARM: uses a strongly ordered memory model for device memories.
+ *
+ * See also https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/Documentation/memory-barriers.txt
+ */
+#if IS_PPC // cf. http://lxr.free-electrons.com/source/arch/powerpc/include/asm/barrier.h
+	asm("eieio" : : : "memory");
+#elif IS_SPARC
+#if defined(__sparc_v9__) || defined(__sparcv9)
+	/* Sparc V9 CPUs support three different memory orderings that range from x86-like TSO to PowerPC-like
+	 * RMO. The modes can be switched at runtime thus to make sure we maintain the right order of access we
+	 * use the strongest hardware memory barriers that exist on Sparc V9. */
+	asm volatile ("membar #Sync" ::: "memory");
+#elif defined(__sparc_v8__) || defined(__sparcv8)
+	/* On SPARC V8 there is no RMO just PSO and that does not apply to I/O accesses... but if V8 code is run
+	 * on V9 CPUs it might apply... or not... we issue a write barrier anyway. That's the most suitable
+	 * operation in the V8 instruction set anyway. If you know better then please tell us. */
+	asm volatile ("stbar");
 #else
-
-#error Unknown architecture
-
+	#error Unknown and/or unsupported SPARC instruction set version detected.
 #endif
+#endif
+}
+
+#if IS_X86 && !(defined(__DJGPP__) || defined(__LIBPAYLOAD__))
+static int release_io_perms(void *p)
+{
+#if defined (__sun)
+	sysi86(SI86V86, V86SC_IOPL, 0);
+#elif USE_DEV_IO
+	close(io_fd);
+#elif USE_IOPERM
+	ioperm(0, 65536, 0);
+#elif USE_IOPL
+	iopl(0);
+#endif
+	return 0;
+}
+#endif
+
+/* Get I/O permissions with automatic permission release on shutdown. */
+int rget_io_perms(void)
+{
+#if IS_X86 && !(defined(__DJGPP__) || defined(__LIBPAYLOAD__))
+#if defined (__sun)
+	if (sysi86(SI86V86, V86SC_IOPL, PS_IOPL) != 0) {
+#elif USE_DEV_IO
+	if ((io_fd = open("/dev/io", O_RDWR)) < 0) {
+#elif USE_IOPERM
+	if (ioperm(0, 65536, 1) != 0) {
+#elif USE_IOPL
+	if (iopl(3) != 0) {
+#endif
+		msg_perr("ERROR: Could not get I/O privileges (%s).\n", strerror(errno));
+		msg_perr("You need to be root.\n");
+#if defined (__OpenBSD__)
+		msg_perr("If you are root already please set securelevel=-1 in /etc/rc.securelevel and\n"
+			 "reboot, or reboot into single user mode.\n");
+#elif defined(__NetBSD__)
+		msg_perr("If you are root already please reboot into single user mode or make sure\n"
+			 "that your kernel configuration has the option INSECURE enabled.\n");
+#endif
+		return 1;
+	} else {
+		register_shutdown(release_io_perms, NULL);
+	}
+#else
+	/* DJGPP and libpayload environments have full PCI port I/O permissions by default. */
+	/* PCI port I/O support is unimplemented on PPC/MIPS and unavailable on ARM. */
+#endif
+	return 0;
+}
 
 void mmio_writeb(uint8_t val, void *addr)
 {
@@ -167,6 +172,12 @@ uint16_t mmio_readw(void *addr)
 uint32_t mmio_readl(void *addr)
 {
 	return *(volatile uint32_t *) addr;
+}
+
+void mmio_readn(void *addr, uint8_t *buf, size_t len)
+{
+	memcpy(buf, addr, len);
+	return;
 }
 
 void mmio_le_writeb(uint8_t val, void *addr)

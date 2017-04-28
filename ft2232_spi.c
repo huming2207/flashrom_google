@@ -69,7 +69,7 @@ const struct usbdev_status devs_ft2232spi[] = {
 	{GOOGLE_VID, GOOGLE_SERVO_PID, OK, "Google", "Servo"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID0, OK, "Google", "Servo V2 Legacy"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID1, OK, "Google", "Servo V2"},
-	{},
+	{0},
 };
 
 /*
@@ -155,7 +155,7 @@ static int get_buf(struct ftdi_context *ftdic, const unsigned char *buf,
 static int ft2232_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr);
 
-static const struct spi_programmer spi_programmer_ft2232 = {
+static const struct spi_master spi_master_ft2232 = {
 	.type		= SPI_CONTROLLER_FT2232,
 	.max_data_read	= 64 * 1024,
 	.max_data_write	= 256,
@@ -377,7 +377,7 @@ int ft2232_spi_init(void)
 
 	// msg_pdbg("\nft2232 chosen\n");
 
-	register_spi_programmer(&spi_programmer_ft2232);
+	register_spi_master(&spi_master_ft2232);
 
 	return 0;
 

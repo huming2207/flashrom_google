@@ -382,7 +382,7 @@ static int it85xx_spi_send_command(const struct flashctx *flash, unsigned int wr
 	return 0;
 }
 
-static const struct spi_programmer spi_programmer_it8518 = {
+static const struct spi_master spi_master_it8518 = {
 	.type = SPI_CONTROLLER_IT85XX,
 	.max_data_read = 256,
 	.max_data_write = 256,
@@ -392,7 +392,7 @@ static const struct spi_programmer spi_programmer_it8518 = {
 	.write_256 = default_spi_write_256,
 };
 
-static const struct spi_programmer spi_programmer_it85xx = {
+static const struct spi_master spi_master_it85xx = {
 	.type = SPI_CONTROLLER_IT85XX,
 	.max_data_read = 1,
 	.max_data_write = 1,
@@ -415,9 +415,28 @@ void setup_it8518_io_base()
 	OUTB(0x01, 0x2f);
 }
 
+static int check_params(void)
+{
+	int ret = 0;
+	char *p = NULL;
+
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("it85xx only supports \"ec\" type devices\n");
+		ret = 1;
+	}
+
+	free(p);
+	return ret;
+}
+
 int it8518_spi_init(struct superio s)
 {
 	int ret;
+
+	if (check_params())
+		return 1;
+
 	if (!(internal_buses_supported & BUS_FWH)) {
 		msg_pdbg("%s():%d buses not support FWH\n", __func__, __LINE__);
 		return 1;
@@ -447,7 +466,7 @@ int it8518_spi_init(struct superio s)
 		/* Set this as SPI controller and add FWH | LPC to
 		 * supported buses. */
 		buses_supported |= BUS_LPC | BUS_FWH;
-		register_spi_programmer(&spi_programmer_it8518);
+		register_spi_master(&spi_master_it8518);
 	}
 	return ret;
 }
@@ -457,6 +476,9 @@ int it85xx_spi_init(struct superio s)
 	int ret;
 
 	if (alias && alias->type != ALIAS_EC)
+		return 1;
+
+	if (check_params())
 		return 1;
 
 	found_chip = &ite_chips[ITE_IT85XX];
@@ -491,8 +513,9 @@ int it85xx_spi_init(struct superio s)
 		/* Set this as SPI controller and add FWH | LPC to
 		 * supported buses. */
 		buses_supported |= BUS_LPC | BUS_FWH;
-		register_spi_programmer(&spi_programmer_it85xx);
+		register_spi_master(&spi_master_it85xx);
 	}
+
 	return ret;
 }
 

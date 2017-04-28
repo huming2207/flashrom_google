@@ -226,7 +226,7 @@ endif
 # IMPORTANT: The following line must be placed before ARCH is ever used
 # (of course), but should come after any lines setting CC because the line
 # below uses CC itself.
-override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E arch.h 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
+override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E archtest.c 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
 
 ifeq ($(ARCH), ppc)
 # There's no PCI port I/O support on PPC/PowerPC, yet.
@@ -287,7 +287,7 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
+all: pciutils features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 
 # Set the flashrom version string from the highest revision number
 # of the checked out flashrom files.
@@ -372,6 +372,13 @@ CONFIG_PRINT_WIKI ?= no
 
 # Support for reading a flashmap from a device tree in the image
 CONFIG_FDTMAP ?= no
+
+# Enable all features if CONFIG_EVERYTHING=yes is given
+ifeq ($(CONFIG_EVERYTHING), yes)
+$(foreach var, $(filter CONFIG_%, $(.VARIABLES)),\
+	$(if $(filter no, $($(var))),\
+		$(eval $(var)=yes)))
+endif
 
 # Bitbanging SPI infrastructure, default off unless needed.
 ifeq ($(CONFIG_RAYER_SPI), yes)
@@ -758,7 +765,14 @@ endif
 	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
 	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 
-install: $(PROGRAM)$(EXEC_SUFFIX)
+$(PROGRAM).8.html: $(PROGRAM).8
+	@groff -mandoc -Thtml $< >$@
+
+$(PROGRAM).8: $(PROGRAM).8.tmpl
+	@# Add the man page change date and version to the man page
+	@sed -e 's#.TH FLASHROM 8 ".*".*#.TH FLASHROM 8 "$(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)" "$(VERSION)"#' <$< >$@
+
+install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin

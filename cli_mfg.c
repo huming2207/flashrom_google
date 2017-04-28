@@ -32,14 +32,13 @@
 #include "big_lock.h"
 #include "flash.h"
 #include "flashchips.h"
+#include "layout.h"
 #include "power.h"
 #include "programmer.h"
 #include "writeprotect.h"
 
 #define LOCK_TIMEOUT_SECS	180
 
-/* This variable is shared with doit() in flashrom.c */
-int set_ignore_fmap = 0;
 int set_ignore_lock = 0;
 
 #if CONFIG_INTERNAL == 1
@@ -178,6 +177,7 @@ void cli_mfg_usage(const char *name)
 	       "   --wp-enable                       enable write protection\n"
 	       "   --wp-list                         list write protection ranges\n"
 	       "   --wp-range <start> <length>       set write protect range\n"
+	       "   --wp-region <region>              set write protect range by region name\n"
 	       "   --wp-status                       show write protect status\n"
 	       );
 
@@ -215,6 +215,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_FLASH_NAME,
 	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
+	LONGOPT_WP_SET_REGION,
 	LONGOPT_WP_ENABLE,
 	LONGOPT_WP_DISABLE,
 	LONGOPT_WP_LIST,
@@ -238,9 +239,11 @@ int main(int argc, char *argv[])
 	int option_index = 0;
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
-	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
-	int dont_verify_it = 0, list_supported = 0, extract_it = 0;
+		get_size = 0, dont_verify_it = 0, list_supported = 0,
+		extract_it = 0, flash_name = 0;
+	int set_wp_range = 0, set_wp_region = 0, set_wp_enable = 0,
+	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
+	int set_ignore_fmap = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -274,6 +277,7 @@ int main(int argc, char *argv[])
 		{"diff", 		1, 0, LONGOPT_DIFF},
 		{"wp-status", 		0, 0, LONGOPT_WP_STATUS},
 		{"wp-range", 		0, 0, LONGOPT_WP_SET_RANGE},
+		{"wp-region",		1, 0, LONGOPT_WP_SET_REGION},
 		{"wp-enable", 		optional_argument, 0, LONGOPT_WP_ENABLE},
 		{"wp-disable", 		0, 0, LONGOPT_WP_DISABLE},
 		{"wp-list", 		0, 0, LONGOPT_WP_LIST},
@@ -291,6 +295,7 @@ int main(int argc, char *argv[])
 	char *tempstr = NULL;
 	char *pparam = NULL;
 	char *wp_mode_opt = NULL;
+	char *wp_region = NULL;
 
 	print_version();
 
@@ -544,6 +549,10 @@ int main(int argc, char *argv[])
 		case LONGOPT_WP_SET_RANGE:
 			set_wp_range = 1;
 			break;
+		case LONGOPT_WP_SET_REGION:
+			set_wp_region = 1;
+			wp_region = strdup(optarg);
+			break;
 		case LONGOPT_WP_ENABLE:
 			set_wp_enable = 1;
 			if (optarg)
@@ -715,7 +724,7 @@ int main(int argc, char *argv[])
 	if (chipcount > 1) {
 		msg_gerr("Multiple flash chips were detected:");
 		for (i = 0; i < chipcount; i++)
-			msg_gerr(" %s", flashes[i].name);
+			msg_gerr(" %s", flashes[i].chip->name);
 		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
 		programmer_shutdown();
 		exit(1);
@@ -744,8 +753,8 @@ int main(int argc, char *argv[])
 
 	check_chip_supported(fill_flash);
 
-	size = fill_flash->total_size * 1024;
-	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
+	size = fill_flash->chip->total_size * 1024;
+	if (check_max_decode((buses_supported & fill_flash->chip->bustype), size) &&
 	    (!force)) {
 		msg_gerr("Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
@@ -754,8 +763,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
-	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
-	      wp_status | wp_list | extract_it)) {
+	      get_size | set_wp_range | set_wp_region | set_wp_enable |
+	      set_wp_disable | wp_status | wp_list | extract_it)) {
 		msg_gerr("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
@@ -843,8 +852,8 @@ int main(int argc, char *argv[])
 
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
-		if (fill_flash->wp && fill_flash->wp->disable) {
-			rc |= fill_flash->wp->disable(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->disable) {
+			rc |= fill_flash->chip->wp->disable(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -854,12 +863,42 @@ int main(int argc, char *argv[])
 	}
 
 	if (flash_name) {
-		if (fill_flash->vendor && fill_flash->name) {
+		if (fill_flash->chip->vendor && fill_flash->chip->name) {
 			msg_ginfo("vendor=\"%s\" name=\"%s\"\n",
-			       fill_flash->vendor, fill_flash->name);
+			       fill_flash->chip->vendor,
+			       fill_flash->chip->name);
 			goto cli_mfg_silent_exit;
 		} else {
 			rc = -1;
+			goto cli_mfg_silent_exit;
+		}
+	}
+
+	/* If the user doesn't specify any -i argument, then we can skip the
+	 * fmap parsing to speed up. */
+	if (get_num_include_args() == 0 && !extract_it) {
+		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
+		set_ignore_fmap = 1;
+	}
+
+	/* add entries for regions specified in flashmap */
+	if (!set_ignore_fmap && add_fmap_entries(fill_flash) < 0) {
+		rc = 1;
+		goto cli_mfg_silent_exit;
+	}
+
+	if (set_wp_range || set_wp_region) {
+		if (set_wp_range && set_wp_region) {
+			msg_gerr("Error: Cannot use both --wp-range and "
+				"--wp-region simultaneously.\n");
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		if (!fill_flash->chip->wp || !fill_flash->chip->wp->set_range) {
+			msg_gerr("Error: write protect is not supported "
+			       "on this flash chip.\n");
+			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
 	}
@@ -890,16 +929,31 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (fill_flash->wp && fill_flash->wp->set_range) {
-			rc |= fill_flash->wp->set_range(fill_flash, start, len);
-		} else {
-			msg_gerr("Error: write protect is not supported "
-			       "on this flash chip.\n");
+		rc |= fill_flash->chip->wp->set_range(fill_flash, start, len);
+	}
+
+	if (set_wp_region && wp_region) {
+		int n;
+		romlayout_t entry;
+
+		n = find_romentry(wp_region);
+		if (n < 0) {
+			msg_gerr("Error: Unable to find region \"%s\"\n",
+					wp_region);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
+
+		if (fill_romentry(&entry, n)) {
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		rc |= fill_flash->chip->wp->set_range(fill_flash,
+				entry.start, entry.end - entry.start + 1);
+		free(wp_region);
 	}
-	
+
 	if (!rc && set_wp_enable) {
 		enum wp_mode wp_mode;
 
@@ -914,8 +968,8 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (fill_flash->wp && fill_flash->wp->enable) {
-			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->enable) {
+			rc |= fill_flash->chip->wp->enable(fill_flash, wp_mode);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -925,13 +979,13 @@ int main(int argc, char *argv[])
 	}
 	
 	if (get_size) {
-		msg_ginfo("%d\n", fill_flash->total_size * 1024);
+		msg_ginfo("%d\n", fill_flash->chip->total_size * 1024);
 		goto cli_mfg_silent_exit;
 	}
 
 	if (wp_status) {
-		if (fill_flash->wp && fill_flash->wp->wp_status) {
-			rc |= fill_flash->wp->wp_status(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->wp_status) {
+			rc |= fill_flash->chip->wp->wp_status(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -942,21 +996,14 @@ int main(int argc, char *argv[])
 	
 	if (wp_list) {
 		msg_ginfo("Valid write protection ranges:\n");
-		if (fill_flash->wp && fill_flash->wp->list_ranges) {
-			rc |= fill_flash->wp->list_ranges(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->list_ranges) {
+			rc |= fill_flash->chip->wp->list_ranges(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
 		goto cli_mfg_silent_exit;
-	}
-
-	/* If the user doesn't specify any -i argument, then we can skip the
-	 * fmap parsing to speed up. */
-	if (get_num_include_args() == 0 && !extract_it) {
-		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
-		set_ignore_fmap = 1;
 	}
 
 	if (read_it || write_it || erase_it || verify_it || extract_it) {
