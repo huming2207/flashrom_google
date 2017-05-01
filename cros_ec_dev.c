@@ -191,7 +191,7 @@ static int command_wait_for_response_v2(void)
 	for (i = 1; i <= CROS_EC_COMMAND_RETRIES; i++) {
 		ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD_V2, s_cmd_buf,
 			    sizeof(s_cmd_buf));
-		if (ret) {
+		if (ret < 0) {
 			msg_perr("%s(): CrOS EC command failed: %d, errno=%d\n",
 				 __func__, ret, errno);
 			ret = -EC_RES_ERROR;
@@ -238,7 +238,7 @@ static int __cros_ec_command_dev_v2(int command, int version,
 	memcpy(s_cmd->data, outdata, outsize);
 
 	ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD_V2, s_cmd, size);
-	if (ret < 0 && errno == -EAGAIN) {
+	if (ret < 0 && errno == EAGAIN) {
 		ret = command_wait_for_response_v2();
 		s_cmd->result = 0;
 	}
