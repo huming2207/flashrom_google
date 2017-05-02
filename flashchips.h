@@ -468,6 +468,9 @@
 #define INTEL_HWSEQ		0xFFFE	/* dummy ID for hardware sequencing */
 
 #define ISSI_ID			0xD5	/* ISSI Integrated Silicon Solutions, see also PMC. */
+#define ISSI_ID_SPI		0x9D	/* ISSI ID used for SPI flash, see also PMC_ID_NOPREFIX */
+#define ISSI_IS25LP128		0x6018
+#define ISSI_IS25WP128		0x7018
 #define ISSI_PMC_IS29GL032B	0xF9
 #define ISSI_PMC_IS29GL032T	0xF6
 #define ISSI_PMC_IS29GL064B	0x7E1000
