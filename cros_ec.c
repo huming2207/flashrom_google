@@ -97,6 +97,7 @@ static const char *ec_type[] = {
 	[1] = "pd",
 	[2] = "sh",
 	[3] = "fp",
+	[4] = "tp",
 };
 
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
