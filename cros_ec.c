@@ -74,6 +74,9 @@ static int need_2nd_pass = 0;
 /* 1 if we want the flashrom to try jumping to new firmware after update. */
 static int try_latest_firmware = 0;
 
+/* 1 if EC firmware has RWSIG enabled. */
+static int rwsig_enabled = 0;
+
 /* The range of each firmware copy from the image file to update.
  * But re-define the .flags as the valid flag to indicate the firmware is
  * new or not (if flags = 1).
@@ -103,6 +106,19 @@ static const char *ec_type[] = {
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
  * the number of regions */
 static struct ec_response_flash_region_info regions[EC_FLASH_REGION_WP_RO + 1];
+
+/*
+ * Delay after reboot before EC can respond to host command.
+ * This value should be large enough for EC to initialize, but no larger than
+ * CONFIG_RWSIG_JUMP_TIMEOUT. This way for EC using RWSIG task, we will be
+ * able to abort RWSIG jump and stay in RO.
+ */
+#define EC_INIT_DELAY 800000
+
+/*
+ * Delay after a cold reboot which allows RWSIG enabled EC to jump to EC_RW.
+ */
+#define EC_RWSIG_JUMP_TO_RW_DELAY 3000000
 
 /* Given the range not able to update, mark the corresponding
  * firmware as old.
@@ -162,6 +178,42 @@ static int cros_ec_get_region_info(enum ec_flash_region region,
 	info->offset = resp.offset;
 	info->size = resp.size;
 	return 0;
+}
+
+/**
+ * Check if a feature is supported by EC.
+ *
+ * @param feature	feature code
+ * @return < 0 if error, 0 not supported, > 0 supported
+ */
+static int ec_check_features(int feature)
+{
+	struct ec_response_get_features r;
+	int rc;
+
+	if (feature < 0 || feature >= sizeof(r.flags) * 8)
+		return -1;
+
+	rc = cros_ec_priv->ec_command(EC_CMD_GET_FEATURES,
+				0, NULL, 0, &r, sizeof(r));
+	if (rc < 0)
+		return rc;
+
+	return !!(r.flags[feature / 32] & EC_FEATURE_MASK_0(feature));
+}
+
+/**
+ * Disable EC rwsig jump.
+ *
+ * @return 0 if success, <0 if error
+ */
+static int ec_rwsig_abort()
+{
+	struct ec_params_rwsig_action p;
+
+	p.action = RWSIG_ACTION_ABORT;
+	return cros_ec_priv->ec_command(EC_CMD_RWSIG_ACTION,
+				0, &p, sizeof(p), NULL, 0);
 }
 
 /**
@@ -247,6 +299,21 @@ static int set_ideal_write_size(void)
 	return 0;
 }
 
+/* Perform a cold reboot.
+ *
+ * @param flags		flags to pass to EC_CMD_REBOOT_EC.
+ * @return 0 for success, < 0 for command failure.
+ */
+static int cros_ec_cold_reboot(int flags) {
+	struct ec_params_reboot_ec p;
+
+	memset(&p, 0, sizeof(p));
+	p.cmd = EC_REBOOT_COLD;
+	p.flags = flags;
+	return cros_ec_priv->ec_command(EC_CMD_REBOOT_EC, 0, &p, sizeof(p),
+					NULL, 0);
+}
+
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
  * then this functions picks a NEW firmware copy and jumps to it. Note that
  * RO is preferred, then A, finally B.
@@ -297,11 +364,23 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 		break;
 	}
 
-	msg_pdbg("CROS_EC is jumping to [%s]\n", sections[p.cmd]);
+	/*
+	 * Do a cold reset instead of JUMP_RO so board enabling
+	 * EC_FLASH_PROTECT_ALL_NOW at runtime can clear the WP flag.
+	 * This is true for EC enabling RWSIG, where
+	 * EC_FLASH_PROTECT_ALL_NOW is applied before jumping into RW.
+	 */
+	if (target == EC_IMAGE_RO && rwsig_enabled) {
+		p.cmd = EC_REBOOT_COLD;
+		msg_pdbg("RWSIG enabled: doing a cold reboot instead of "
+			 "JUMP_RO.\n");
+	}
+
+	msg_pdbg("CROS_EC is jumping to [%s]\n", sections[target]);
 	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
 	if (current_image == p.cmd) {
-		msg_pdbg("CROS_EC is already in [%s]\n", sections[p.cmd]);
+		msg_pdbg("CROS_EC is already in [%s]\n", sections[target]);
 		cros_ec_priv->current_image = target;
 		return 0;
 	}
@@ -310,15 +389,23 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 				0, &p, sizeof(p), NULL, 0);
 	if (rc < 0) {
 		msg_perr("CROS_EC cannot jump to [%s]:%d\n",
-			 sections[p.cmd], rc);
-	} else {
-		msg_pdbg("CROS_EC has jumped to [%s]\n", sections[p.cmd]);
-		rc = EC_RES_SUCCESS;
-		cros_ec_priv->current_image = target;
+			 sections[target], rc);
+		return rc;
 	}
 
-	/* Sleep 1 sec to wait the EC re-init. */
-	usleep(1000000);
+	/* Sleep until EC can respond to host command, but just before
+	 * CONFIG_RWSIG_JUMP_TIMEOUT if EC is using RWSIG task. */
+	usleep(EC_INIT_DELAY);
+
+	/* Abort RWSIG jump for EC that use it. Normal EC will ignore it. */
+	if (target == EC_IMAGE_RO && rwsig_enabled) {
+		msg_pdbg("RWSIG enabled: aborting RWSIG jump.\n");
+		ec_rwsig_abort();
+	}
+
+	msg_pdbg("CROS_EC has jumped to [%s]\n", sections[target]);
+	rc = EC_RES_SUCCESS;
+	cros_ec_priv->current_image = target;
 
 	/* update max data write size in case we're jumping to an EC
 	 * firmware with different protocol */
@@ -369,6 +456,11 @@ int cros_ec_prepare(uint8_t *image, int size) {
 	int i, j, wp_status;
 
 	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
+
+	if (ec_check_features(EC_FEATURE_RWSIG) > 0) {
+		rwsig_enabled = 1;
+		msg_pdbg("EC has RWSIG enabled.\n");
+	}
 
 	/*
 	 * If HW WP is disabled we may still need to disable write protection
@@ -452,6 +544,18 @@ int cros_ec_need_2nd_pass(void) {
  */
 int cros_ec_finish(void) {
 	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
+
+	/* For EC with RWSIG enabled. We need a cold reboot to enable
+	 * EC_FLASH_PROTECT_ALL_NOW and make sure RWSIG check is performed.
+	 */
+	if (rwsig_enabled) {
+		int rc;
+
+		msg_pdbg("RWSIG enabled: doing a cold reboot to enable WP.\n");
+		rc = cros_ec_cold_reboot(0);
+		usleep(EC_RWSIG_JUMP_TO_RW_DELAY);
+		return rc;
+	}
 
 	if (try_latest_firmware) {
 		if (fwcopy[EC_IMAGE_RW].flags &&
@@ -701,8 +805,6 @@ static int set_wp(int enable) {
 		/* Good, RO_NOW is set. */
 		msg_pdbg("INFO: RO_NOW is set. WP is active now.\n");
 	} else if (r.writable_flags & EC_FLASH_PROTECT_ALL_NOW) {
-		struct ec_params_reboot_ec reboot;
-
 		msg_pdbg("WARN: RO_NOW is not set. Trying ALL_NOW.\n");
 
 		memset(&p, 0, sizeof(p));
@@ -741,11 +843,7 @@ static int set_wp(int enable) {
 		 * the RW update failed. So, we arrange an EC code reset to
 		 * unlock RW ASAP.
 		 */
-		memset(&reboot, 0, sizeof(reboot));
-		reboot.cmd = EC_REBOOT_COLD;
-		reboot.flags = EC_REBOOT_FLAG_ON_AP_SHUTDOWN;
-		rc = cros_ec_priv->ec_command(EC_CMD_REBOOT_EC,
-				0, &reboot, sizeof(reboot), NULL, 0);
+		rc = cros_ec_cold_reboot(EC_REBOOT_FLAG_ON_AP_SHUTDOWN);
 		if (rc < 0) {
 			msg_perr("WARN: Cannot arrange a cold reset at next "
 				 "shutdown to unlock entire protect.\n");
