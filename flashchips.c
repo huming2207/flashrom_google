@@ -4284,7 +4284,7 @@ const struct flashchip flashchips[] = {
 		.unlock		= spi_disable_blockprotect,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
-		.wp		= &wp_generic,
+		.wp		= &wp_w25,
 	},
 
 	{
