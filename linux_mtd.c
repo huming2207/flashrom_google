@@ -212,7 +212,12 @@ static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 	}
 
 	for (i = 0; i < len; ) {
-		/* Try to align reads to eraseblock size */
+		/*
+		 * Try to align reads to eraseblock size.
+		 * FIXME: Shouldn't actually be necessary, but not all MTD
+		 * drivers handle arbitrary large reads well. See, for example,
+		 * https://b/35573113
+		 */
 		unsigned int step = eb_size - ((start + i) % eb_size);
 		step = min(step, len - i);
 
@@ -228,39 +233,39 @@ static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 	return 0;
 }
 
-/* this version assumes we must divide the write request into pages ourselves */
+/* this version assumes we must divide the write request into chunks ourselves */
 static int linux_mtd_write(struct flashctx *flash, const uint8_t *buf,
 				unsigned int start, unsigned int len)
 {
-	unsigned int page;
-	unsigned int chunksize, page_size;
-
-	chunksize = page_size = flash->chip->page_size;
+	unsigned int chunksize = flash->chip->block_erasers[0].eraseblocks[0].size;
+	unsigned int i;
 
 	if (!mtd_device_is_writeable)
 		return 1;
 
-	for (page = start / page_size;
-		page <= (start + len - 1) / page_size; page++) {
-		unsigned int i, starthere, lenhere;
+	if (lseek(dev_fd, start, SEEK_SET) != start) {
+		msg_perr("Cannot seek to 0x%06x: %s\n", start, strerror(errno));
+		return 1;
+	}
 
-		starthere = max(start, page * page_size);
-		lenhere = min(start + len, (page + 1) * page_size) - starthere;
-		for (i = 0; i < lenhere; i += chunksize) {
-			unsigned int towrite = min(chunksize, lenhere - i);
+	/*
+	 * Try to align writes to eraseblock size. We want these large enough
+	 * to give MTD room for optimizing performance.
+	 * FIXME: Shouldn't need to divide this up at all, but not all MTD
+	 * drivers handle arbitrary large writes well. See, for example,
+	 * https://b/35573113
+	 */
+	for (i = 0; i < len; ) {
+		unsigned int step = chunksize - ((start + i) % chunksize);
+		step = min(step, len - i);
 
-			if (lseek(dev_fd, starthere, SEEK_SET) != starthere) {
-				msg_perr("Cannot seek to 0x%06x: %s\n",
-						start, strerror(errno));
-				return 1;
-			}
-
-			if (write(dev_fd, &buf[starthere - start], towrite) != towrite) {
-				msg_perr("Cannot read 0x%06x bytes at 0x%06x: "
-					"%s\n", start, len, strerror(errno));
-				return 1;
-			}
+		if (write(dev_fd, buf + i, step) != step) {
+			msg_perr("Cannot write 0x%06x bytes at 0x%06x: %s\n",
+					step, start + i, strerror(errno));
+			return 1;
 		}
+
+		i += step;
 	}
 
 	return 0;
