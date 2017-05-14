@@ -113,8 +113,7 @@ struct programmer_entry {
 
 	int (*init) (void);
 
-	void *(*map_flash_region) (const char *descr, unsigned long phys_addr,
-				   size_t len);
+	void *(*map_flash_region) (const char *descr, uintptr_t phys_addr, size_t len);
 	void (*unmap_flash_region) (void *virt_addr, size_t len);
 
 	void (*delay) (int usecs);
@@ -160,6 +159,9 @@ struct bitbang_spi_master {
 	int (*get_miso) (void);
 	void (*request_bus) (void);
 	void (*release_bus) (void);
+
+	/* Length of half a clock period in usecs. */
+	unsigned int half_period;
 };
 
 #if CONFIG_INTERNAL == 1
@@ -235,18 +237,17 @@ void internal_delay(int usecs);
 
 #if NEED_PCI == 1
 /* pcidev.c */
-extern uint32_t io_base_addr;
 extern struct pci_access *pacc;
-extern struct pci_dev *pcidev_dev;
-struct pcidev_status {
+struct dev_entry {
 	uint16_t vendor_id;
 	uint16_t device_id;
 	int status;
 	const char *vendor_name;
 	const char *device_name;
 };
-uintptr_t pcidev_validate(struct pci_dev *dev, int bar, const struct pcidev_status *devs);
-uintptr_t pcidev_init(int bar, const struct pcidev_status *devs);
+uintptr_t pcidev_readbar(struct pci_dev *dev, int bar);
+uintptr_t pcidev_validate(struct pci_dev *dev, int bar, const struct dev_entry *devs);
+struct pci_dev *pcidev_init(const struct dev_entry *devs, int bar);
 /* rpci_write_* are reversible writes. The original PCI config space register
  * contents will be restored on shutdown.
  */
@@ -257,7 +258,7 @@ int rpci_write_long(struct pci_dev *dev, int reg, uint32_t data);
 
 /* print.c */
 #if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI+CONFIG_SATAMV >= 1
-void print_supported_pcidevs(const struct pcidev_status *devs);
+void print_supported_pcidevs(const struct dev_entry *devs);
 #endif
 
 #if CONFIG_INTERNAL == 1
@@ -275,22 +276,22 @@ int board_flash_enable(const char *vendor, const char *part);
 /* chipset_enable.c */
 int chipset_flash_enable(void);
 int get_target_bus_from_chipset(enum chipbustype *target_bus);
-enum ich_chipset ich_generation;
 
 /* processor_enable.c */
 int processor_flash_enable(void);
 #endif
 
 /* physmap.c */
-void *physmap(const char *descr, unsigned long phys_addr, size_t len);
-void *physmap_try_ro(const char *descr, unsigned long phys_addr, size_t len);
+void *physmap(const char *descr, uintptr_t phys_addr, size_t len);
+void *rphysmap(const char *descr, uintptr_t phys_addr, size_t len);
+void *physmap_try_ro(const char *descr, uintptr_t phys_addr, size_t len);
 void physunmap(void *virt_addr, size_t len);
 #if CONFIG_INTERNAL == 1
 int setup_cpu_msr(int cpu);
 void cleanup_cpu_msr(void);
 
 /* cbtable.c */
-void lb_vendor_dev_from_string(char *boardstring);
+void lb_vendor_dev_from_string(const char *boardstring);
 int coreboot_init(void);
 extern char *lb_part, *lb_vendor;
 extern int partvendor_from_cbtable;
@@ -318,8 +319,7 @@ struct pci_dev *pci_dev_find(uint16_t vendor, uint16_t device);
 struct pci_dev *pci_card_find(uint16_t vendor, uint16_t device,
 			      uint16_t card_vendor, uint16_t card_device);
 #endif
-void get_io_perms(void);
-void release_io_perms(void);
+int rget_io_perms(void);
 #if CONFIG_INTERNAL == 1
 extern int is_laptop;
 extern int laptop_ok;
@@ -366,7 +366,7 @@ void rmmio_vall(void *addr);
 /* dummyflasher.c */
 #if CONFIG_DUMMY == 1
 int dummy_init(void);
-void *dummy_map(const char *descr, unsigned long phys_addr, size_t len);
+void *dummy_map(const char *descr, uintptr_t phys_addr, size_t len);
 void dummy_unmap(void *virt_addr, size_t len);
 
 #endif
@@ -374,67 +374,67 @@ void dummy_unmap(void *virt_addr, size_t len);
 /* nic3com.c */
 #if CONFIG_NIC3COM == 1
 int nic3com_init(void);
-extern const struct pcidev_status nics_3com[];
+extern const struct dev_entry nics_3com[];
 #endif
 
 /* gfxnvidia.c */
 #if CONFIG_GFXNVIDIA == 1
 int gfxnvidia_init(void);
-extern const struct pcidev_status gfx_nvidia[];
+extern const struct dev_entry gfx_nvidia[];
 #endif
 
 /* drkaiser.c */
 #if CONFIG_DRKAISER == 1
 int drkaiser_init(void);
-extern const struct pcidev_status drkaiser_pcidev[];
+extern const struct dev_entry drkaiser_pcidev[];
 #endif
 
 /* nicrealtek.c */
 #if CONFIG_NICREALTEK == 1
 int nicrealtek_init(void);
-extern const struct pcidev_status nics_realtek[];
+extern const struct dev_entry nics_realtek[];
 #endif
 
 /* nicnatsemi.c */
 #if CONFIG_NICNATSEMI == 1
 int nicnatsemi_init(void);
-extern const struct pcidev_status nics_natsemi[];
+extern const struct dev_entry nics_natsemi[];
 #endif
 
 /* nicintel.c */
 #if CONFIG_NICINTEL == 1
 int nicintel_init(void);
-extern const struct pcidev_status nics_intel[];
+extern const struct dev_entry nics_intel[];
 #endif
 
 /* nicintel_spi.c */
 #if CONFIG_NICINTEL_SPI == 1
 int nicintel_spi_init(void);
-extern const struct pcidev_status nics_intel_spi[];
+extern const struct dev_entry nics_intel_spi[];
 #endif
 
 /* ogp_spi.c */
 #if CONFIG_OGP_SPI == 1
 int ogp_spi_init(void);
-extern const struct pcidev_status ogp_spi[];
+extern const struct dev_entry ogp_spi[];
 #endif
 
 /* satamv.c */
 #if CONFIG_SATAMV == 1
 int satamv_init(void);
-extern const struct pcidev_status satas_mv[];
+extern const struct dev_entry satas_mv[];
 #endif
 
 /* satasii.c */
 #if CONFIG_SATASII == 1
 int satasii_init(void);
-extern const struct pcidev_status satas_sii[];
+extern const struct dev_entry satas_sii[];
 #endif
 
 /* atahpt.c */
 #if CONFIG_ATAHPT == 1
 int atahpt_init(void);
-extern const struct pcidev_status ata_hpt[];
+extern const struct dev_entry ata_hpt[];
 #endif
 
 /* ft2232_spi.c */
@@ -457,7 +457,7 @@ int rayer_spi_init(void);
 #endif
 
 /* bitbang_spi.c */
-int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod);
+int register_spi_bitbang_master(const struct bitbang_spi_master *master);
 int bitbang_spi_shutdown(const struct bitbang_spi_master *master);
 
 /* buspirate_spi.c */
@@ -548,7 +548,7 @@ enum spi_controller {
 #if CONFIG_DEDIPROG == 1
 	SPI_CONTROLLER_DEDIPROG,
 #endif
-#if CONFIG_OGP_SPI == 1 || CONFIG_NICINTEL_SPI == 1 || CONFIG_RAYER_SPI == 1 || (CONFIG_INTERNAL == 1 && (defined(__i386__) || defined(__x86_64__) || defined(__arm__)))
+#if CONFIG_BITBANG_SPI == 1
 	SPI_CONTROLLER_BITBANG,
 #endif
 #if CONFIG_LINUX_SPI == 1
@@ -558,12 +558,12 @@ enum spi_controller {
 	SPI_CONTROLLER_SERPROG,
 #endif
 };
-extern const int spi_programmer_count;
+extern const int spi_master_count;
 
 #define MAX_DATA_UNSPECIFIED 0
 #define MAX_DATA_READ_UNLIMITED 64 * 1024
 #define MAX_DATA_WRITE_UNLIMITED 256
-struct spi_programmer {
+struct spi_master {
 	enum spi_controller type;
 	unsigned int max_data_read;
 	unsigned int max_data_write;
@@ -571,21 +571,20 @@ struct spi_programmer {
 		   const unsigned char *writearr, unsigned char *readarr);
 	int (*multicommand)(const struct flashctx *flash, struct spi_command *cmds);
 
-	/* Optimized functions for this programmer */
+	/* Optimized functions for this master */
 	int (*read)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*write_256)(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write_256)(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 };
 
-extern const struct spi_programmer *spi_programmer;
+extern const struct spi_master *spi_master;
 int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 			     const unsigned char *writearr, unsigned char *readarr);
 int default_spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
 int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-void register_spi_programmer(const struct spi_programmer *programmer);
+int default_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
+void register_spi_master(const struct spi_master *programmer);
 
 /* ichspi.c */
-#if CONFIG_INTERNAL == 1
 enum ich_chipset {
 	CHIPSET_ICH_UNKNOWN,
 	CHIPSET_ICH7 = 7,
@@ -600,8 +599,11 @@ enum ich_chipset {
 	CHIPSET_9_SERIES_WILDCAT_POINT,
 	CHIPSET_100_SERIES_SUNRISE_POINT,
 	CHIPSET_BAYTRAIL,
+	CHIPSET_APL,
 };
 
+#if CONFIG_INTERNAL == 1
+enum ich_chipset ich_generation;
 extern uint32_t ichspi_bbar;
 int ich_init_spi(struct pci_dev *dev, uint32_t base, void *rcrb,
 		 enum ich_chipset ich_generation);
@@ -640,7 +642,7 @@ struct opaque_programmer {
 	/* Specific functions for this programmer */
 	int (*probe) (struct flashctx *flash);
 	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
-	int (*write) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*write) (struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 	int (*erase) (struct flashctx *flash, unsigned int blockaddr, unsigned int blocklen);
 	uint8_t (*read_status) (const struct flashctx *flash);
 	int (*write_status) (const struct flashctx *flash, int status);
@@ -651,7 +653,7 @@ void register_opaque_programmer(struct opaque_programmer *pgm);
 
 /* programmer.c */
 int noop_shutdown(void);
-void *fallback_map(const char *descr, unsigned long phys_addr, size_t len);
+void *fallback_map(const char *descr, uintptr_t phys_addr, size_t len);
 void fallback_unmap(void *virt_addr, size_t len);
 uint8_t noop_chip_readb(const struct flashctx *flash, const chipaddr addr);
 void noop_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr);
@@ -661,7 +663,7 @@ void fallback_chip_writen(const struct flashctx *flash, uint8_t *buf, chipaddr a
 uint16_t fallback_chip_readw(const struct flashctx *flash, const chipaddr addr);
 uint32_t fallback_chip_readl(const struct flashctx *flash, const chipaddr addr);
 void fallback_chip_readn(const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
-struct par_programmer {
+struct par_master {
 	void (*chip_writeb) (const struct flashctx *flash, uint8_t val, chipaddr addr);
 	void (*chip_writew) (const struct flashctx *flash, uint16_t val, chipaddr addr);
 	void (*chip_writel) (const struct flashctx *flash, uint32_t val, chipaddr addr);
@@ -671,8 +673,8 @@ struct par_programmer {
 	uint32_t (*chip_readl) (const struct flashctx *flash, const chipaddr addr);
 	void (*chip_readn) (const struct flashctx *flash, uint8_t *buf, const chipaddr addr, size_t len);
 };
-extern const struct par_programmer *par_programmer;
-void register_par_programmer(const struct par_programmer *pgm, const enum chipbustype buses);
+extern const struct par_master *par_master;
+void register_par_master(const struct par_master *pgm, const enum chipbustype buses);
 
 /* serprog.c */
 #if CONFIG_SERPROG == 1

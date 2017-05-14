@@ -54,6 +54,32 @@ static int enable_flash_ali_m1533(struct pci_dev *dev, const char *name)
 	return 0;
 }
 
+static int enable_flash_rdc_r8610(struct pci_dev *dev, const char *name)
+{
+	uint8_t tmp;
+
+	/* enable ROMCS for writes */
+	tmp = pci_read_byte(dev, 0x43);
+	tmp |= 0x80;
+	pci_write_byte(dev, 0x43, tmp);
+
+	/* read the bootstrapping register */
+	tmp = pci_read_byte(dev, 0x40) & 0x3;
+	switch (tmp) {
+	case 3:
+		internal_buses_supported = BUS_FWH;
+		break;
+	case 2:
+		internal_buses_supported = BUS_LPC;
+		break;
+	default:
+		internal_buses_supported = BUS_PARALLEL;
+		break;
+	}
+
+	return 0;
+}
+
 static int enable_flash_sis85c496(struct pci_dev *dev, const char *name)
 {
 	uint8_t tmp;
@@ -253,8 +279,9 @@ static int enable_flash_piix4(struct pci_dev *dev, const char *name)
  * See ie. page 375 of "Intel I/O Controller Hub 7 (ICH7) Family Datasheet"
  * http://download.intel.com/design/chipsets/datashts/30701303.pdf
  */
-static int enable_flash_ich(struct pci_dev *dev, const char *name,
-			    int bios_cntl)
+static int __enable_flash_ich(void *dev, const char *name, int bios_cntl,
+			 u8 (*read_bios_cntl)(struct pci_dev *,int),
+			 int (*write_bios_cntl)(struct pci_dev *, int, uint8_t))
 {
 	uint8_t old, new, wanted;
 
@@ -262,7 +289,7 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	 * Note: the ICH0-ICH5 BIOS_CNTL register is actually 16 bit wide, but
 	 * just treating it as 8 bit wide seems to work fine in practice.
 	 */
-	old = pci_read_byte(dev, bios_cntl);
+	old = read_bios_cntl(dev, bios_cntl);
 	wanted = old;
 
 	msg_pdbg("\nBIOS Lock Enable: %sabled, ",
@@ -290,9 +317,9 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	if (wanted == old)
 		return 0;
 
-	rpci_write_byte(dev, bios_cntl, wanted);
+	write_bios_cntl(dev, bios_cntl, wanted);
 
-	if ((new = pci_read_byte(dev, bios_cntl)) != wanted) {
+	if ((new = read_bios_cntl(dev, bios_cntl)) != wanted) {
 		msg_pinfo("WARNING: Setting 0x%x from 0x%x to 0x%x on %s "
 			  "failed. New value is 0x%x.\n",
 			  bios_cntl, old, wanted, name, new);
@@ -300,6 +327,32 @@ static int enable_flash_ich(struct pci_dev *dev, const char *name,
 	}
 
 	return 0;
+}
+
+static int enable_flash_ich(struct pci_dev *dev, const char *name,
+			    int bios_cntl)
+{
+	return __enable_flash_ich(dev, name, bios_cntl, pci_read_byte,
+				  rpci_write_byte);
+}
+
+static u8 apl_read_bios_cntl(struct pci_dev *dev, int offset)
+{
+	void *base = dev;
+	return mmio_readb(base + offset);
+}
+
+static int apl_write_bios_cntl(struct pci_dev *dev, int offset, uint8_t val)
+{
+	void *base = dev;
+	mmio_writeb(val, base + offset);
+	return 0;
+}
+
+static int enable_flash_ich_apl(void *dev, const char *name, int bios_cntl)
+{
+	return __enable_flash_ich(dev, name, bios_cntl, apl_read_bios_cntl,
+				  apl_write_bios_cntl);
 }
 
 static int enable_flash_ich_4e(struct pci_dev *dev, const char *name)
@@ -662,6 +715,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	case CHIPSET_8_SERIES_LYNX_POINT_LP:
 	case CHIPSET_9_SERIES_WILDCAT_POINT:
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		straps_names = straps_names_lpt_lp;
 		break;
 	default:
@@ -672,6 +726,22 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	}
 
 	switch (generation) {
+	case CHIPSET_APL:
+		ret = enable_flash_ich_apl(dev, name, 0xdc);
+		if (ret == ERROR_FATAL)
+			return ret;
+
+		/* Read SPI BAR */
+		tmp = mmio_readl((void *)dev + 0x10) & 0xfffff000;
+		msg_pdbg("SPI BAR is = 0x%x\n", tmp);
+
+		/* Map SPI BAR to virtual memory */
+		rcrb = physmap("PCH SPI BAR0", tmp, 0x4000);
+
+		/* Set BBS (Boot BIOS Straps) field of GCS register. */
+		gcs = mmio_readl((void *)dev + 0xdc);
+		break;
+
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		ret = enable_flash_ich(dev, name, 0xdc);
 		if (ret == ERROR_FATAL)
@@ -771,6 +841,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		}
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		if (target_bus == BUS_SPI) {
 			msg_pdbg("Setting BBS to SPI -\n");
 			gcs = (gcs & ~0x40) | (0x0 << 6);
@@ -786,6 +857,13 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	}
 
 	switch (generation) {
+	case CHIPSET_APL:
+		mmio_writel(gcs, (void *)dev + 0xdc);
+		msg_pdbg("GCS = 0x%x: ", gcs);
+		msg_pdbg("BIOS Interface Lock-Down: %sabled, ",
+			(gcs & 0x80) ? "en" : "dis");
+		break;
+
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
 		rpci_write_long(dev, 0xdc, gcs);
 		msg_pdbg("GCS = 0x%x: ", gcs);
@@ -807,6 +885,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 		bbs = (gcs >> 10) & 0x1;
 		break;
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		bbs = (gcs & 0x40) >> 6;
 		break;
 	default:
@@ -818,6 +897,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 
 	switch (generation) {
 	case CHIPSET_100_SERIES_SUNRISE_POINT:
+	case CHIPSET_APL:
 		break;
 	default:
 		buc = mmio_readb(rcrb + 0x3414);
@@ -846,7 +926,7 @@ static int enable_flash_ich_dc_spi(struct pci_dev *dev, const char *name,
 	ret_spi = ich_init_spi(dev, tmp, rcrb, generation);
 	if (ret_spi == ERROR_FATAL)
 		return ret_spi;
-	
+
 	if (ret || ret_spi)
 		ret = ERROR_NONFATAL;
 
@@ -910,6 +990,19 @@ static int enable_flash_sunrisepoint(struct pci_dev *dev, const char *name)
 {
 	return enable_flash_ich_dc_spi(dev, name,
 					CHIPSET_100_SERIES_SUNRISE_POINT);
+}
+
+static int enable_flash_apl(struct pci_dev *dev, const char *name)
+{
+	uint32_t addr = (0xe0000000 | (0xd << 15) | (0x2 << 12));
+
+	void *spicfg = physmap("SPI PCI CONFIG", addr, 0x1000);
+
+	msg_pdbg("Vendor ID: %x, Device ID: %x, BAR: %x\n",
+		 mmio_readw(spicfg + 0x0), mmio_readw(spicfg + 0x2),
+		 mmio_readl(spicfg + 0x10));
+
+	return enable_flash_ich_dc_spi(spicfg, name, CHIPSET_APL);
 }
 
 /* Baytrail */
@@ -1498,7 +1591,7 @@ const struct penable chipset_enables[] = {
 #if defined(__i386__) || defined(__x86_64__)
 	{0x1002, 0x4377, OK, "ATI", "SB400",		enable_flash_sb400},
 	{0x1002, 0x438d, OK, "AMD", "SB600",		enable_flash_sb600},
-	{0x1002, 0x439d, OK, "AMD", "SB700/SB710/SB750/SB850", enable_flash_sb600},
+	{0x1002, 0x439d, OK, "AMD", "SB7x0/SB8x0/SB9x0", enable_flash_sb600},
 	{0x100b, 0x0510, NT, "AMD", "SC1100",		enable_flash_sc1100},
 	{0x1022, 0x2080, OK, "AMD", "CS5536",		enable_flash_cs5536},
 	{0x1022, 0x2090, OK, "AMD", "CS5536",		enable_flash_cs5536},
@@ -1521,7 +1614,7 @@ const struct penable chipset_enables[] = {
 	{0x1039, 0x0651, OK, "SiS", "651",		enable_flash_sis540},
 	{0x1039, 0x0655, NT, "SiS", "655",		enable_flash_sis540},
 	{0x1039, 0x0661, OK, "SiS", "661",		enable_flash_sis540},
-	{0x1039, 0x0730, NT, "SiS", "730",		enable_flash_sis540},
+	{0x1039, 0x0730, OK, "SiS", "730",		enable_flash_sis540},
 	{0x1039, 0x0733, NT, "SiS", "733",		enable_flash_sis540},
 	{0x1039, 0x0735, OK, "SiS", "735",		enable_flash_sis540},
 	{0x1039, 0x0740, NT, "SiS", "740",		enable_flash_sis540},
@@ -1565,7 +1658,7 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0365, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* LPC */
 	{0x10de, 0x0366, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* LPC */
 	{0x10de, 0x0367, OK, "NVIDIA", "MCP55",		enable_flash_mcp55}, /* Pro */
-	{0x10de, 0x03e0, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
+	{0x10de, 0x03e0, OK, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x03e1, OK, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x03e2, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
 	{0x10de, 0x03e3, NT, "NVIDIA", "MCP61",		enable_flash_mcp6x_7x},
@@ -1576,8 +1669,8 @@ const struct penable chipset_enables[] = {
 	{0x10de, 0x0548, OK, "NVIDIA", "MCP67",		enable_flash_mcp6x_7x},
 	{0x10de, 0x075c, NT, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
 	{0x10de, 0x075d, OK, "NVIDIA", "MCP78S",	enable_flash_mcp6x_7x},
-	{0x10de, 0x07d7, NT, "NVIDIA", "MCP73",		enable_flash_mcp6x_7x},
-	{0x10de, 0x0aac, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
+	{0x10de, 0x07d7, OK, "NVIDIA", "MCP73",		enable_flash_mcp6x_7x},
+	{0x10de, 0x0aac, OK, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0aad, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0aae, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
 	{0x10de, 0x0aaf, NT, "NVIDIA", "MCP79",		enable_flash_mcp6x_7x},
@@ -1586,12 +1679,12 @@ const struct penable chipset_enables[] = {
 	{0x1106, 0x0595, NT, "VIA", "VT82C595",		via_no_byte_merge},
 	{0x1106, 0x0597, NT, "VIA", "VT82C597",		via_no_byte_merge},
 	{0x1106, 0x0601, NT, "VIA", "VT8601/VT8601A",	via_no_byte_merge},
-	{0x1106, 0x0691, NT, "VIA", "VT82C69x",		via_no_byte_merge}, /* 691, 693a, 694t, 694x checked */
+	{0x1106, 0x0691, OK, "VIA", "VT82C69x",		via_no_byte_merge},
 	{0x1106, 0x8601, NT, "VIA", "VT8601T",		via_no_byte_merge},
 	/* VIA southbridges */
 	{0x1106, 0x0586, OK, "VIA", "VT82C586A/B",	enable_flash_amd8111},
 	{0x1106, 0x0596, OK, "VIA", "VT82C596",		enable_flash_amd8111},
-	{0x1106, 0x0686, NT, "VIA", "VT82C686A/B",	enable_flash_amd8111},
+	{0x1106, 0x0686, OK, "VIA", "VT82C686A/B",	enable_flash_amd8111},
 	{0x1106, 0x3074, OK, "VIA", "VT8233",		enable_flash_vt823x},
 	{0x1106, 0x3147, OK, "VIA", "VT8233A",		enable_flash_vt823x},
 	{0x1106, 0x3177, OK, "VIA", "VT8235",		enable_flash_vt823x},
@@ -1604,6 +1697,7 @@ const struct penable chipset_enables[] = {
 	{0x1106, 0x8409, OK, "VIA", "VX855/VX875",	enable_flash_vt823x},
 	{0x1166, 0x0200, OK, "Broadcom", "OSB4",	enable_flash_osb4},
 	{0x1166, 0x0205, OK, "Broadcom", "HT-1000",	enable_flash_ht1000},
+	{0x17f3, 0x6030, OK, "RDC", "R8610/R3210",	enable_flash_rdc_r8610},
 	{0x8086, 0x122e, OK, "Intel", "PIIX",		enable_flash_piix4},
 	{0x8086, 0x1234, NT, "Intel", "MPIIX",		enable_flash_piix4},
 	{0x8086, 0x1c44, OK, "Intel", "Z68",		enable_flash_pch6},
@@ -1621,8 +1715,8 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x1c54, NT, "Intel", "C204",		enable_flash_pch6},
 	{0x8086, 0x1c56, NT, "Intel", "C206",		enable_flash_pch6},
 	{0x8086, 0x1c5c, NT, "Intel", "H61",		enable_flash_pch6},
-	{0x8086, 0x1d40, OK, "Intel", "X79",		enable_flash_ich10}, /* FIXME: when datasheet is available */
-	{0x8086, 0x1d41, NT, "Intel", "X79",		enable_flash_ich10}, /* FIXME: when datasheet is available */
+	{0x8086, 0x1d40, OK, "Intel", "X79",		enable_flash_pch6},
+	{0x8086, 0x1d41, NT, "Intel", "X79",		enable_flash_pch6},
 	{0x8086, 0x1e41, OK, "Intel", "Desktop Full",	enable_flash_pch6},
 	{0x8086, 0x1e42, OK, "Intel", "Mobile Full",	enable_flash_pch6},
 	{0x8086, 0x1e43, OK, "Intel", "Mobile SFF",	enable_flash_pch6},
@@ -1727,8 +1821,17 @@ const struct penable chipset_enables[] = {
 	{0x8086, 0x0f1c, OK, "Intel", "Baytrail-M", enable_flash_baytrail},
 	{0x8086, 0x229c, OK, "Intel", "Braswell", enable_flash_baytrail},
 	{0x8086, 0x9d24, OK, "Intel", "Skylake", enable_flash_sunrisepoint},
+	{0x8086, 0xa224, OK, "Intel", "Lewisburg", enable_flash_sunrisepoint},
+	/*
+	 * Currently, on Apollolake platform, the SPI PCI device is hidden in
+	 * the OS. Thus, flashrom is not able to find the SPI device while
+	 * walking the PCI tree. Instead use the PCI ID of APL host bridge. In
+	 * the callback for enabling APL flash, use mmio-based access to mmap
+	 * SPI PCI device and work with it.
+	 */
+	{0x8086, 0x5af0, OK, "Intel", "Apollolake", enable_flash_apl},
 #endif
-	{},
+	{0},
 };
 
 int chipset_flash_enable(void)
@@ -1820,8 +1923,10 @@ int get_target_bus_from_chipset(enum chipbustype *bus)
 				   enable_flash_baytrail) {
 				/* Baytrail has 2 bit BBS at different offset */
 				is_new_ich = 3;
-			} else if (chipset_enables[i].doit ==
-				   enable_flash_sunrisepoint) {
+			} else if ((chipset_enables[i].doit ==
+				   enable_flash_sunrisepoint) ||
+				   (chipset_enables[i].doit ==
+				    enable_flash_apl)) {
 				/* Sunrise point has 1 bit BBS
 				 * in GCS register */
 				is_new_ich = 4;

@@ -19,10 +19,19 @@
  */
 
 /*
- * Datasheet:
+ * Datasheets:
  * PCI/PCI-X Family of Gigabit Ethernet Controllers Software Developer's Manual
  * 82540EP/EM, 82541xx, 82544GC/EI, 82545GM/EM, 82546GB/EB, and 82547xx
- * http://download.intel.com/design/network/manuals/8254x_GBe_SDM.pdf
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/pci-pci-x-family-gbe-controllers-software-dev-manual.html
+ *
+ * PCIe GbE Controllers Open Source Software Developer's Manual
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/pcie-gbe-controllers-open-source-manual.html
+ *
+ * Intel 82574 Gigabit Ethernet Controller Family Datasheet
+ * http://www.intel.com/content/www/us/en/ethernet-controllers/82574l-gbe-controller-datasheet.html
+ *
+ * Intel 82599 10 GbE Controller Datasheet (331520)
+ * http://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf
  */
 
 #include <stdlib.h>
@@ -31,14 +40,17 @@
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 
+/* EEPROM/Flash Control & Data Register */
 #define EECD	0x10
+/* Flash Access Register */
 #define FLA	0x1c
 
 /*
  * Register bits of EECD.
- * 
+ * Table 13-6
+ *
  * Bit 04, 05: FWE (Flash Write Enable Control)
- * 00b = not allowed
+ * 00b = not allowed (on some cards this sends an erase command if bit 31 (FL_ER) of FLA is set)
  * 01b = flash writes disabled
  * 10b = flash writes enabled
  * 11b = not allowed
@@ -46,8 +58,9 @@
 #define FLASH_WRITES_DISABLED	0x10 /* FWE: 10000b */
 #define FLASH_WRITES_ENABLED	0x20 /* FWE: 100000b */
 
-/* Flash Access register bits */
-/* Table 13-9 */
+/* Flash Access register bits
+ * Table 13-9
+ */
 #define FL_SCK	0
 #define FL_CS	1
 #define FL_SI	2
@@ -60,13 +73,13 @@
 
 uint8_t *nicintel_spibar;
 
-const struct pcidev_status nics_intel_spi[] = {
+const struct dev_entry nics_intel_spi[] = {
 	{PCI_VENDOR_ID_INTEL, 0x105e, OK, "Intel", "82571EB Gigabit Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x1076, OK, "Intel", "82541GI Gigabit Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x107c, OK, "Intel", "82541PI Gigabit Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x10b9, OK, "Intel", "82572EI Gigabit Ethernet Controller"},
 
-	{},
+	{0},
 };
 
 static void nicintel_request_spibus(void)
@@ -137,37 +150,39 @@ static const struct bitbang_spi_master bitbang_spi_master_nicintel = {
 	.get_miso = nicintel_bitbang_get_miso,
 	.request_bus = nicintel_request_spibus,
 	.release_bus = nicintel_release_spibus,
+	.half_period = 1,
 };
 
 static int nicintel_spi_shutdown(void *data)
 {
 	uint32_t tmp;
 
-	/* Disable writes manually. See the comment about EECD in
-	 * nicintel_spi_init() for details.
-	 */
+	/* Disable writes manually. See the comment about EECD in nicintel_spi_init() for details. */
 	tmp = pci_mmio_readl(nicintel_spibar + EECD);
 	tmp &= ~FLASH_WRITES_ENABLED;
 	tmp |= FLASH_WRITES_DISABLED;
 	pci_mmio_writel(tmp, nicintel_spibar + EECD);
-
-	physunmap(nicintel_spibar, 4096);
-	pci_cleanup(pacc);
-	release_io_perms();
 
 	return 0;
 }
 
 int nicintel_spi_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t tmp;
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, nics_intel_spi);
+	dev = pcidev_init(nics_intel_spi, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
 
-	nicintel_spibar = physmap("Intel Gigabit NIC w/ SPI flash",
-				  io_base_addr, 4096);
+	uint32_t io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
+
+	nicintel_spibar = rphysmap("Intel Gigabit NIC w/ SPI flash", io_base_addr, 4096);
 	/* Automatic restore of EECD on shutdown is not possible because EECD
 	 * does not only contain FLASH_WRITES_DISABLED|FLASH_WRITES_ENABLED,
 	 * but other bits with side effects as well. Those other bits must be
@@ -181,8 +196,7 @@ int nicintel_spi_init(void)
 	if (register_shutdown(nicintel_spi_shutdown, NULL))
 		return 1;
 
-	/* 1 usec halfperiod delay for now. */
-	if (bitbang_spi_init(&bitbang_spi_master_nicintel, 1))
+	if (register_spi_bitbang_master(&bitbang_spi_master_nicintel))
 		return 1;
 
 	return 0;

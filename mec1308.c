@@ -34,6 +34,7 @@
 
 #if defined(__i386__) || defined(__x86_64__)
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -134,7 +135,8 @@ static int mec1308_get_sio_index(uint16_t *port)
 		return 0;
 	}
 
-	get_io_perms();
+	if (rget_io_perms())
+		return -1;
 
 	for (i = 0; i < ARRAY_SIZE(ports); i++) {
 		uint8_t tmp8;
@@ -336,13 +338,15 @@ static int mec1308_shutdown(void *data)
 
 int mec1308_spi_read(struct flashctx *flash, uint8_t * buf, int start, int len)
 {
-	return spi_read_chunked(flash, buf, start, len, flash->page_size);
+	return spi_read_chunked(flash, buf, start, len,
+				flash->chip->page_size);
 }
 
 int mec1308_spi_write_256(struct flashctx *flash,
                           uint8_t *buf, int start, int len)
 {
-	return spi_write_chunked(flash, buf, start, len, flash->page_size);
+	return spi_write_chunked(flash, buf, start, len,
+				 flash->chip->page_size);
 }
 
 static int mec1308_chip_select(void)
@@ -393,7 +397,7 @@ mec1308_spi_send_command_exit:
 	return rc;
 }
 
-static const struct spi_programmer spi_programmer_mec1308 = {
+static const struct spi_master spi_master_mec1308 = {
 	.type = SPI_CONTROLLER_MEC1308,
 	.max_data_read = 256,	/* FIXME: should be MAX_DATA_READ_UNLIMITED? */
 	.max_data_write = 256,	/* FIXME: should be MAX_DATA_WRITE_UNLIMITED? */
@@ -409,15 +413,25 @@ int mec1308_probe_spi_flash(const char *name)
 	uint16_t sio_port;
 	uint8_t device_id;
 	uint8_t tmp8;
+	int ret = 0;
+	char *p = NULL;
 
 	msg_pdbg("%s(): entered\n", __func__);
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("mec1308 only supports \"ec\" type devices\n");
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
+	}
+
 	if (mec1308_get_sio_index(&sio_port) < 0) {
 		msg_pdbg("MEC1308 not found (probe failed).\n");
-		return 1;
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
 	}
 	device_id = sio_read(sio_port, MEC1308_DEVICE_ID_REG);
 	switch(device_id) {
@@ -433,7 +447,8 @@ int mec1308_probe_spi_flash(const char *name)
 		break;
 	default:
 		msg_pdbg("MEC1308 not found\n");
-		return 1;
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
 	}
 
 	/*
@@ -457,23 +472,28 @@ int mec1308_probe_spi_flash(const char *name)
 	 * command to finish.*/
 	if (mbx_wait() != 0) {
 		msg_perr("%s: mailbox is not available\n", __func__);
-		return 1;
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
 	}
 
 	/* Further setup -- disable SMI and ACPI.
 	   FIXME: is there an ordering dependency? */
 	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_ACPI_DISABLE)) {
 		msg_pdbg("%s: unable to disable ACPI\n", __func__);
-		return 1;
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
 	}
 
 	if (mbx_write(MEC1308_MBX_CMD, MEC1308_CMD_SMI_DISABLE)) {
 		msg_pdbg("%s: unable to disable SMI\n", __func__);
-		return 1;
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
 	}
 
-	if (register_shutdown(mec1308_shutdown, NULL))
-		return 1;
+	if (register_shutdown(mec1308_shutdown, NULL)) {
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
+	}
 
 	/*
 	 * Enter SPI Pass-Thru Mode after commands which do not require access
@@ -482,12 +502,16 @@ int mec1308_probe_spi_flash(const char *name)
 	 */
 	mec1308_exit_passthru_mode();
 
-	if (enter_passthru_mode())
-		return 1;
+	if (enter_passthru_mode()) {
+		ret = 1;
+		goto mec1308_probe_spi_flash_exit;
+	}
 
 	buses_supported |= BUS_LPC;	/* for LPC <--> SPI bridging */
-	register_spi_programmer(&spi_programmer_mec1308);
+	register_spi_master(&spi_master_mec1308);
 	msg_pdbg("%s(): successfully initialized mec1308\n", __func__);
-	return 0;
+mec1308_probe_spi_flash_exit:
+	free(p);
+	return ret;
 }
 #endif

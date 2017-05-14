@@ -32,6 +32,7 @@
  * EVEN IF GOOGLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -51,11 +52,12 @@
 #include "cros_ec.h"
 #include "programmer.h"
 
-#define CROS_EC_DEV_SUFFIX "/dev/cros_"
-#define CROS_EC_DEV_NAME CROS_EC_DEV_SUFFIX "XX"
+#define CROS_EC_DEV_PREFIX "/dev/cros_"
 #define CROS_EC_COMMAND_RETRIES	50
 
 int cros_ec_fd;		/* File descriptor for kernel device */
+
+/* ec device interface v1 (used with Chrome OS v3.18 and earlier) */
 
 /**
  * Wait for a command to complete, then return the response
@@ -151,13 +153,142 @@ static int __cros_ec_command_dev(int command, int version,
 		return -EC_RES_ERROR;
 	}
 	if (cmd.result) {
-		msg_perr("%s(): Command 0x%02x returned result: %d\n",
+		msg_pdbg("%s(): Command 0x%02x returned result: %d\n",
 			 __func__, command, cmd.result);
 		return -cmd.result;
 	}
 
 	return ret;
 }
+
+/*
+ * ec device interface v2
+ * (used with upstream kernel as well as with Chrome OS v4.4 and later)
+ */
+
+static int command_wait_for_response_v2(void)
+{
+	uint8_t s_cmd_buf[sizeof(struct cros_ec_command_v2) +
+			  sizeof(struct ec_response_get_comms_status)];
+	struct ec_response_get_comms_status *status;
+	struct cros_ec_command_v2 *s_cmd;
+	int ret;
+	int i;
+
+	s_cmd = (struct cros_ec_command_v2 *)s_cmd_buf;
+	status = (struct ec_response_get_comms_status *)s_cmd->data;
+
+	s_cmd->version = 0;
+	s_cmd->command = EC_CMD_GET_COMMS_STATUS;
+	s_cmd->outsize = 0;
+	s_cmd->insize = sizeof(*status);
+
+	/*
+	 * FIXME: magic delay until we fix the underlying problem (probably in
+	 * the kernel driver)
+	 */
+	usleep(10 * 1000);
+	for (i = 1; i <= CROS_EC_COMMAND_RETRIES; i++) {
+		ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD_V2, s_cmd_buf,
+			    sizeof(s_cmd_buf));
+		if (ret < 0) {
+			msg_perr("%s(): CrOS EC command failed: %d, errno=%d\n",
+				 __func__, ret, errno);
+			ret = -EC_RES_ERROR;
+			break;
+		}
+		if (s_cmd->result) {
+			msg_perr("%s(): CrOS EC command failed: result=%d\n",
+				 __func__, s_cmd->result);
+			ret = -s_cmd->result;
+			break;
+		}
+
+		if (!(status->flags & EC_COMMS_STATUS_PROCESSING)) {
+			ret = -EC_RES_SUCCESS;
+			break;
+		}
+
+		usleep(1000);
+	}
+
+	return ret;
+}
+
+static int __cros_ec_command_dev_v2(int command, int version,
+			   const void *outdata, int outsize,
+			   void *indata, int insize)
+{
+	struct cros_ec_command_v2 *s_cmd;
+	int size = sizeof(struct cros_ec_command_v2) + max(outsize, insize);
+	int ret;
+
+	assert(outsize == 0 || outdata != NULL);
+	assert(insize == 0 || indata != NULL);
+
+	s_cmd = malloc(size);
+	if (s_cmd == NULL)
+		return -EC_RES_ERROR;
+
+	s_cmd->command = command;
+	s_cmd->version = version;
+	s_cmd->result = 0xff;
+	s_cmd->outsize = outsize;
+	s_cmd->insize = insize;
+	memcpy(s_cmd->data, outdata, outsize);
+
+	ret = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD_V2, s_cmd, size);
+	if (ret < 0 && errno == EAGAIN) {
+		ret = command_wait_for_response_v2();
+		s_cmd->result = 0;
+	}
+	if (ret < 0) {
+		msg_perr("%s(): Command 0x%02x failed: %d, errno=%d\n",
+			__func__, command, ret, errno);
+		free(s_cmd);
+		return -EC_RES_ERROR;
+	}
+	if (s_cmd->result) {
+		msg_pdbg("%s(): Command 0x%02x returned result: %d\n",
+			 __func__, command, s_cmd->result);
+		free(s_cmd);
+		return -s_cmd->result;
+	}
+
+	memcpy(indata, s_cmd->data, min(ret, insize));
+	free(s_cmd);
+	return min(ret, insize);
+}
+
+/*
+ * Attempt to communicate with kernel using old ioctl format.
+ * If it returns ENOTTY, assume that this kernel uses the new format.
+ */
+static int ec_dev_is_v2()
+{
+	struct ec_params_hello h_req = {
+		.in_data = 0xa0b0c0d0
+	};
+	struct ec_response_hello h_resp;
+	struct cros_ec_command s_cmd = { };
+	int r;
+
+	s_cmd.command = EC_CMD_HELLO;
+	s_cmd.result = 0xff;
+	s_cmd.outsize = sizeof(h_req);
+	s_cmd.outdata = (uint8_t *)&h_req;
+	s_cmd.insize = sizeof(h_resp);
+	s_cmd.indata = (uint8_t *)&h_resp;
+
+	r = ioctl(cros_ec_fd, CROS_EC_DEV_IOCXCMD, &s_cmd, sizeof(s_cmd));
+	if (r < 0 && errno == ENOTTY)
+		return 1;
+
+	return 0;
+}
+
+static int (*__cros_ec_command_dev_fn)(int command, int version,
+	const void *outdata, int outsize, void *indata, int insize);
 
 /*
  * cros_ec_command_dev - Issue command to CROS_EC device with retry
@@ -184,8 +315,8 @@ static int cros_ec_command_dev(int command, int version,
 	int try;
 
 	for (try = 0; try < CROS_EC_DEV_RETRY; try++) {
-		ret = __cros_ec_command_dev(command, version, outdata,
-					    outsize, indata, insize);
+		ret = __cros_ec_command_dev_fn(command, version, outdata,
+					       outsize, indata, insize);
 		if (ret >= 0)
 			return ret;
 	}
@@ -206,7 +337,6 @@ static struct opaque_programmer opaque_programmer_cros_ec_dev = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
-	.data		= &cros_ec_dev_priv,
 };
 
 static int cros_ec_dev_shutdown(void *data)
@@ -217,7 +347,7 @@ static int cros_ec_dev_shutdown(void *data)
 
 int cros_ec_probe_dev(void)
 {
-	char dev_name[strlen(CROS_EC_DEV_NAME)];
+	char dev_path[32];
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
@@ -225,23 +355,29 @@ int cros_ec_probe_dev(void)
 	if (cros_ec_parse_param(&cros_ec_dev_priv))
 		return 1;
 
-	strcpy(dev_name, CROS_EC_DEV_SUFFIX);
-	strcat(dev_name, cros_ec_dev_priv.dev);
+	snprintf(dev_path, sizeof(dev_path), "%s%s",
+			CROS_EC_DEV_PREFIX, cros_ec_dev_priv.dev);
 
-	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, dev_name);
-	cros_ec_fd = open(dev_name, O_RDWR);
+	msg_pdbg("%s: probing for CROS_EC at %s\n", __func__, dev_path);
+	cros_ec_fd = open(dev_path, O_RDWR);
 	if (cros_ec_fd < 0)
 		return cros_ec_fd;
+
+	if (ec_dev_is_v2())
+		__cros_ec_command_dev_fn = __cros_ec_command_dev_v2;
+	else
+		__cros_ec_command_dev_fn = __cros_ec_command_dev;
 
 	if (cros_ec_test(&cros_ec_dev_priv))
 		return 1;
 
 	cros_ec_set_max_size(&cros_ec_dev_priv, &opaque_programmer_cros_ec_dev);
 
-	msg_pdbg("CROS_EC detected at %s\n", dev_name);
+	msg_pdbg("CROS_EC detected at %s\n", dev_path);
 	register_opaque_programmer(&opaque_programmer_cros_ec_dev);
 	register_shutdown(cros_ec_dev_shutdown, NULL);
 	cros_ec_dev_priv.detected = 1;
+	cros_ec_priv = &cros_ec_dev_priv;
 
 	return 0;
 }

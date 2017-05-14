@@ -28,11 +28,11 @@
 uint8_t *mv_bar;
 uint16_t mv_iobar;
 
-const struct pcidev_status satas_mv[] = {
+const struct dev_entry satas_mv[] = {
 	/* 88SX6041 and 88SX6042 are the same according to the datasheet. */
 	{0x11ab, 0x7042, OK, "Marvell", "88SX7042 PCI-e 4-port SATA-II"},
 
-	{},
+	{0},
 };
 
 #define NVRAM_PARAM			0x1045c
@@ -45,8 +45,7 @@ static void satamv_chip_writeb(const struct flashctx *flash, uint8_t val,
 			       chipaddr addr);
 static uint8_t satamv_chip_readb(const struct flashctx *flash,
 				 const chipaddr addr);
-
-static const struct par_programmer par_programmer_satamv = {
+static const struct par_master par_master_satamv = {
 		.chip_readb		= satamv_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -56,14 +55,6 @@ static const struct par_programmer par_programmer_satamv = {
 		.chip_writel		= fallback_chip_writel,
 		.chip_writen		= fallback_chip_writen,
 };
-
-static int satamv_shutdown(void *data)
-{
-	physunmap(mv_bar, 0x20000);
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 0;
-}
 
 /*
  * Random notes:
@@ -83,23 +74,25 @@ static int satamv_shutdown(void *data)
  */
 int satamv_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uintptr_t addr;
 	uint32_t tmp;
 
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
 	/* BAR0 has all internal registers memory mapped. */
-	/* No need to check for errors, pcidev_init() will not return in case
-	 * of errors.
-	 */
-	addr = pcidev_init(PCI_BASE_ADDRESS_0, satas_mv);
+	dev = pcidev_init(satas_mv, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
 
-	mv_bar = physmap("Marvell 88SX7042 registers", addr, 0x20000);
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!addr)
+		return 1;
+
+	mv_bar = rphysmap("Marvell 88SX7042 registers", addr, 0x20000);
 	if (mv_bar == ERROR_PTR)
 		goto error_out;
-
-	if (register_shutdown(satamv_shutdown, NULL))
-		return 1;
 
 	tmp = pci_mmio_readl(mv_bar + FLASH_PARAM);
 	msg_pspew("Flash Parameters:\n");
@@ -144,7 +137,7 @@ int satamv_init(void)
 	pci_rmmio_writel(tmp, mv_bar + GPIO_PORT_CONTROL);
 
 	/* Get I/O BAR location. */
-	tmp = pci_read_long(pcidev_dev, PCI_BASE_ADDRESS_2) &
+	tmp = pci_read_long(dev, PCI_BASE_ADDRESS_2) &
 	      PCI_BASE_ADDRESS_IO_MASK;
 	/* Truncate to reachable range.
 	 * FIXME: Check if the I/O BAR is actually reachable.
@@ -156,13 +149,11 @@ int satamv_init(void)
 	/* 512 kByte with two 8-bit latches, and
 	 * 4 MByte with additional 3-bit latch. */
 	max_rom_decode.parallel = 4 * 1024 * 1024;
-	register_par_programmer(&par_programmer_satamv, BUS_PARALLEL);
+	register_par_master(&par_master_satamv, BUS_PARALLEL);
 
 	return 0;
 
 error_out:
-	pci_cleanup(pacc);
-	release_io_perms();
 	return 1;
 }
 
@@ -188,13 +179,15 @@ static uint8_t satamv_indirect_chip_readb(const chipaddr addr)
 }
 
 /* FIXME: Prefer direct access to BAR2 if BAR2 is active. */
-void satamv_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void satamv_chip_writeb(const struct flashctx *flash, uint8_t val,
+			       chipaddr addr)
 {
 	satamv_indirect_chip_writeb(val, addr);
 }
 
 /* FIXME: Prefer direct access to BAR2 if BAR2 is active. */
-uint8_t satamv_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t satamv_chip_readb(const struct flashctx *flash,
+				 const chipaddr addr)
 {
 	return satamv_indirect_chip_readb(addr);
 }

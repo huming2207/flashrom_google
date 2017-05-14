@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "flash.h"
 #include "search.h"
@@ -73,7 +74,7 @@ int search_find_next(struct search_info *search, off_t *offsetp)
 	long int flash_size;
 	int ret;
 
-	flash_size = search->flash->total_size * 1024;
+	flash_size = search->flash->chip->total_size * 1024;
 	switch (search->state) {
 	case SEARCH_STATE_START:
 		search->ceiling_size = ceiling(flash_size);

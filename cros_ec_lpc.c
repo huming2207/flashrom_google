@@ -397,7 +397,6 @@ static struct opaque_programmer cros_ec = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
-	.data		= &cros_ec_lpc_priv,
 };
 
 /*
@@ -523,11 +522,17 @@ int cros_ec_probe_lpc(const char *name) {
 	if (cros_ec_parse_param(&cros_ec_lpc_priv))
 		return 1;
 
+	if (cros_ec_lpc_priv.dev && strcmp(cros_ec_lpc_priv.dev, "ec")) {
+		msg_pdbg("cros_ec_lpc only supports \"ec\" type devices.\n");
+		return 1;
+	}
+
 	if (detect_ec(&cros_ec_lpc_priv))
 		return 1;
 
 	msg_pdbg("CROS_EC detected on LPC bus\n");
 	cros_ec_lpc_priv.detected = 1;
+	cros_ec_priv = &cros_ec_lpc_priv;
 
 	if (buses_supported & BUS_SPI) {
 		msg_pdbg("%s():%d remove BUS_SPI from buses_supported.\n",

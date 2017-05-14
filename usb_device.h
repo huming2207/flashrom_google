@@ -53,21 +53,21 @@
  * flashrom recognizes.  It also displays additional libusb specific
  * information about the failure.
  */
-#define LIBUSB(expression)				      \
-	({						      \
-		int error__ = (expression);		      \
-							      \
-		if (error__ < 0) {			      \
-			msg_perr("libusb error: %s:%d %s\n",  \
-				 __FILE__,		      \
-				 __LINE__,		      \
-				 libusb_error_name(error__)); \
-			error__ = 0x20000 | -error__;	      \
-		} else {				      \
-			error__ = 0;			      \
-		}					      \
-							      \
-		error__;				      \
+#define LIBUSB(expression)				      		\
+	({						      		\
+		int libusb_error__ = (expression);		      	\
+							      		\
+		if (libusb_error__ < 0) {			      	\
+			msg_perr("libusb error: %s:%d %s\n",  		\
+				 __FILE__,		      		\
+				 __LINE__,		      		\
+				 libusb_error_name(libusb_error__)); 	\
+			libusb_error__ = 0x20000 | -libusb_error__;	\
+		} else {				      		\
+			libusb_error__ = 0;			      	\
+		}					      		\
+							      		\
+		libusb_error__;				      		\
 	})
 
 /*
@@ -89,6 +89,7 @@ struct usb_match {
 	struct usb_match_value address;
 	struct usb_match_value vid;
 	struct usb_match_value pid;
+	struct usb_match_value serial;
 	struct usb_match_value config;
 	struct usb_match_value interface;
 	struct usb_match_value altsetting;

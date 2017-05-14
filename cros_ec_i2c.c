@@ -264,7 +264,6 @@ static struct opaque_programmer opaque_programmer_cros_ec_i2c = {
 	.read		= cros_ec_read,
 	.write		= cros_ec_write,
 	.erase		= cros_ec_block_erase,
-	.data		= &cros_ec_i2c_priv,
 };
 
 int cros_ec_probe_i2c(const char *name)
@@ -278,6 +277,11 @@ int cros_ec_probe_i2c(const char *name)
 
 	if (cros_ec_parse_param(&cros_ec_i2c_priv))
 		return 1;
+
+	if (cros_ec_i2c_priv.dev && strcmp(cros_ec_i2c_priv.dev, "ec")) {
+		msg_pdbg("cros_ec_i2c only supports \"ec\" type devices.\n");
+		return 1;
+	}
 
 #if USE_CROS_EC_LOCK == 1
 	if (acquire_cros_ec_lock(CROS_EC_LOCK_TIMEOUT_SECS) < 0) {
@@ -336,6 +340,7 @@ int cros_ec_probe_i2c(const char *name)
 	msg_pdbg("CROS_EC detected on I2C bus\n");
 	register_opaque_programmer(&opaque_programmer_cros_ec_i2c);
 	cros_ec_i2c_priv.detected = 1;
+	cros_ec_priv = &cros_ec_i2c_priv;
 	ret = 0;
 
 cros_ec_probe_i2c_done:

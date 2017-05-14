@@ -45,9 +45,10 @@ static uint32_t ogp_reg_siso;
 static uint32_t ogp_reg__ce;
 static uint32_t ogp_reg_sck;
 
-const struct pcidev_status ogp_spi[] = {
+const struct dev_entry ogp_spi[] = {
 	{PCI_VENDOR_ID_OGP, 0x0000, OK, "Open Graphics Project", "Development Board OGD1"},
-	{},
+
+	{0},
 };
 
 static void ogp_request_spibus(void)
@@ -91,19 +92,12 @@ static const struct bitbang_spi_master bitbang_spi_master_ogp = {
 	.get_miso = ogp_bitbang_get_miso,
 	.request_bus = ogp_request_spibus,
 	.release_bus = ogp_release_spibus,
+	.half_period = 0,
 };
-
-static int ogp_spi_shutdown(void *data)
-{
-	physunmap(ogp_spibar, 4096);
-	pci_cleanup(pacc);
-	release_io_perms();
-
-	return 0;
-}
 
 int ogp_spi_init(void)
 {
+	struct pci_dev *dev = NULL;
 	char *type;
 
 	type = extract_programmer_param("rom");
@@ -127,17 +121,22 @@ int ogp_spi_init(void)
 		return 1;
 	}
 
-	get_io_perms();
-
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_0, ogp_spi);
-
-	ogp_spibar = physmap("OGP registers", io_base_addr, 4096);
-
-	if (register_shutdown(ogp_spi_shutdown, NULL))
+	if (rget_io_perms())
 		return 1;
 
-	/* no delay for now. */
-	if (bitbang_spi_init(&bitbang_spi_master_ogp, 0))
+	dev = pcidev_init(ogp_spi, PCI_BASE_ADDRESS_0);
+	if (!dev)
+		return 1;
+
+	uint32_t io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_0);
+	if (!io_base_addr)
+		return 1;
+
+	ogp_spibar = rphysmap("OGP registers", io_base_addr, 4096);
+	if (ogp_spibar == ERROR_PTR)
+		return 1;
+
+	if (register_spi_bitbang_master(&bitbang_spi_master_ogp))
 		return 1;
 
 	return 0;

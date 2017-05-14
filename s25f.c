@@ -497,7 +497,7 @@ int probe_spi_big_spansion(struct flashctx *flash)
 			msg_gdbg(" 0x%02x", dev_id[i]);
 		msg_gdbg(".\n");
 
-		if (dev_id[0] == flash->manufacture_id) {
+		if (dev_id[0] == flash->chip->manufacture_id) {
 			union {
 				uint8_t array[4];
 				uint32_t whole;
@@ -528,7 +528,7 @@ int probe_spi_big_spansion(struct flashctx *flash)
 	 */
 			memcpy(model_id.array, dev_id + 1, 2);
 			memcpy(model_id.array + 2, dev_id + 4, 2);
-			if (be_to_cpu32(model_id.whole) == flash->model_id)
+			if (be_to_cpu32(model_id.whole) == flash->chip->model_id)
 				return 1;
 		}
 	}

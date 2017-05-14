@@ -167,7 +167,7 @@ static void wiki_helper(const char *devicetype, int cols,
 		       boards[i].url ? boards[i].url : "",
 		       boards[i].name,
 		       boards[i].url ? "]" : "",
-		       b[k].lb_vendor ? "-m " : "&mdash;",
+		       b[k].lb_vendor ? "-p internal:mainboards=" : "&mdash;",
 		       b[k].lb_vendor ? b[k].lb_vendor : "",
 		       b[k].lb_vendor ? ":" : "",
 		       b[k].lb_vendor ? b[k].lb_part : "",
@@ -210,14 +210,15 @@ static void print_supported_chips_wiki(int cols)
 {
 	int i = 0, c = 1, chipcount = 0;
 	const struct flashchip *f, *old = NULL;
-	uint32_t t;
 	char *s;
 	char vmax[6];
 	char vmin[6];
 
 	for (f = flashchips; f->name != NULL; f++) {
-		/* Don't count "unknown XXXX SPI chip" entries. */
-		if (!strncmp(f->name, "unknown", 7))
+		/* Don't count generic entries. */
+		if (!strncmp(f->vendor, "Unknown", 7) ||
+		    !strncmp(f->vendor, "Programmer", 10) ||
+		    !strncmp(f->name, "unknown", 7))
 			continue;
 		chipcount++;
 	}
@@ -227,15 +228,16 @@ static void print_supported_chips_wiki(int cols)
 		"| valign=\"top\"|\n\n%s", chipcount, chip_th);
 
 	for (f = flashchips; f->name != NULL; f++, i++) {
-		/* Don't print "unknown XXXX SPI chip" entries. */
-		if (!strncmp(f->name, "unknown", 7))
+		/* Don't print generic entries. */
+		if (!strncmp(f->vendor, "Unknown", 7) ||
+		    !strncmp(f->vendor, "Programmer", 10) ||
+		    !strncmp(f->name, "unknown", 7))
 			continue;
 
 		/* Alternate colors if the vendor changes. */
 		if (old != NULL && strcmp(old->vendor, f->vendor))
 			c = !c;
 
-		t = f->tested;
 		s = flashbuses_to_text(f->bustype);
 		sprintf(vmin, "%0.03f", f->voltage.min / (double)1000);
 		sprintf(vmax, "%0.03f", f->voltage.max / (double)1000);
@@ -246,14 +248,14 @@ static void print_supported_chips_wiki(int cols)
 		       "|| %s || %s \n",
 		       (c == 1) ? "eeeeee" : "dddddd", f->vendor, f->name,
 		       f->total_size, s,
-		       (t & TEST_OK_PROBE) ? "OK" :
-		       (t & TEST_BAD_PROBE) ? "No" : "?3",
-		       (t & TEST_OK_READ) ? "OK" :
-		       (t & TEST_BAD_READ) ? "No" : "?3",
-		       (t & TEST_OK_ERASE) ? "OK" :
-		       (t & TEST_BAD_ERASE) ? "No" : "?3",
-		       (t & TEST_OK_WRITE) ? "OK" :
-		       (t & TEST_BAD_WRITE) ? "No" : "?3",
+		       (f->tested.probe == OK) ? "OK" :
+		       (f->tested.probe == BAD) ? "No" : "?3",
+		       (f->tested.read == OK) ? "OK" :
+		       (f->tested.read == BAD) ? "No" : "?3",
+		       (f->tested.erase == OK) ? "OK" :
+		       (f->tested.erase == BAD) ? "No" : "?3",
+		       (f->tested.write == OK) ? "OK" :
+		       (f->tested.write == BAD) ? "No" : "?3",
 		       f->voltage.min ? vmin : "N/A",
 		       f->voltage.min ? vmax : "N/A");
 		free(s);
@@ -272,7 +274,7 @@ static void print_supported_chips_wiki(int cols)
 
 /* Not needed for CONFIG_INTERNAL, but for all other PCI-based programmers. */
 #if CONFIG_NIC3COM+CONFIG_NICREALTEK+CONFIG_NICNATSEMI+CONFIG_GFXNVIDIA+CONFIG_DRKAISER+CONFIG_SATASII+CONFIG_ATAHPT+CONFIG_NICINTEL+CONFIG_NICINTEL_SPI+CONFIG_OGP_SPI+CONFIG_SATAMV >= 1
-static void print_supported_pcidevs_wiki(const struct pcidev_status *devs)
+static void print_supported_pcidevs_wiki(const struct dev_entry *devs)
 {
 	int i = 0;
 	static int c = 0;

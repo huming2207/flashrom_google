@@ -42,27 +42,40 @@ ifeq ($(CONFIG_STATIC),yes)
 PKG_CONFIG += --static
 endif
 
-# FIXME We have to differentiate between host and target OS architecture.
-OS_ARCH	?= $(shell uname)
-ifneq ($(OS_ARCH), SunOS)
+# HOST_OS is only used to work around local toolchain issues.
+HOST_OS	?= $(shell uname)
+ifeq ($(HOST_OS), MINGW32_NT-5.1)
+# Explicitly set CC = gcc on MinGW, otherwise: "cc: command not found".
+CC = gcc
+endif
+ifneq ($(HOST_OS), SunOS)
 STRIP_ARGS = -s
 endif
-ifeq ($(OS_ARCH), Darwin)
+
+# Determine the destination processor architecture.
+# IMPORTANT: The following line must be placed before TARGET_OS is ever used
+# (of course), but should come after any lines setting CC because the line
+# below uses CC itself.
+override TARGET_OS := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E os.h 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
+
+ifeq ($(TARGET_OS), Darwin)
 CPPFLAGS += -I/opt/local/include -I/usr/local/include
 # DirectHW framework can be found in the DirectHW library.
 LDFLAGS += -framework IOKit -framework DirectHW -L/opt/local/lib -L/usr/local/lib
 endif
-ifeq ($(OS_ARCH), FreeBSD)
+ifeq ($(TARGET_OS), FreeBSD)
 CPPFLAGS += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib
 endif
-ifeq ($(OS_ARCH), OpenBSD)
+ifeq ($(TARGET_OS), OpenBSD)
 CPPFLAGS += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib
 endif
-ifeq ($(OS_ARCH), DOS)
+ifeq ($(TARGET_OS), DOS)
 EXEC_SUFFIX := .exe
 CPPFLAGS += -I../libgetopt -I../libpci/include
+# DJGPP has odd uint*_t definitions which cause lots of format string warnings.
+CPPFLAGS += -Wno-format
 # FIXME Check if we can achieve the same effect with -L../libgetopt -lgetopt
 LIBS += ../libgetopt/libgetopt.a
 # Bus Pirate and Serprog are not supported under DOS (missing serial support).
@@ -89,9 +102,9 @@ override CONFIG_FT2232_SPI = no
 endif
 endif
 
-ifeq ($(OS_ARCH), MINGW32_NT-5.1)
-# Explicitly set CC = gcc on MinGW, otherwise: "cc: command not found".
-CC = gcc
+# FIXME: Should we check for Cygwin/MSVC as well?
+ifeq ($(TARGET_OS), MinGW)
+EXEC_SUFFIX := .exe
 # MinGW doesn't have the ffs() function, but we can use gcc's __builtin_ffs().
 CFLAGS += -Dffs=__builtin_ffs
 # libusb-win32/libftdi stuff is usually installed in /usr/local.
@@ -171,10 +184,7 @@ override CONFIG_SATAMV = no
 endif
 endif
 
-ifeq ($(OS_ARCH), libpayload)
-CC:=CC=i386-elf-gcc lpgcc
-AR:=i386-elf-ar
-RANLIB:=i386-elf-ranlib
+ifeq ($(TARGET_OS), libpayload)
 CPPFLAGS += -DSTANDALONE
 ifeq ($(CONFIG_DUMMY), yes)
 UNSUPPORTED_FEATURES += CONFIG_DUMMY=yes
@@ -204,13 +214,21 @@ override CONFIG_FT2232_SPI = no
 endif
 endif
 
+ifneq ($(TARGET_OS), Linux)
+ifeq ($(CONFIG_LINUX_SPI), yes)
+UNSUPPORTED_FEATURES += CONFIG_LINUX_SPI=yes
+else
+override CONFIG_LINUX_SPI = no
+endif
+endif
+
 # Determine the destination processor architecture.
 # IMPORTANT: The following line must be placed before ARCH is ever used
 # (of course), but should come after any lines setting CC because the line
-# below uses CC itself. In some cases we set CC based on OS_ARCH, see above.
-override ARCH := $(strip $(shell LC_ALL=C $(CC) -E arch.h 2>/dev/null | grep -v '^\#'))
+# below uses CC itself.
+override ARCH := $(strip $(shell LC_ALL=C $(CC) $(CPPFLAGS) -E archtest.c 2>/dev/null | grep -v '^\#' | grep '"' | cut -f 2 -d'"'))
 
-ifeq ($(ARCH), "ppc")
+ifeq ($(ARCH), ppc)
 # There's no PCI port I/O support on PPC/PowerPC, yet.
 ifeq ($(CONFIG_NIC3COM), yes)
 UNSUPPORTED_FEATURES += CONFIG_NIC3COM=yes
@@ -269,13 +287,13 @@ CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
 PROGRAMMER_OBJS = udelay.o programmer.o
 
-all: pciutils features $(PROGRAM)$(EXEC_SUFFIX)
+all: pciutils features $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 
 # Set the flashrom version string from the highest revision number
 # of the checked out flashrom files.
 # Note to packagers: Any tree exported with "make export" or "make tarball"
 # will not require subversion. The downloadable snapshots are already exported.
-SVNVERSION := $(shell ./util/getversion.sh)
+SVNVERSION := $(shell ./util/getrevision.sh)
 
 RELEASE := 0.9.4
 VERSION := $(RELEASE) $(SVNVERSION)
@@ -340,21 +358,27 @@ CONFIG_LINUX_I2C ?= no
 
 CONFIG_LINUX_MTD ?= no
 
-# Disable Linux spidev interface support for now, until we check for a Linux
-# device (not host, as DOS binaries for example are built on a Linux host).
-CONFIG_LINUX_SPI ?= no
-
 # Always enable Dediprog SF100 for now.
 CONFIG_DEDIPROG ?= yes
 
 # Always enable Marvell SATA controllers for now.
 CONFIG_SATAMV ?= yes
 
+# Enable Linux spidev interface by default. We disable it on non-Linux targets.
+CONFIG_LINUX_SPI ?= yes
+
 # Disable wiki printing by default. It is only useful if you have wiki access.
 CONFIG_PRINT_WIKI ?= no
 
 # Support for reading a flashmap from a device tree in the image
 CONFIG_FDTMAP ?= no
+
+# Enable all features if CONFIG_EVERYTHING=yes is given
+ifeq ($(CONFIG_EVERYTHING), yes)
+$(foreach var, $(filter CONFIG_%, $(.VARIABLES)),\
+	$(if $(filter no, $($(var))),\
+		$(eval $(var)=yes)))
+endif
 
 # Bitbanging SPI infrastructure, default off unless needed.
 ifeq ($(CONFIG_RAYER_SPI), yes)
@@ -378,11 +402,11 @@ endif
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
 PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o cros_ec.o
-ifeq ($(ARCH),"x86")
+ifeq ($(ARCH),x86)
 PROGRAMMER_OBJS += cros_ec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o
 else
-ifeq ($(ARCH),"arm")
+ifeq ($(ARCH),arm)
 PROGRAMMER_OBJS += cros_ec_i2c.o
 endif
 NEED_PCI := yes
@@ -509,11 +533,6 @@ FEATURE_CFLAGS += -D'CONFIG_LINUX_MTD=1'
 PROGRAMMER_OBJS += linux_mtd.o
 endif
 
-ifeq ($(CONFIG_LINUX_SPI), yes)
-FEATURE_CFLAGS += -D'CONFIG_LINUX_SPI=1'
-PROGRAMMER_OBJS += linux_spi.o
-endif
-
 ifeq ($(CONFIG_DEDIPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_DEDIPROG=1'
 FEATURE_LIBS += -lusb
@@ -526,12 +545,17 @@ PROGRAMMER_OBJS += satamv.o
 NEED_PCI := yes
 endif
 
+ifeq ($(CONFIG_LINUX_SPI), yes)
+FEATURE_CFLAGS += -D'CONFIG_LINUX_SPI=1'
+PROGRAMMER_OBJS += linux_spi.o
+endif
+
 ifeq ($(NEED_SERIAL), yes)
 LIB_OBJS += serial.o
 endif
 
 ifeq ($(NEED_NET), yes)
-ifeq ($(OS_ARCH), SunOS)
+ifeq ($(TARGET_OS), SunOS)
 LIBS += -lsocket
 endif
 endif
@@ -540,13 +564,13 @@ ifeq ($(NEED_PCI), yes)
 CHECK_LIBPCI = yes
 FEATURE_CFLAGS += -D'NEED_PCI=1'
 PROGRAMMER_OBJS += pcidev.o physmap.o hwaccess.o
-ifeq ($(OS_ARCH), NetBSD)
+ifeq ($(TARGET_OS), NetBSD)
 # The libpci we want is called libpciutils on NetBSD and needs NetBSD libpci.
 LIBS += -lpciutils -lpci
 # For (i386|x86_64)_iopl(2).
 LIBS += -l$(shell uname -p)
 else
-ifeq ($(OS_ARCH), DOS)
+ifeq ($(TARGET_OS), DOS)
 # FIXME There needs to be a better way to do this
 LIBS += ../libpci/lib/libpci.a
 else
@@ -556,7 +580,7 @@ LIBS += -static $(LIBS_PCI)
 else
 LIBS += -lpci
 endif
-ifeq ($(OS_ARCH), OpenBSD)
+ifeq ($(TARGET_OS), OpenBSD)
 # For (i386|amd64)_iopl(2).
 LIBS += -l$(shell uname -m)
 endif
@@ -635,11 +659,16 @@ compiler: featuresavailable
 		echo "found." || ( echo "not found."; \
 		rm -f .test.c .test$(EXEC_SUFFIX); exit 1)
 	@rm -f .test.c .test$(EXEC_SUFFIX)
-	@printf "ARCH is "
+	@printf "Target arch is "
 	@# FreeBSD wc will output extraneous whitespace.
-	@echo $(ARCH)|wc -l|grep -q '^[[:blank:]]*1[[:blank:]]*$$' ||	\
+	@echo $(ARCH)|wc -w|grep -q '^[[:blank:]]*1[[:blank:]]*$$' ||	\
 		( echo "unknown. Aborting."; exit 1)
 	@printf "%s\n" '$(ARCH)'
+	@printf "Target OS is "
+	@# FreeBSD wc will output extraneous whitespace.
+	@echo $(TARGET_OS)|wc -w|grep -q '^[[:blank:]]*1[[:blank:]]*$$' ||	\
+		( echo "unknown. Aborting."; exit 1)
+	@printf "%s\n" '$(TARGET_OS)'
 
 define LIBPCI_TEST
 /* Avoid a failing test due to libpci header symbol shadowing breakage */
@@ -736,7 +765,14 @@ endif
 	@$(DIFF) -q .features.tmp .features >/dev/null 2>&1 && rm .features.tmp || mv .features.tmp .features
 	@rm -f .featuretest.c .featuretest$(EXEC_SUFFIX)
 
-install: $(PROGRAM)$(EXEC_SUFFIX)
+$(PROGRAM).8.html: $(PROGRAM).8
+	@groff -mandoc -Thtml $< >$@
+
+$(PROGRAM).8: $(PROGRAM).8.tmpl
+	@# Add the man page change date and version to the man page
+	@sed -e 's#.TH FLASHROM 8 ".*".*#.TH FLASHROM 8 "$(shell ./util/getrevision.sh -d $(PROGRAM).8.tmpl 2>/dev/null)" "$(VERSION)"#' <$< >$@
+
+install: $(PROGRAM)$(EXEC_SUFFIX) $(PROGRAM).8
 	mkdir -p $(DESTDIR)$(PREFIX)/sbin
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	$(INSTALL) -m 0755 $(PROGRAM)$(EXEC_SUFFIX) $(DESTDIR)$(PREFIX)/sbin
@@ -755,7 +791,9 @@ tarball: export
 	@echo Created $(EXPORTDIR)/flashrom-$(RELEASENAME).tar.bz2
 
 djgpp-dos: clean
-	make CC=i586-pc-msdosdjgpp-gcc STRIP=i586-pc-msdosdjgpp-strip WARNERROR=no OS_ARCH=DOS
+	make CC=i586-pc-msdosdjgpp-gcc STRIP=i586-pc-msdosdjgpp-strip
+libpayload: clean
+	make CC="CC=i386-elf-gcc lpgcc" AR=i386-elf-ar RANLIB=i386-elf-ranlib
 
 .PHONY: all clean distclean compiler pciutils features export tarball dos featuresavailable
 

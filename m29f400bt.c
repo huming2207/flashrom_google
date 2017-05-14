@@ -28,7 +28,7 @@
    functions. */
 
 /* chunksize is 1 */
-int write_m29f400bt(struct flashctx *flash, uint8_t *src, unsigned int start, unsigned int len)
+int write_m29f400bt(struct flashctx *flash, const uint8_t *src, unsigned int start, unsigned int len)
 {
 	int i;
 	chipaddr bios = flash->virtual_memory;
@@ -80,7 +80,7 @@ int probe_m29f400bt(struct flashctx *flash)
 
 	msg_cdbg("%s: id1 0x%02x, id2 0x%02x\n", __func__, id1, id2);
 
-	if (id1 == flash->manufacture_id && id2 == flash->model_id)
+	if (id1 == flash->chip->manufacture_id && id2 == flash->chip->model_id)
 		return 1;
 
 	return 0;
@@ -127,7 +127,7 @@ int block_erase_m29f400bt(struct flashctx *flash, unsigned int start, unsigned i
 
 int block_erase_chip_m29f400bt(struct flashctx *flash, unsigned int address, unsigned int blocklen)
 {
-	if ((address != 0) || (blocklen != flash->total_size * 1024)) {
+	if ((address != 0) || (blocklen != flash->chip->total_size * 1024)) {
 		msg_cerr("%s called with incorrect arguments\n",
 			__func__);
 		return -1;

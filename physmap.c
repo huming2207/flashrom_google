@@ -20,7 +20,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <inttypes.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,7 +43,7 @@
 
 static void *realmem_map;
 
-static void *map_first_meg(unsigned long phys_addr, size_t len)
+static void *map_first_meg(uintptr_t phys_addr, size_t len)
 {
 	if (realmem_map)
 		return realmem_map + phys_addr;
@@ -60,7 +62,7 @@ static void *map_first_meg(unsigned long phys_addr, size_t len)
 	return realmem_map + phys_addr;
 }
 
-static void *sys_physmap(unsigned long phys_addr, size_t len)
+static void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	int ret;
 	__dpmi_meminfo mi;
@@ -108,7 +110,7 @@ void physunmap(void *virt_addr, size_t len)
 
 #define MEM_DEV ""
 
-void *sys_physmap(unsigned long phys_addr, size_t len)
+void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	return (void *)phys_to_virt(phys_addr);
 }
@@ -128,11 +130,11 @@ int setup_cpu_msr(int cpu)
 void cleanup_cpu_msr(void)
 {
 }
-#elif defined(__DARWIN__)
+#elif defined(__MACH__) && defined(__APPLE__)
 
 #define MEM_DEV "DirectHW"
 
-static void *sys_physmap(unsigned long phys_addr, size_t len)
+static void *sys_physmap(uintptr_t phys_addr, size_t len)
 {
 	/* The short form of ?: is a GNU extension.
 	 * FIXME: map_physical returns NULL both for errors and for success
@@ -164,7 +166,7 @@ static int fd_mem = -1;
 static int fd_mem_cached = -1;
 
 /* For MMIO access. Must be uncached, doesn't make sense to restrict to ro. */
-static void *sys_physmap_rw_uncached(unsigned long phys_addr, size_t len)
+static void *sys_physmap_rw_uncached(uintptr_t phys_addr, size_t len)
 {
 	void *virt_addr;
 
@@ -184,7 +186,7 @@ static void *sys_physmap_rw_uncached(unsigned long phys_addr, size_t len)
 /* For reading DMI/coreboot/whatever tables. We should never write, and we
  * do not care about caching.
  */
-static void *sys_physmap_ro_cached(unsigned long phys_addr, size_t len)
+static void *sys_physmap_ro_cached(uintptr_t phys_addr, size_t len)
 {
 	void *virt_addr;
 
@@ -212,29 +214,48 @@ void physunmap(void *virt_addr, size_t len)
 }
 #endif
 
-#define PHYSMAP_NOFAIL	0
-#define PHYSMAP_MAYFAIL	1
-#define PHYSMAP_RW	0
-#define PHYSMAP_RO	1
+#define PHYSMAP_NOFAIL		0
+#define PHYSMAP_MAYFAIL		1
+#define PHYSMAP_RW		0
+#define PHYSMAP_RO		1
+#define PHYSMAP_NOCLEANUP	0
+#define PHYSMAP_CLEANUP		1
 
-static void *physmap_common(const char *descr, unsigned long phys_addr,
-			    size_t len, int mayfail, int readonly)
+struct undo_physmap_data {
+	void *virt_addr;
+	size_t len;
+};
+
+static int undo_physmap(void *data)
+{
+	if (data == NULL) {
+		msg_perr("%s: tried to physunmap without valid data!\n", __func__);
+		return 1;
+	}
+	struct undo_physmap_data *d = data;
+	physunmap(d->virt_addr, d->len);
+	free(data);
+	return 0;
+}
+
+static void *physmap_common(const char *descr, uintptr_t phys_addr, size_t len, bool mayfail,
+			    bool readonly, bool autocleanup)
 {
 	void *virt_addr;
 
 	if (len == 0) {
-		msg_pspew("Not mapping %s, zero size at 0x%08lx.\n",
+		msg_pspew("Not mapping %s, zero size at 0x%" PRIxPTR ".\n",
 			  descr, phys_addr);
 		return ERROR_PTR;
 	}
 
 	if ((getpagesize() - 1) & len) {
-		msg_perr("Mapping %s at 0x%08lx, unaligned size 0x%lx.\n",
+		msg_perr("Mapping %s at 0x%" PRIxPTR ", unaligned size 0x%lx.\n",
 			 descr, phys_addr, (unsigned long)len);
 	}
 
 	if ((getpagesize() - 1) & phys_addr) {
-		msg_perr("Mapping %s, 0x%lx bytes at unaligned 0x%08lx.\n",
+		msg_perr("Mapping %s, 0x%lx bytes at unaligned 0x%" PRIxPTR ".\n",
 			 descr, (unsigned long)len, phys_addr);
 	}
 
@@ -246,7 +267,7 @@ static void *physmap_common(const char *descr, unsigned long phys_addr,
 	if (ERROR_PTR == virt_addr) {
 		if (NULL == descr)
 			descr = "memory";
-		msg_perr("Error accessing %s, 0x%lx bytes at 0x%08lx\n", descr,
+		msg_perr("Error accessing %s, 0x%lx bytes at 0x%" PRIxPTR "\n", descr,
 			 (unsigned long)len, phys_addr);
 		perror(MEM_DEV " mmap failed");
 #ifdef __linux__
@@ -266,19 +287,42 @@ static void *physmap_common(const char *descr, unsigned long phys_addr,
 			exit(3);
 	}
 
+	if (autocleanup) {
+		struct undo_physmap_data *d = malloc(sizeof(struct undo_physmap_data));
+		if (d == NULL) {
+			msg_perr("%s: Out of memory!\n", __func__);
+			goto unmap_out;
+		}
+
+		d->virt_addr = virt_addr;
+		d->len = len;
+		if (register_shutdown(undo_physmap, d) != 0) {
+			msg_perr("%s: Could not register shutdown function!\n", __func__);
+			goto unmap_out;
+		}
+	}
+
 	return virt_addr;
+unmap_out:
+	physunmap(virt_addr, len);
+	if (!mayfail)
+		exit(3);
+	return ERROR_PTR;
 }
 
 void *physmap(const char *descr, unsigned long phys_addr, size_t len)
 {
-	return physmap_common(descr, phys_addr, len, PHYSMAP_NOFAIL,
-			      PHYSMAP_RW);
+	return physmap_common(descr, phys_addr, len, PHYSMAP_NOFAIL, PHYSMAP_RW, PHYSMAP_NOCLEANUP);
+}
+
+void *rphysmap(const char *descr, uintptr_t phys_addr, size_t len)
+{
+	return physmap_common(descr, phys_addr, len, PHYSMAP_NOFAIL, PHYSMAP_RW, PHYSMAP_CLEANUP);
 }
 
 void *physmap_try_ro(const char *descr, unsigned long phys_addr, size_t len)
 {
-	return physmap_common(descr, phys_addr, len, PHYSMAP_MAYFAIL,
-			      PHYSMAP_RO);
+	return physmap_common(descr, phys_addr, len, PHYSMAP_MAYFAIL, PHYSMAP_RO, PHYSMAP_NOCLEANUP);
 }
 
 #if defined(__i386__) || defined(__x86_64__)
@@ -466,7 +510,7 @@ void cleanup_cpu_msr(void)
 
 #else
 
-#ifdef __DARWIN__
+#if defined(__MACH__) && defined(__APPLE__)
 int setup_cpu_msr(int cpu)
 {
 	// Always succeed for now

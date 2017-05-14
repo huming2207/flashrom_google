@@ -32,20 +32,21 @@
 
 #define PCI_VENDOR_ID_HPT	0x1103
 
-const struct pcidev_status ata_hpt[] = {
+static uint32_t io_base_addr = 0;
+
+const struct dev_entry ata_hpt[] = {
 	{0x1103, 0x0004, NT, "Highpoint", "HPT366/368/370/370A/372/372N"},
 	{0x1103, 0x0005, NT, "Highpoint", "HPT372A/372N"},
 	{0x1103, 0x0006, NT, "Highpoint", "HPT302/302N"},
 
-	{},
+	{0},
 };
 
 static void atahpt_chip_writeb(const struct flashctx *flash, uint8_t val,
 			       chipaddr addr);
 static uint8_t atahpt_chip_readb(const struct flashctx *flash,
 				 const chipaddr addr);
-
-static const struct par_programmer par_programmer_atahpt = {
+static const struct par_master par_master_atahpt = {
 		.chip_readb		= atahpt_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -56,31 +57,28 @@ static const struct par_programmer par_programmer_atahpt = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int atahpt_shutdown(void *data)
-{
-	/* Flash access is disabled automatically by PCI restore. */
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 0;
-}
-
 int atahpt_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uint32_t reg32;
 
-	get_io_perms();
-
-	io_base_addr = pcidev_init(PCI_BASE_ADDRESS_4, ata_hpt);
-
-	/* Enable flash access. */
-	reg32 = pci_read_long(pcidev_dev, REG_FLASH_ACCESS);
-	reg32 |= (1 << 24);
-	rpci_write_long(pcidev_dev, REG_FLASH_ACCESS, reg32);
-
-	if (register_shutdown(atahpt_shutdown, NULL))
+	if (rget_io_perms())
 		return 1;
 
-	register_par_programmer(&par_programmer_atahpt, BUS_PARALLEL);
+	dev = pcidev_init(ata_hpt, PCI_BASE_ADDRESS_4);
+	if (!dev)
+		return 1;
+
+	io_base_addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_4);
+	if (!io_base_addr)
+		return 1;
+
+	/* Enable flash access. */
+	reg32 = pci_read_long(dev, REG_FLASH_ACCESS);
+	reg32 |= (1 << 24);
+	rpci_write_long(dev, REG_FLASH_ACCESS, reg32);
+
+	register_par_master(&par_master_atahpt, BUS_PARALLEL);
 
 	return 0;
 }

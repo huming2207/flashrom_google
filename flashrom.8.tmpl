@@ -5,9 +5,10 @@ flashrom \- detect, read, write, verify and erase flash chips
 .B flashrom \fR[\fB\-n\fR] [\fB\-V\fR] [\fB\-f\fR] [\fB\-h\fR|\fB\-R\fR|\
 \fB\-L\fR|\fB\-z\fR|\fB\-E\fR|\fB\-r\fR <file>|\fB\-w\fR <file>|\
 \fB\-v\fR <file>]
-         [\fB\-c\fR <chipname>] [\fB\-m\fR [<vendor>:]<board>] \
+         [\fB\-c\fR <chipname>] \
 [\fB\-l\fR <file>]
          [\fB\-i\fR <image>] [\fB\-p\fR <programmername>[:<parameters>]]
+[\fB-o\fR <logfile>]
 .SH DESCRIPTION
 .B flashrom
 is a utility for detecting, reading, writing, verifying and erasing flash
@@ -87,19 +88,6 @@ printed by
 .B "flashrom \-L"
 without the vendor name as parameter. Please note that the chip name is
 case sensitive.
-.TP
-.B "\-m, \-\-mainboard" [<vendor>:]<board>
-Override mainboard settings.
-.sp
-flashrom reads the coreboot table to determine the current mainboard. If no
-coreboot table could be read or if you want to override these values, you can
-specify \-m, e.g.:
-.sp
-.B "  flashrom \-\-mainboard AGAMI:ARUMA \-w agami_aruma.rom"
-.sp
-See the 'Known boards' or 'Known laptops' section in the output
-of 'flashrom \-L' for a list of boards which require the specification of
-the board name, if no coreboot table is found.
 .TP
 .B "\-f, \-\-force"
 Force one or more of the following actions:
@@ -218,6 +206,8 @@ or Xilinx DLC5 compatible cable)
 .sp
 .BR "* ogp_spi" " (for SPI flash ROMs on Open Graphics Project graphics card)"
 .sp
+.BR "* linux_spi" " (for SPI flash ROMs accessible via /dev/spidevX.Y on Linux)"
+.sp
 Some programmers have optional or mandatory parameters which are described
 in detail in the
 .B PROGRAMMER SPECIFIC INFO
@@ -227,6 +217,13 @@ lists all supported programmers.
 .TP
 .B "\-h, \-\-help"
 Show a help text and exit.
+.TP
+.B "\-o, \-\-output <logfile>"
+Save the full debug log to
+.BR <logfile> .
+If the file already exists, it will be overwritten. This is the recommended
+way to gather logs from flashrom because they will be verbose even if the
+on-screen messages are not verbose.
 .TP
 .B "\-R, \-\-version"
 Show version information and exit.
@@ -245,10 +242,15 @@ autodetected using one of the following mechanisms: If your system is
 running coreboot, the mainboard type is determined from the coreboot table.
 Otherwise, the mainboard is detected by examining the onboard PCI devices
 and possibly DMI info. If PCI and DMI do not contain information to uniquely
-identify the mainboard (which is the exception), it might be necessary to
-specify the mainboard using the
-.B \-m
-switch (see above).
+identify the mainboard (which is the exception), or if you want to override
+the detected mainboard model, you can specify the mainboard using the
+.sp
+.B "  flashrom \-p internal:mainboard=[<vendor>:]<board>"
+syntax.
+.sp
+See the 'Known boards' or 'Known laptops' section in the output
+of 'flashrom \-L' for a list of boards which require the specification of
+the board name, if no coreboot table is found.
 .sp
 Some of these board-specific flash enabling functions (called
 .BR "board enables" )
@@ -429,6 +431,28 @@ is the number of bytes (min. 1, max. 256).
 Example:
 .sp
 .B "  flashrom -p dummy:emulate=M25P10.RES,spi_write_256_chunksize=5"
+.sp
+To simulate a programmer which refuses to send certain SPI commands to the
+flash chip, you can specify a blacklist of SPI commands with the
+.sp
+.B "  flashrom -p dummy:spi_blacklist=commandlist"
+.sp
+syntax where commandlist is a list of two-digit hexadecimal representations of
+SPI commands. If commandlist is e.g. 0302, flashrom will behave as if the SPI
+controller refuses to run command 0x03 (READ) and command 0x02 (WRITE).
+commandlist may be up to 512 characters (256 commands) long.
+Implementation note: flashrom will detect an error during command execution.
+.sp
+To simulate a flash chip which ignores (doesn't support) certain SPI commands,
+you can specify an ignorelist of SPI commands with the
+.sp
+.B "  flashrom -p dummy:spi_ignorelist=commandlist"
+.sp
+syntax where commandlist is a list of two-digit hexadecimal representations of
+SPI commands. If commandlist is e.g. 0302, the emulated flash chip will ignore
+command 0x03 (READ) and command 0x02 (WRITE).  commandlist may be up to 512
+characters (256 commands) long.
+Implementation note: flashrom won't detect an error during command execution.
 .TP
 .BR "nic3com" , " nicrealtek" , " nicsmc1211" , " nicnatsemi" , " nicintel\
 " , " nicintel_spi" , " gfxnvidia" , " ogp_spi" , " drkaiser" , " satasii\
@@ -578,6 +602,36 @@ section above.
 .sp
 More information about the hardware is available at
 .BR http://wiki.opengraphics.org .
+.SS
+.BR "linux_spi " programmer
+You have to specify the SPI controller to use with the
+.sp
+.B "  flashrom \-p linux_spi:dev=/dev/spidevX.Y"
+.sp
+syntax where
+.B /dev/spidevX.Y
+is the Linux device node for your SPI controller.
+.sp
+Please note that the linux_spi driver only works on Linux.
+.SH EXAMPLES
+To back up and update your BIOS, run
+.sp
+.B flashrom -p internal -r backup.rom -o backuplog.txt
+.br
+.B flashrom -p internal -w newbios.rom -o writelog.txt
+.sp
+Please make sure to copy backup.rom to some external media before you try
+to write. That makes offline recovery easier.
+.br
+If writing fails and flashrom complains about the chip being in an unknown
+state, you can try to restore the backup by running
+.sp
+.B flashrom -p internal -w backup.rom -o restorelog.txt
+.sp
+If you encounter any problems, please contact us and supply
+backuplog.txt, writelog.txt and restorelog.txt. See section
+.B BUGS
+for contact info.
 .SH EXIT STATUS
 flashrom exits with 0 on success, 1 on most failures but with 2 if /dev/mem
 (/dev/xsvc on Solaris) can not be opened and with 3 if a call to mmap() fails.

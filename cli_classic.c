@@ -465,9 +465,9 @@ int main(int argc, char *argv[])
 
 	if (chipcount > 1) {
 		printf("Multiple flash chips were detected: \"%s\"",
-			flashes[0].name);
+			flashes[0].chip->name);
 		for (i = 1; i < chipcount; i++)
-			printf(", \"%s\"", flashes[i].name);
+			printf(", \"%s\"", flashes[i].chip->name);
 		printf("\nPlease specify which chip to use with the "
 		       "-c <chipname> option.\n");
 		ret = 1;
@@ -496,10 +496,10 @@ int main(int argc, char *argv[])
 		goto out_shutdown;
 	} else if (!chip_to_probe) {
 		/* repeat for convenience when looking at foreign logs */
-		tempstr = flashbuses_to_text(flashes[0].bustype);
+		tempstr = flashbuses_to_text(flashes[0].chip->bustype);
 		msg_gdbg("Found %s flash chip \"%s\" (%d kB, %s).\n",
-			 flashes[0].vendor, flashes[0].name,
-			 flashes[0].total_size, tempstr);
+			 flashes[0].chip->vendor, flashes[0].chip->name,
+			 flashes[0].chip->total_size, tempstr);
 		free(tempstr);
 	}
 
@@ -507,8 +507,8 @@ int main(int argc, char *argv[])
 
 	check_chip_supported(fill_flash);
 
-	size = fill_flash->total_size * 1024;
-	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
+	size = fill_flash->chip->total_size * 1024;
+	if (check_max_decode((buses_supported & fill_flash->chip->bustype), size) &&
 	    (!force)) {
 		fprintf(stderr, "Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");

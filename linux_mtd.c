@@ -45,6 +45,8 @@ static int dev_fd = -1;
 
 static int mtd_device_is_writeable;
 
+static int mtd_no_erase;
+
 /* Size info is presented in bytes in sysfs. */
 static unsigned long int mtd_total_size;
 static unsigned long int mtd_numeraseregions;
@@ -52,7 +54,7 @@ static unsigned long int mtd_erasesize;	/* only valid if numeraseregions is 0 */
 
 static struct wp wp_mtd;	/* forward declaration */
 
-static int stat_mtd_files(char *dev_path, char *sysfs_path)
+static int stat_mtd_files(char *dev_path)
 {
 	struct stat s;
 
@@ -145,6 +147,9 @@ static int get_mtd_info(void)
 		/* cache for later use by write function */
 		mtd_device_is_writeable = 1;
 	}
+	if (tmp & MTD_NO_ERASE) {
+		mtd_no_erase = 1;
+	}
 
 	/* Device name */
 	if (read_sysfs_string("name", mtd_device_name, sizeof(mtd_device_name)))
@@ -184,11 +189,13 @@ static int get_mtd_info(void)
 
 static int linux_mtd_probe(struct flashctx *flash)
 {
-	flash->wp = &wp_mtd;
-	flash->tested = TEST_OK_PREW;
-	flash->total_size = mtd_total_size / 1024;	/* bytes -> kB */
-	flash->block_erasers[0].eraseblocks[0].size = mtd_erasesize;
-	flash->block_erasers[0].eraseblocks[0].count =
+	flash->chip->wp = &wp_mtd;
+	if (mtd_no_erase)
+		flash->chip->feature_bits |= FEATURE_NO_ERASE;
+	flash->chip->tested = TEST_OK_PREW;
+	flash->chip->total_size = mtd_total_size / 1024;	/* bytes -> kB */
+	flash->chip->block_erasers[0].eraseblocks[0].size = mtd_erasesize;
+	flash->chip->block_erasers[0].eraseblocks[0].count =
 				mtd_total_size / mtd_erasesize;
 	return 1;
 }
@@ -196,28 +203,39 @@ static int linux_mtd_probe(struct flashctx *flash)
 static int linux_mtd_read(struct flashctx *flash, uint8_t *buf,
 			  unsigned int start, unsigned int len)
 {
+	unsigned int eb_size = flash->chip->block_erasers[0].eraseblocks[0].size;
+	unsigned int i;
+
 	if (lseek(dev_fd, start, SEEK_SET) != start) {
 		msg_perr("Cannot seek to 0x%06x: %s\n", start, strerror(errno));
 		return 1;
 	}
 
-	if (read(dev_fd, buf, len) != len) {
-		msg_perr("Cannot read 0x%06x bytes at 0x%06x: %s\n",
-				start, len, strerror(errno));
-		return 1;
+	for (i = 0; i < len; ) {
+		/* Try to align reads to eraseblock size */
+		unsigned int step = eb_size - ((start + i) % eb_size);
+		step = min(step, len - i);
+
+		if (read(dev_fd, buf + i, step) != step) {
+			msg_perr("Cannot read 0x%06x bytes at 0x%06x: %s\n",
+					step, start + i, strerror(errno));
+			return 1;
+		}
+
+		i += step;
 	}
 
 	return 0;
 }
 
 /* this version assumes we must divide the write request into pages ourselves */
-static int linux_mtd_write(struct flashctx *flash, uint8_t *buf,
+static int linux_mtd_write(struct flashctx *flash, const uint8_t *buf,
 				unsigned int start, unsigned int len)
 {
 	unsigned int page;
 	unsigned int chunksize, page_size;
 
-	chunksize = page_size = flash->page_size;
+	chunksize = page_size = flash->chip->page_size;
 
 	if (!mtd_device_is_writeable)
 		return 1;
@@ -253,6 +271,12 @@ static int linux_mtd_erase(struct flashctx *flash,
 {
 	uint32_t u;
 
+	if (mtd_no_erase) {
+		msg_perr("%s: device does not support erasing. Please file a "
+				"bug report at flashrom@flashrom.org\n", __func__);
+		return 1;
+	}
+
 	if (mtd_numeraseregions != 0) {
 		/* TODO: Support non-uniform eraseblock size using
 		   use MEMGETREGIONCOUNT/MEMGETREGIONINFO ioctls */
@@ -274,8 +298,7 @@ static int linux_mtd_erase(struct flashctx *flash,
 }
 
 static struct opaque_programmer programmer_linux_mtd = {
-	/* FIXME: Do we need to change these (especially write) as per
-	 * page size requirements? */
+	/* max_data_{read,write} don't have any effect for this programmer */
 	.max_data_read	= MAX_DATA_UNSPECIFIED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
 	.probe		= linux_mtd_probe,
@@ -319,7 +342,7 @@ static int linux_mtd_setup(int dev_num)
 	msg_pdbg("%s: sysfs_path: \"%s\", dev_path: \"%s\"\n",
 			__func__, sysfs_path, dev_path);
 
-	if (stat_mtd_files(dev_path, sysfs_path))
+	if (stat_mtd_files(dev_path))
 		goto linux_mtd_setup_exit;
 
 	if (get_mtd_info())
@@ -442,6 +465,7 @@ static int mtd_wp_enable_writeprotect(const struct flashctx *flash, enum wp_mode
 	if (ioctl(dev_fd, MEMUNLOCK, &entire_chip) == -1) {
 		msg_perr("%s: Failed to disable write-protection, ioctl: %s\n",
 				__func__, strerror(errno));
+		msg_perr("Did you disable WP#?\n");
 		return 1;
 	}
 
@@ -468,6 +492,7 @@ static int mtd_wp_disable_writeprotect(const struct flashctx *flash)
 
 	if (ioctl(dev_fd, MEMUNLOCK, &erase_info) == -1) {
 		msg_perr("%s: ioctl: %s\n", __func__, strerror(errno));
+		msg_perr("Did you disable WP#?\n");
 		return 1;
 	}
 
@@ -476,8 +501,8 @@ static int mtd_wp_disable_writeprotect(const struct flashctx *flash)
 
 static int mtd_wp_status(const struct flashctx *flash)
 {
-	uint32_t start = 0, end = 0;
-	int start_found = 0, end_found = 0;
+	uint32_t start = 0, len = 0;
+	int start_found = 0;
 	unsigned int u;
 
 	/* For now, assume only one contiguous region can be locked (NOR) */
@@ -498,21 +523,20 @@ static int mtd_wp_status(const struct flashctx *flash)
 				start = erase_info.start;
 				start_found = 1;
 			}
+			len += mtd_erasesize;
 		} else if (rc == 0) {
 			if (start_found) {
-				end = erase_info.start;
-				end_found = 1;
+				/* TODO: changes required for supporting non-contiguous locked regions */
+				break;
 			}
 		}
 
-		if (start_found && end_found) {
-			msg_pinfo("WP: write protect range: start=0x%08x, "
-				"len=0x%08x\n", start, end - start);
-			/* TODO: Replace this break with "start = end = 0" if
-			 * we want to support non-contiguous locked regions */
-			break;
-		}
 	}
+
+	msg_cinfo("WP: write protect is %s.\n",
+			start_found ? "enabled": "disabled");
+	msg_pinfo("WP: write protect range: start=0x%08x, "
+			"len=0x%08x\n", start, len);
 
 	return 0;
 }

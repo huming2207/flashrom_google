@@ -33,6 +33,8 @@ COMMAND	Description			Parameters			Return Value
 0x12	Set used bustype		8-bit flags (as with 0x05)	ACK / NAK
 0x13	Perform SPI operation		24-bit slen + 24-bit rlen	ACK + rlen bytes of data / NAK
 					 + slen bytes of data
+0x14	Set SPI clock frequency in Hz	32-bit requested frequency	ACK + 32-bit set frequency / NAK
+0x15	Toggle flash chip pin drivers	8-bit (0 disable, else enable)	ACK / NAK
 0x??	unimplemented command - invalid.
 
 
@@ -72,7 +74,21 @@ Additional information of the above commands:
 		Send and receive bytes via SPI.
 		Maximum slen is Q_WRNMAXLEN in case Q_BUSTYPE returns SPI only or S_BUSTYPE was used
 		to set SPI exclusively before. Same for rlen and Q_RDNMAXLEN.
-		This operation is immediate, meaning it doesnt use the operation buffer.
+		This operation is immediate, meaning it doesn't use the operation buffer.
+	0x14 (S_SPI_FREQ):
+		Set the SPI clock frequency. The 32-bit value indicates the
+		requested frequency in Hertz. Value 0 is reserved and should
+		be NAKed by the programmer. The requested frequency should be
+		mapped by the programmer software to a supported frequency
+		lower than the one requested. If there is no lower frequency
+		available the lowest possible should be used. The value
+		chosen is sent back in the reply with an ACK.
+	0x15 (S_CMD_S_PIN_STATE):
+		Sets the state of the pin drivers connected to the flash chip. Disabling them allows other
+		devices (e.g. a mainboard's chipset) to access the chip. This way the serprog controller can
+		remain attached to the flash chip even when the board is running. The user is responsible to
+		NOT connect VCC and other permanently externally driven signals to the programmer as needed.
+		If the value is 0, then the drivers should be disabled, otherwise they should be enabled.
 	About mandatory commands:
 		The only truly mandatory commands for any device are 0x00, 0x01, 0x02 and 0x10,
 		but one can't really do anything with these commands.
@@ -83,27 +99,4 @@ Additional information of the above commands:
 		In addition, support for these commands is recommended:
 		S_CMD_Q_PGMNAME, S_CMD_Q_BUSTYPE, S_CMD_Q_CHIPSIZE (if parallel).
 
-
-This define listing should help C coders - (it's here to be the single source for copying - will be a .h someday i think)
-#define S_ACK 0x06
-#define S_NAK 0x15
-#define S_CMD_NOP		0x00            /* No operation                                 */
-#define S_CMD_Q_IFACE           0x01            /* Query interface version                      */
-#define S_CMD_Q_CMDMAP		0x02		/* Query supported commands bitmap		*/
-#define S_CMD_Q_PGMNAME         0x03            /* Query programmer name                        */
-#define S_CMD_Q_SERBUF          0x04            /* Query Serial Buffer Size                     */
-#define S_CMD_Q_BUSTYPE         0x05            /* Query supported bustypes                     */
-#define S_CMD_Q_CHIPSIZE        0x06            /* Query supported chipsize (2^n format)        */
-#define S_CMD_Q_OPBUF           0x07            /* Query operation buffer size                  */
-#define S_CMD_Q_WRNMAXLEN	0x08		/* Query Write to opbuf: Write-N maximum length */
-#define S_CMD_R_BYTE            0x09            /* Read a single byte                           */
-#define S_CMD_R_NBYTES          0x0A            /* Read n bytes                                 */
-#define S_CMD_O_INIT            0x0B            /* Initialize operation buffer                  */
-#define S_CMD_O_WRITEB          0x0C            /* Write opbuf: Write byte with address         */
-#define S_CMD_O_WRITEN		0x0D		/* Write to opbuf: Write-N			*/
-#define S_CMD_O_DELAY           0x0E            /* Write opbuf: udelay                          */
-#define S_CMD_O_EXEC            0x0F            /* Execute operation buffer                     */
-#define S_CMD_SYNCNOP		0x10		/* Special no-operation that returns NAK+ACK	*/
-#define S_CMD_Q_RDNMAXLEN	0x11		/* Query read-n maximum length			*/
-#define S_CMD_S_BUSTYPE		0x12		/* Set used bustype(s).				*/
-#define S_CMD_O_SPIOP		0x13		/* Perform SPI operation.			*/
+See also serprog.h.

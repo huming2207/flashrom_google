@@ -20,6 +20,9 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <inttypes.h>
 #include "flash.h"
 #include "chipdrivers.h"
 #include "programmer.h"
@@ -42,6 +45,10 @@
  *   flashrom -p dummy:emulate=VARIABLE_SIZE,size=4194304
  */
 #define VARIABLE_SIZE_CHIP_NAME "VARIABLE_SIZE"
+unsigned char spi_blacklist[256];
+unsigned char spi_ignorelist[256];
+int spi_blacklist_size = 0;
+int spi_ignorelist_size = 0;
 #endif
 #endif
 
@@ -78,7 +85,7 @@ static unsigned long int delay_us = 0;
 
 static int dummy_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr);
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len);
 static void dummy_chip_writeb(const struct flashctx *flash, uint8_t val,
 			      chipaddr addr);
@@ -97,7 +104,7 @@ static uint32_t dummy_chip_readl(const struct flashctx *flash,
 static void dummy_chip_readn(const struct flashctx *flash, uint8_t *buf,
 			     const chipaddr addr, size_t len);
 
-static const struct spi_programmer spi_programmer_dummyflasher = {
+static const struct spi_master spi_master_dummyflasher = {
 	.type		= SPI_CONTROLLER_DUMMY,
 	.max_data_read	= MAX_DATA_READ_UNLIMITED,
 	.max_data_write	= MAX_DATA_UNSPECIFIED,
@@ -107,7 +114,7 @@ static const struct spi_programmer spi_programmer_dummyflasher = {
 	.write_256	= dummy_spi_write_256,
 };
 
-static const struct par_programmer par_programmer_dummy = {
+static const struct par_master par_master_dummy = {
 		.chip_readb		= dummy_chip_readb,
 		.chip_readw		= dummy_chip_readw,
 		.chip_readl		= dummy_chip_readl,
@@ -146,6 +153,7 @@ int dummy_init(void)
 {
 	char *bustext = NULL;
 	char *tmp = NULL;
+	int i;
 #if EMULATE_CHIP
 	struct stat image_stat;
 #if EMULATE_SPI_CHIP
@@ -193,6 +201,78 @@ int dummy_init(void)
 			return 1;
 		}
 	}
+
+	tmp = extract_programmer_param("spi_blacklist");
+	if (tmp) {
+		i = strlen(tmp);
+		if (!strncmp(tmp, "0x", 2)) {
+			i -= 2;
+			memmove(tmp, tmp + 2, i + 1);
+		}
+		if ((i > 512) || (i % 2)) {
+			msg_perr("Invalid SPI command blacklist length\n");
+			free(tmp);
+			return 1;
+		}
+		spi_blacklist_size = i / 2;
+		for (i = 0; i < spi_blacklist_size * 2; i++) {
+			if (!isxdigit((unsigned char)tmp[i])) {
+				msg_perr("Invalid char \"%c\" in SPI command "
+					 "blacklist\n", tmp[i]);
+				free(tmp);
+				return 1;
+			}
+		}
+		for (i = 0; i < spi_blacklist_size; i++) {
+			unsigned int tmp2;
+			/* SCNx8 is apparently not supported by MSVC (and thus
+			 * MinGW), so work around it with an extra variable
+			 */
+			sscanf(tmp + i * 2, "%2x", &tmp2);
+			spi_blacklist[i] = (uint8_t)tmp2;
+		}
+		msg_pdbg("SPI blacklist is ");
+		for (i = 0; i < spi_blacklist_size; i++)
+			msg_pdbg("%02x ", spi_blacklist[i]);
+		msg_pdbg(", size %i\n", spi_blacklist_size);
+	}
+	free(tmp);
+
+	tmp = extract_programmer_param("spi_ignorelist");
+	if (tmp) {
+		i = strlen(tmp);
+		if (!strncmp(tmp, "0x", 2)) {
+			i -= 2;
+			memmove(tmp, tmp + 2, i + 1);
+		}
+		if ((i > 512) || (i % 2)) {
+			msg_perr("Invalid SPI command ignorelist length\n");
+			free(tmp);
+			return 1;
+		}
+		spi_ignorelist_size = i / 2;
+		for (i = 0; i < spi_ignorelist_size * 2; i++) {
+			if (!isxdigit((unsigned char)tmp[i])) {
+				msg_perr("Invalid char \"%c\" in SPI command "
+					 "ignorelist\n", tmp[i]);
+				free(tmp);
+				return 1;
+			}
+		}
+		for (i = 0; i < spi_ignorelist_size; i++) {
+			unsigned int tmp2;
+			/* SCNx8 is apparently not supported by MSVC (and thus
+			 * MinGW), so work around it with an extra variable
+			 */
+			sscanf(tmp + i * 2, "%2x", &tmp2);
+			spi_ignorelist[i] = (uint8_t)tmp2;
+		}
+		msg_pdbg("SPI ignorelist is ");
+		for (i = 0; i < spi_ignorelist_size; i++)
+			msg_pdbg("%02x ", spi_ignorelist[i]);
+		msg_pdbg(", size %i\n", spi_ignorelist_size);
+	}
+	free(tmp);
 
 	/* frequency to emulate in Hz (default), KHz, or MHz */
 	tmp = extract_programmer_param("freq");
@@ -398,19 +478,19 @@ dummy_init_out:
 		return 1;
 	}
 	if (dummy_buses_supported & (BUS_PARALLEL | BUS_LPC | BUS_FWH))
-		register_par_programmer(&par_programmer_dummy,
+		register_par_master(&par_master_dummy,
 					dummy_buses_supported &
 						(BUS_PARALLEL | BUS_LPC |
 						 BUS_FWH));
 	if (dummy_buses_supported & BUS_SPI)
-		register_spi_programmer(&spi_programmer_dummyflasher);
+		register_spi_master(&spi_master_dummyflasher);
 
 	return 0;
 }
 
-void *dummy_map(const char *descr, unsigned long phys_addr, size_t len)
+void *dummy_map(const char *descr, uintptr_t phys_addr, size_t len)
 {
-	msg_pspew("%s: Mapping %s, 0x%lx bytes at 0x%08lx\n",
+	msg_pspew("%s: Mapping %s, 0x%lx bytes at %" PRIxPTR "\n",
 		  __func__, descr, (unsigned long)len, phys_addr);
 	return (void *)phys_addr;
 }
@@ -478,7 +558,7 @@ void dummy_chip_readn(const struct flashctx *flash, uint8_t *buf, const chipaddr
 static int emulate_spi_chip_response(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		      const unsigned char *writearr, unsigned char *readarr)
 {
-	unsigned int offs;
+	unsigned int offs, i;
 	static int unsigned aai_offs;
 	static int aai_active = 0;
 
@@ -486,7 +566,24 @@ static int emulate_spi_chip_response(const struct flashctx *flash, unsigned int 
 		msg_perr("No command sent to the chip!\n");
 		return 1;
 	}
-	/* TODO: Implement command blacklists here. */
+	/* spi_blacklist has precedence over spi_ignorelist. */
+	for (i = 0; i < spi_blacklist_size; i++) {
+		if (writearr[0] == spi_blacklist[i]) {
+			msg_pdbg("Refusing blacklisted SPI command 0x%02x\n",
+				 spi_blacklist[i]);
+			return SPI_INVALID_OPCODE;
+		}
+	}
+	for (i = 0; i < spi_ignorelist_size; i++) {
+		if (writearr[0] == spi_ignorelist[i]) {
+			msg_cdbg("Ignoring ignorelisted SPI command 0x%02x\n",
+				 spi_ignorelist[i]);
+			/* Return success because the command does not fail,
+			 * it is simply ignored.
+			 */
+			return 0;
+		}
+	}
 	switch (writearr[0]) {
 	case JEDEC_RES:
 		if (emu_chip != EMULATE_ST_M25P10_RES)
@@ -705,7 +802,7 @@ static int dummy_spi_send_command(const struct flashctx *flash, unsigned int wri
 	case EMULATE_VARIABLE_SIZE:
 		if (emulate_spi_chip_response(flash, writecnt, readcnt, writearr,
 					      readarr)) {
-			msg_perr("Invalid command sent to flash chip!\n");
+			msg_pdbg("Invalid command sent to flash chip!\n");
 			return 1;
 		}
 		break;
@@ -722,7 +819,7 @@ static int dummy_spi_send_command(const struct flashctx *flash, unsigned int wri
 	return 0;
 }
 
-static int dummy_spi_write_256(struct flashctx *flash, uint8_t *buf,
+static int dummy_spi_write_256(struct flashctx *flash, const uint8_t *buf,
 			       unsigned int start, unsigned int len)
 {
 	return spi_write_chunked(flash, buf, start, len,
@@ -752,16 +849,16 @@ int probe_variable_size(struct flashctx *flash)
 	if (emu_chip_size % 1024)
 		msg_perr("%s: emu_chip_size is not multipler of 1024.\n",
 		         __func__);
-	flash->total_size = emu_chip_size / 1024;
+	flash->chip->total_size = emu_chip_size / 1024;
 	msg_cdbg("%s: set flash->total_size to %dK bytes.\n", __func__,
-	         flash->total_size);
+	         flash->chip->total_size);
 
 	if (erase_to_zero)
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
 	/* Update eraser count */
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
-		struct block_eraser *eraser = &flash->block_erasers[i];
+		struct block_eraser *eraser = &flash->chip->block_erasers[i];
 		if (eraser->block_erase == NULL)
 			break;
 

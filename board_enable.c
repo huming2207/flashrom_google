@@ -1540,6 +1540,7 @@ static int intel_ich_gpio21_raise(void)
  *  - ASUS P4B266: socket478 + Intel 845D + ICH2
  *  - ASUS P4B533-E: socket478 + 845E + ICH4
  *  - ASUS P4B-MX variant in HP Vectra VL420 SFF: socket478 + 845D + ICH2
+ *  - TriGem Anaheim-3: socket370 + Intel 810 + ICH
  */
 static int intel_ich_gpio22_raise(void)
 {
@@ -1556,6 +1557,16 @@ static int intel_ich_gpio22_raise(void)
 static int intel_ich_gpio34_raise(void)
 {
 	return intel_ich_gpio_set(34, 1);
+}
+
+/*
+ * Suited for:
+ *  - AOpen i945GMx-VFX: Intel 945GM + ICH7-M used in ...
+ *    - FSC ESPRIMO Q5010 (SMBIOS: D2544-B1)
+ */
+static int intel_ich_gpio38_raise(void)
+{
+	return intel_ich_gpio_set(38, 1);
 }
 
 /*
@@ -2035,6 +2046,19 @@ static int it8718f_gpio63_raise(void)
 	return it87_gpio_set(63, 1);
 }
 
+/*
+ * Suited for all boards with ambiguous DMI chassis information, which should be
+ * whitelisted because they are known to work:
+ * - MSC Q7 Tunnel Creek Module (Q7-TCTC)
+ */
+static int p2_not_a_laptop(void)
+{
+	/* label this board as not a laptop */
+	is_laptop = 0;
+	msg_pdbg("Laptop detection overridden by P2 board enable.\n");
+	return 0;
+}
+
 #endif
 
 /*
@@ -2070,7 +2094,8 @@ static int it8718f_gpio63_raise(void)
  * The coreboot ids are used two fold. When running with a coreboot firmware,
  * the ids uniquely matches the coreboot board identification string. When a
  * legacy bios is installed and when autodetection is not possible, these ids
- * can be used to identify the board through the -m command line argument.
+ * can be used to identify the board through the -p internal:mainboard=
+ * programmer parameter.
  *
  * When a board is identified through its coreboot ids (in both cases), the
  * main pci ids are still required to match, as a safeguard.
@@ -2089,7 +2114,7 @@ const struct board_match board_matches[] = {
 	{0x8086, 0x2930, 0x147b, 0x1083,  0x10ec, 0x8167, 0x147b, 0x1083, NULL,         NULL, NULL,           P3, "abit",        "IP35 Pro",              0,   OK, intel_ich_gpio16_raise},
 	{0x10de, 0x0050, 0x147b, 0x1c1a,       0,      0,      0,      0, NULL,         NULL, NULL,           P3, "abit",        "KN8 Ultra",             0,   NT, nvidia_mcp_gpio2_lower},
 	{0x10de, 0x01e0, 0x147b, 0x1c00,  0x10de, 0x0060, 0x147B, 0x1c00, NULL,         NULL, NULL,           P3, "abit",        "NF7-S",                 0,   OK, nvidia_mcp_gpio8_raise},
-	{0x10de, 0x02f0, 0x147b, 0x1c26,  0x10de, 0x0240, 0x10de, 0x0222, NULL,         NULL, NULL,           P3, "abit",        "NF-M2 nView",           0,   OK, nvidia_mcp_gpio4_lower},
+	{0x10de, 0x02f0, 0x147b, 0x1c26,  0x10de, 0x0260, 0x147b, 0x1c26, NULL,         NULL, NULL,           P3, "abit",        "NF-M2 nView",           0,   OK, nvidia_mcp_gpio4_lower},
 	{0x1106, 0x0691,      0,      0,  0x1106, 0x3057,      0,      0, "(VA6)$",     NULL, NULL,           P3, "abit",        "VA6",                   0,   OK, via_apollo_gpo4_lower},
 	{0x1106, 0x0691,      0,      0,  0x1106, 0x3057,      0,      0, NULL,         "abit", "vt6x4",      P3, "abit",        "VT6X4",                 0,   OK, via_apollo_gpo4_lower},
 	{0x105a, 0x0d30, 0x105a, 0x4d33,  0x8086, 0x1130, 0x8086,      0, NULL,         NULL, NULL,           P3, "Acorp",       "6A815EPD",              0,   OK, board_acorp_6a815epd},
@@ -2097,6 +2122,7 @@ const struct board_match board_matches[] = {
 	{0x1106, 0x3177, 0x17F2, 0x3177,  0x1106, 0x3148, 0x17F2, 0x3148, NULL,         NULL, NULL,           P3, "Albatron",    "PM266A Pro",            0,   OK, w836xx_memw_enable_2e},
 	{0x1022, 0x2090,      0,      0,  0x1022, 0x2080,      0,      0, NULL,        "artecgroup", "dbe61", P3, "Artec Group", "DBE61",                 0,   OK, board_artecgroup_dbe6x},
 	{0x1022, 0x2090,      0,      0,  0x1022, 0x2080,      0,      0, NULL,        "artecgroup", "dbe62", P3, "Artec Group", "DBE62",                 0,   OK, board_artecgroup_dbe6x},
+	{0x8086, 0x27b9, 0xa0a0, 0x0632,  0x8086, 0x27da, 0xa0a0, 0x0632, NULL,         NULL, NULL,           P3, "AOpen",       "i945GMx-VFX",           0,   OK, intel_ich_gpio38_raise},
 	{0x8086, 0x277c, 0xa0a0, 0x060b,  0x8086, 0x27da, 0xa0a0, 0x060b, NULL,         NULL, NULL,           P3, "AOpen",       "i975Xa-YDG",            0,   OK, board_aopen_i975xa_ydg},
 	{0x8086, 0x27b8, 0x1849, 0x27b8,  0x8086, 0x27da, 0x1849, 0x27da, "^ConRoeXFire-eSATA2", NULL, NULL,  P3, "ASRock",      "ConRoeXFire-eSATA2",    0,   OK, intel_ich_gpio16_raise},
 	{0x1039, 0x0741, 0x1849, 0x0741,  0x1039, 0x5513, 0x1849, 0x5513, "^K7S41 $",   NULL, NULL,           P3, "ASRock",      "K7S41",                 0,   OK, w836xx_memw_enable_2e},
@@ -2179,6 +2205,7 @@ const struct board_match board_matches[] = {
 	{0x1022, 0x7468,      0,      0,       0,      0,      0,      0, NULL,         "iwill", "dk8_htx",   P3, "IWILL",       "DK8-HTX",               0,   OK, w83627hf_gpio24_raise_2e},
 	{0x8086, 0x27A0, 0x8086, 0x27a0,  0x8086, 0x27b8, 0x8086, 0x27b8, NULL,        "kontron", "986lcd-m", P3, "Kontron",     "986LCD-M",              0,   OK, board_kontron_986lcd_m},
 	{0x8086, 0x2411, 0x8086, 0x2411,  0x8086, 0x7125, 0x0e11, 0xb165, NULL,         NULL, NULL,           P3, "Mitac",       "6513WU",                0,   OK, board_mitac_6513wu},
+	{0x8086, 0x8186, 0x8086, 0x8186,  0x8086, 0x8800, 0x0000, 0x0000, "^MSC Vertriebs GmbH$", NULL, NULL, P2, "MSC",         "Q7-TCTC",               0,   OK, p2_not_a_laptop},
 	{0x10DE, 0x005E, 0x1462, 0x7125,  0x10DE, 0x0052, 0x1462, 0x7125, NULL,         NULL, NULL,           P3, "MSI",         "K8N Neo4-F",            0,   OK, nvidia_mcp_gpio2_raise}, /* TODO: Should probably be K8N Neo4 Platinum, see http://www.coreboot.org/pipermail/flashrom/2010-August/004362.html. */
 	{0x8086, 0x7190,      0,      0,  0x8086, 0x7110,      0,      0, "^MS-6163 (i440BX)$", NULL, NULL,   P3, "MSI",         "MS-6163 (MS-6163 Pro)", 0,   OK, intel_piix4_gpo14_raise},
 	{0x1039, 0x0745,      0,      0,  0x1039, 0x0018,      0,      0, "^MS-6561",   NULL, NULL,           P3, "MSI",         "MS-6561 (745 Ultra)",   0,   OK, w836xx_memw_enable_2e},
@@ -2204,6 +2231,7 @@ const struct board_match board_matches[] = {
 	{0x10de, 0x0364, 0x108e, 0x6676,  0x10de, 0x0369, 0x108e, 0x6676, "^Sun Ultra 40 M2", NULL, NULL,     P3, "Sun",         "Ultra 40 M2",           0,   OK, board_sun_ultra_40_m2},
 	{0x1106, 0x3038, 0x0925, 0x1234,  0x1106, 0x0596, 0x1106,      0, NULL,         NULL, NULL,           P3, "Tekram",      "P6Pro-A5",              256, OK, NULL},
 	{0x1106, 0x3123, 0x1106, 0x3123,  0x1106, 0x3059, 0x1106, 0x4161, NULL,         NULL, NULL,           P3, "Termtek",     "TK-3370 (Rev:2.5B)",    0,   OK, w836xx_memw_enable_4e},
+	{0x8086, 0x7120, 0x109f, 0x3157,  0x8086, 0x2410,      0,      0, NULL,         NULL, NULL,           P3, "TriGem",      "Anaheim-3",             0,   OK, intel_ich_gpio22_raise},
 	{0x8086, 0x1076, 0x8086, 0x1176,  0x1106, 0x3059, 0x10f1, 0x2498, NULL,         NULL, NULL,           P3, "Tyan",        "S2498 (Tomcat K7M)",    0,   OK, w836xx_memw_enable_2e},
 	{0x1106, 0x0259, 0x1106, 0xAA07,  0x1106, 0x3227, 0x1106, 0xAA07, NULL,         NULL, NULL,           P3, "VIA",         "EPIA EK",               0,   NT, via_vt823x_gpio9_raise},
 	{0x1106, 0x3177, 0x1106, 0xAA01,  0x1106, 0x3123, 0x1106, 0xAA01, NULL,         NULL, NULL,           P3, "VIA",         "EPIA M/MII/...",        0,   OK, via_vt823x_gpio15_raise},
@@ -2245,7 +2273,7 @@ static const struct board_match *board_match_cbname(const char *vendor,
 			msg_pinfo("AMBIGUOUS BOARD NAME: %s\n", part);
 			msg_pinfo("At least vendors '%s' and '%s' match.\n",
 				  partmatch->lb_vendor, board->lb_vendor);
-			msg_perr("Please use the full -m vendor:part syntax.\n");
+			msg_perr("Please use the full -p internal:mainboard=vendor:part syntax.\n");
 			return NULL;
 		}
 		partmatch = board;
@@ -2259,7 +2287,7 @@ static const struct board_match *board_match_cbname(const char *vendor,
 		 * coreboot table. If it was, the coreboot implementor is
 		 * expected to fix flashrom, too.
 		 */
-		msg_perr("\nUnknown vendor:board from -m option: %s:%s\n\n",
+		msg_perr("\nUnknown vendor:board from -p internal:mainboard= programmer parameter:\n%s:%s\n\n",
 			 vendor, part);
 	}
 	return NULL;

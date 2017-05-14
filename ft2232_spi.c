@@ -69,7 +69,7 @@ const struct usbdev_status devs_ft2232spi[] = {
 	{GOOGLE_VID, GOOGLE_SERVO_PID, OK, "Google", "Servo"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID0, OK, "Google", "Servo V2 Legacy"},
 	{GOOGLE_VID, GOOGLE_SERVO_V2_PID1, OK, "Google", "Servo V2"},
-	{},
+	{0},
 };
 
 /*
@@ -155,7 +155,7 @@ static int get_buf(struct ftdi_context *ftdic, const unsigned char *buf,
 static int ft2232_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr);
 
-static const struct spi_programmer spi_programmer_ft2232 = {
+static const struct spi_master spi_master_ft2232 = {
 	.type		= SPI_CONTROLLER_FT2232,
 	.max_data_read	= 64 * 1024,
 	.max_data_write	= 256,
@@ -213,6 +213,8 @@ int ft2232_spi_init(void)
 			ft2232_vid = OLIMEX_VID;
 			ft2232_type = OLIMEX_ARM_OCD_PID;
 			ft2232_interface = INTERFACE_A;
+			cs_bits = 0x08;
+			pindir = 0x1b;
 		} else if (!strcasecmp(arg, "arm-usb-tiny")) {
 			ft2232_vid = OLIMEX_VID;
 			ft2232_type = OLIMEX_ARM_TINY_PID;
@@ -221,6 +223,8 @@ int ft2232_spi_init(void)
 			ft2232_vid = OLIMEX_VID;
 			ft2232_type = OLIMEX_ARM_OCD_H_PID;
 			ft2232_interface = INTERFACE_A;
+			cs_bits = 0x08;
+			pindir = 0x1b;
 		} else if (!strcasecmp(arg, "arm-usb-tiny-h")) {
 			ft2232_vid = OLIMEX_VID;
 			ft2232_type = OLIMEX_ARM_TINY_H_PID;
@@ -373,7 +377,7 @@ int ft2232_spi_init(void)
 
 	// msg_pdbg("\nft2232 chosen\n");
 
-	register_spi_programmer(&spi_programmer_ft2232);
+	register_spi_master(&spi_master_ft2232);
 
 	return 0;
 

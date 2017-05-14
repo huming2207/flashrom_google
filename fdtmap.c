@@ -234,7 +234,7 @@ int fdtmap_find(struct flashctx *flash, struct fdtmap_hdr *hdr, loff_t offset,
 	msg_gdbg("%s: fdtmap size %#x\n", __func__, fmap_size);
 
 	/* We may as well just read it here, to simplify the code */
-	if (flash->read(flash, *buf, offset + sizeof(*hdr), fmap_size)) {
+	if (flash->chip->read(flash, *buf, offset + sizeof(*hdr), fmap_size)) {
 		msg_gdbg("[L%d] failed to read %d bytes at offset %#lx\n",
 			 __LINE__, fmap_size, (unsigned long)offset);
 		return 0;

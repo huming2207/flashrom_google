@@ -32,14 +32,13 @@
 #include "big_lock.h"
 #include "flash.h"
 #include "flashchips.h"
+#include "layout.h"
 #include "power.h"
 #include "programmer.h"
 #include "writeprotect.h"
 
 #define LOCK_TIMEOUT_SECS	180
 
-/* This variable is shared with doit() in flashrom.c */
-int set_ignore_fmap = 0;
 int set_ignore_lock = 0;
 
 #if CONFIG_INTERNAL == 1
@@ -121,8 +120,8 @@ void cli_mfg_usage(const char *name)
 	         "-z|"
 #endif
 	         "-E|-r <file>|-w <file>|-v <file>]\n"
-	       "       [-i <image>[:<file>]] [-c <chipname>] "
-	               "[-m [<vendor>:]<part>] [-l <file>]\n"
+	       "       [-i <image>[:<file>]] [-c <chipname>]\n"
+	               "[-o <file>] [-l <file>]\n"
 	       "       [-p <programmer>[:<parameters>]]\n\n");
 
 	msg_ginfo("Please note that the command line interface for flashrom has "
@@ -145,11 +144,6 @@ void cli_mfg_usage(const char *name)
 	       "   -V | --verbose                    more verbose output\n"
 	       "   -c | --chip <chipname>            probe only for specified "
 	         "flash chip\n"
-#if CONFIG_INTERNAL == 1
-	       /* FIXME: --mainboard should be a programmer parameter */
-	       "   -m | --mainboard <[vendor:]part>  override mainboard "
-	         "detection\n"
-#endif
 	       "   -f | --force                      force specific operations "
 	         "(see man page)\n"
 	       "   -n | --noverify                   don't auto-verify\n"
@@ -157,6 +151,7 @@ void cli_mfg_usage(const char *name)
 	         "<file>\n"
 	       "   -i | --image <name>[:<file>]      only access image <name> "
 	         "from flash layout\n"
+	       "   -o | --output <name>	             log to file <name>\n"
 	       "   -L | --list-supported             print supported devices\n"
 	       "   -x | --extract                    extract regions to files\n"
 #if CONFIG_PRINT_WIKI == 1
@@ -182,6 +177,7 @@ void cli_mfg_usage(const char *name)
 	       "   --wp-enable                       enable write protection\n"
 	       "   --wp-list                         list write protection ranges\n"
 	       "   --wp-range <start> <length>       set write protect range\n"
+	       "   --wp-region <region>              set write protect range by region name\n"
 	       "   --wp-status                       show write protect status\n"
 	       );
 
@@ -200,6 +196,18 @@ void cli_mfg_abort_usage(const char *name)
 	exit(1);
 }
 
+static int check_filename(char *filename, char *type)
+{
+        if (!filename || (filename[0] == '\0')) {
+		fprintf(stderr, "Error: No %s file specified.\n", type);
+		return 1;
+	}
+	/* Not an error, but maybe the user intended to specify a CLI option instead of a file name. */
+	if (filename[0] == '-')
+		fprintf(stderr, "Warning: Supplied %s file name starts with -\n", type);
+	return 0;
+}
+
 enum LONGOPT_RETURN_VALUES {
 	/* start after ASCII chars */
 	LONGOPT_GET_SIZE = 256,
@@ -207,6 +215,7 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_FLASH_NAME,
 	LONGOPT_WP_STATUS,
 	LONGOPT_WP_SET_RANGE,
+	LONGOPT_WP_SET_REGION,
 	LONGOPT_WP_ENABLE,
 	LONGOPT_WP_DISABLE,
 	LONGOPT_WP_LIST,
@@ -230,9 +239,11 @@ int main(int argc, char *argv[])
 	int option_index = 0;
 	int force = 0;
 	int read_it = 0, write_it = 0, erase_it = 0, verify_it = 0,
-	    get_size = 0, set_wp_range = 0, set_wp_enable = 0,
-	    set_wp_disable = 0, wp_status = 0, wp_list = 0, flash_name = 0;
-	int dont_verify_it = 0, list_supported = 0, extract_it = 0;
+		get_size = 0, dont_verify_it = 0, list_supported = 0,
+		extract_it = 0, flash_name = 0;
+	int set_wp_range = 0, set_wp_region = 0, set_wp_enable = 0,
+	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
+	int set_ignore_fmap = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
 #endif
@@ -242,46 +253,49 @@ int main(int argc, char *argv[])
 	int rc = 0;
 	int found_chip = 0;
 
-	const char *optstring = "rRwvnVEfc:m:l:i:p:Lzhbx";
+	const char *optstring = "rRwvnVEfc:l:i:p:o:Lzhbx";
 	static struct option long_options[] = {
-		{"read", 0, 0, 'r'},
-		{"write", 0, 0, 'w'},
-		{"erase", 0, 0, 'E'},
-		{"verify", 0, 0, 'v'},
-		{"noverify", 0, 0, 'n'},
-		{"chip", 1, 0, 'c'},
-		{"mainboard", 1, 0, 'm'},
-		{"verbose", 0, 0, 'V'},
-		{"force", 0, 0, 'f'},
-		{"layout", 1, 0, 'l'},
-		{"image", 1, 0, 'i'},
-		{"list-supported", 0, 0, 'L'},
+		{"read",		0, 0, 'r'},
+		{"write",		0, 0, 'w'},
+		{"erase",		0, 0, 'E'},
+		{"verify",		0, 0, 'v'},
+		{"noverify",		0, 0, 'n'},
+		{"chip",		1, 0, 'c'},
+		{"verbose",		0, 0, 'V'},
+		{"force",		0, 0, 'f'},
+		{"layout",		1, 0, 'l'},
+		{"image",		1, 0, 'i'},
+		{"list-supported",	0, 0, 'L'},
 		{"list-supported-wiki", 0, 0, 'z'},
-		{"extract", 0, 0, 'x'},
-		{"programmer", 1, 0, 'p'},
-		{"help", 0, 0, 'h'},
-		{"version", 0, 0, 'R'},
-		{"get-size", 0, 0, LONGOPT_GET_SIZE},
-		{"flash-name", 0, 0, LONGOPT_FLASH_NAME},
-		{"diff", 1, 0, LONGOPT_DIFF},
-		{"wp-status", 0, 0, LONGOPT_WP_STATUS},
-		{"wp-range", 0, 0, LONGOPT_WP_SET_RANGE},
-		{"wp-enable", optional_argument, 0, LONGOPT_WP_ENABLE},
-		{"wp-disable", 0, 0, LONGOPT_WP_DISABLE},
-		{"wp-list", 0, 0, LONGOPT_WP_LIST},
-		{"broken-timers", 0, 0, 'b' },
-		{"ignore-fmap", 0, 0, LONGOPT_IGNORE_FMAP},
-		{"fast-verify", 0, 0, LONGOPT_FAST_VERIFY},
-		{"ignore-lock", 0, 0, LONGOPT_IGNORE_LOCK},
+		{"extract", 		0, 0, 'x'},
+		{"programmer", 		1, 0, 'p'},
+		{"help", 		0, 0, 'h'},
+		{"version", 		0, 0, 'R'},
+		{"output", 		1, 0, 'o'},
+		{"get-size", 		0, 0, LONGOPT_GET_SIZE},
+		{"flash-name", 		0, 0, LONGOPT_FLASH_NAME},
+		{"diff", 		1, 0, LONGOPT_DIFF},
+		{"wp-status", 		0, 0, LONGOPT_WP_STATUS},
+		{"wp-range", 		0, 0, LONGOPT_WP_SET_RANGE},
+		{"wp-region",		1, 0, LONGOPT_WP_SET_REGION},
+		{"wp-enable", 		optional_argument, 0, LONGOPT_WP_ENABLE},
+		{"wp-disable", 		0, 0, LONGOPT_WP_DISABLE},
+		{"wp-list", 		0, 0, LONGOPT_WP_LIST},
+		{"broken-timers", 	0, 0, 'b' },
+		{"ignore-fmap", 	0, 0, LONGOPT_IGNORE_FMAP},
+		{"fast-verify",		0, 0, LONGOPT_FAST_VERIFY},
+		{"ignore-lock",		0, 0, LONGOPT_IGNORE_LOCK},
 		{0, 0, 0, 0}
 	};
 
 	char *filename = NULL;
+	char *layoutfile = NULL;
 	char *diff_file = NULL;
-
+	char *logfile = NULL;
 	char *tempstr = NULL;
 	char *pparam = NULL;
 	char *wp_mode_opt = NULL;
+	char *wp_region = NULL;
 
 	print_version();
 
@@ -352,7 +366,9 @@ int main(int argc, char *argv[])
 			chip_to_probe = strdup(optarg);
 			break;
 		case 'V':
-			verbose++;
+			verbose_screen++;
+			if(verbose_screen > MSG_DEBUG2)
+				verbose_logfile = verbose_screen;
 			break;
 		case 'E':
 			if (++operation_specified > 1) {
@@ -367,24 +383,15 @@ int main(int argc, char *argv[])
 			broken_timer = 1;
 #endif
 			break;
-		case 'm':
-#if CONFIG_INTERNAL == 1
-			tempstr = strdup(optarg);
-			lb_vendor_dev_from_string(tempstr);
-#else
-			msg_gerr("Error: Internal programmer support "
-				"was not compiled in and --mainboard only\n"
-				"applies to the internal programmer. Aborting.\n");
-			cli_mfg_abort_usage(argv[0]);
-#endif
-			break;
 		case 'f':
 			force = 1;
 			break;
 		case 'l':
-			tempstr = strdup(optarg);
-			if (read_romlayout(tempstr))
+			if (layoutfile) {
+				fprintf(stderr, "Error: --layout specified more than once. Aborting\n");
 				cli_mfg_abort_usage(argv[0]);
+			}
+			layoutfile = strdup(optarg);
 			break;
 		case 'i':
 			tempstr = strdup(optarg);
@@ -518,6 +525,18 @@ int main(int argc, char *argv[])
 			cli_mfg_usage(argv[0]);
 			exit(0);
 			break;
+		case 'o':
+#ifdef STANDALONE
+			fprintf(stderr, "Log file not supported in standalone mode. Aborting.\n");
+			cli_mfg_abort_usage(argv[0]);
+#else /* STANDALONE */
+			logfile = strdup(optarg);
+			if (logfile[0] == '\0') {
+				fprintf(stderr, "No log filename specified.\n");
+				cli_mfg_abort_usage(argv[0]);
+			}
+#endif /* STANDALONE */
+			break;
 		case LONGOPT_GET_SIZE:
 			get_size = 1;
 			break;
@@ -529,6 +548,10 @@ int main(int argc, char *argv[])
 			break;
 		case LONGOPT_WP_SET_RANGE:
 			set_wp_range = 1;
+			break;
+		case LONGOPT_WP_SET_REGION:
+			set_wp_region = 1;
+			wp_region = strdup(optarg);
 			break;
 		case LONGOPT_WP_ENABLE:
 			set_wp_enable = 1;
@@ -583,9 +606,37 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+	if (layoutfile && check_filename(layoutfile, "layout")) {
+		cli_mfg_abort_usage(argv[0]);
+	}
+
+
+#ifndef STANDALONE
+	if (logfile && check_filename(logfile, "log"))
+		cli_mfg_abort_usage(argv[0]);
+	if (logfile && open_logfile(logfile))
+		return 1;
+#endif /* !STANDALONE */
+
 	if (read_it || write_it || verify_it) {
 		if (argv[optind])
 			filename = argv[optind];
+	}
+
+#ifndef STANDALONE
+	start_logging();
+#endif /* !STANDALONE */
+
+	print_buildinfo();
+
+        msg_gdbg("Command line (%i args):", argc - 1);
+	for (i = 0; i < argc; i++) {
+		msg_gdbg(" %s", argv[i]);
+	}
+	msg_gdbg("\n");
+
+	if (layoutfile && read_romlayout(layoutfile)) {
+		cli_mfg_abort_usage(argv[0]);
 	}
 
 	if (chip_to_probe) {
@@ -616,13 +667,6 @@ int main(int argc, char *argv[])
 	if (prog == PROGRAMMER_INVALID)
 		prog = default_programmer;
 
-#if CONFIG_INTERNAL == 1
-	if ((prog != PROGRAMMER_INTERNAL) && (lb_part || lb_vendor)) {
-		msg_gerr("Error: --mainboard requires the internal "
-				"programmer. Aborting.\n");
-		cli_mfg_abort_usage(argv[0]);
-	}
-#endif
 
 #if USE_BIG_LOCK == 1
 	/* get lock before doing any work that touches hardware */
@@ -680,7 +724,7 @@ int main(int argc, char *argv[])
 	if (chipcount > 1) {
 		msg_gerr("Multiple flash chips were detected:");
 		for (i = 0; i < chipcount; i++)
-			msg_gerr(" %s", flashes[i].name);
+			msg_gerr(" %s", flashes[i].chip->name);
 		msg_gerr("\nPlease specify which chip to use with the -c <chipname> option.\n");
 		programmer_shutdown();
 		exit(1);
@@ -709,8 +753,8 @@ int main(int argc, char *argv[])
 
 	check_chip_supported(fill_flash);
 
-	size = fill_flash->total_size * 1024;
-	if (check_max_decode((buses_supported & fill_flash->bustype), size) &&
+	size = fill_flash->chip->total_size * 1024;
+	if (check_max_decode((buses_supported & fill_flash->chip->bustype), size) &&
 	    (!force)) {
 		msg_gerr("Chip is too big for this programmer "
 			"(-V gives details). Use --force to override.\n");
@@ -719,8 +763,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
-	      get_size | set_wp_range | set_wp_enable | set_wp_disable |
-	      wp_status | wp_list | extract_it)) {
+	      get_size | set_wp_range | set_wp_region | set_wp_enable |
+	      set_wp_disable | wp_status | wp_list | extract_it)) {
 		msg_gerr("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
@@ -808,8 +852,8 @@ int main(int argc, char *argv[])
 
 	/* Note: set_wp_disable should be done before setting the range */
 	if (set_wp_disable) {
-		if (fill_flash->wp && fill_flash->wp->disable) {
-			rc |= fill_flash->wp->disable(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->disable) {
+			rc |= fill_flash->chip->wp->disable(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -819,12 +863,42 @@ int main(int argc, char *argv[])
 	}
 
 	if (flash_name) {
-		if (fill_flash->vendor && fill_flash->name) {
+		if (fill_flash->chip->vendor && fill_flash->chip->name) {
 			msg_ginfo("vendor=\"%s\" name=\"%s\"\n",
-			       fill_flash->vendor, fill_flash->name);
+			       fill_flash->chip->vendor,
+			       fill_flash->chip->name);
 			goto cli_mfg_silent_exit;
 		} else {
 			rc = -1;
+			goto cli_mfg_silent_exit;
+		}
+	}
+
+	/* If the user doesn't specify any -i argument, then we can skip the
+	 * fmap parsing to speed up. */
+	if (get_num_include_args() == 0 && !extract_it) {
+		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
+		set_ignore_fmap = 1;
+	}
+
+	/* add entries for regions specified in flashmap */
+	if (!set_ignore_fmap && add_fmap_entries(fill_flash) < 0) {
+		rc = 1;
+		goto cli_mfg_silent_exit;
+	}
+
+	if (set_wp_range || set_wp_region) {
+		if (set_wp_range && set_wp_region) {
+			msg_gerr("Error: Cannot use both --wp-range and "
+				"--wp-region simultaneously.\n");
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		if (!fill_flash->chip->wp || !fill_flash->chip->wp->set_range) {
+			msg_gerr("Error: write protect is not supported "
+			       "on this flash chip.\n");
+			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
 	}
@@ -855,16 +929,31 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (fill_flash->wp && fill_flash->wp->set_range) {
-			rc |= fill_flash->wp->set_range(fill_flash, start, len);
-		} else {
-			msg_gerr("Error: write protect is not supported "
-			       "on this flash chip.\n");
+		rc |= fill_flash->chip->wp->set_range(fill_flash, start, len);
+	}
+
+	if (set_wp_region && wp_region) {
+		int n;
+		romlayout_t entry;
+
+		n = find_romentry(wp_region);
+		if (n < 0) {
+			msg_gerr("Error: Unable to find region \"%s\"\n",
+					wp_region);
 			rc = 1;
 			goto cli_mfg_silent_exit;
 		}
+
+		if (fill_romentry(&entry, n)) {
+			rc = 1;
+			goto cli_mfg_silent_exit;
+		}
+
+		rc |= fill_flash->chip->wp->set_range(fill_flash,
+				entry.start, entry.end - entry.start + 1);
+		free(wp_region);
 	}
-	
+
 	if (!rc && set_wp_enable) {
 		enum wp_mode wp_mode;
 
@@ -879,8 +968,8 @@ int main(int argc, char *argv[])
 			goto cli_mfg_silent_exit;
 		}
 
-		if (fill_flash->wp && fill_flash->wp->enable) {
-			rc |= fill_flash->wp->enable(fill_flash, wp_mode);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->enable) {
+			rc |= fill_flash->chip->wp->enable(fill_flash, wp_mode);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -890,13 +979,13 @@ int main(int argc, char *argv[])
 	}
 	
 	if (get_size) {
-		msg_ginfo("%d\n", fill_flash->total_size * 1024);
+		msg_ginfo("%d\n", fill_flash->chip->total_size * 1024);
 		goto cli_mfg_silent_exit;
 	}
 
 	if (wp_status) {
-		if (fill_flash->wp && fill_flash->wp->wp_status) {
-			rc |= fill_flash->wp->wp_status(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->wp_status) {
+			rc |= fill_flash->chip->wp->wp_status(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
@@ -907,21 +996,14 @@ int main(int argc, char *argv[])
 	
 	if (wp_list) {
 		msg_ginfo("Valid write protection ranges:\n");
-		if (fill_flash->wp && fill_flash->wp->list_ranges) {
-			rc |= fill_flash->wp->list_ranges(fill_flash);
+		if (fill_flash->chip->wp && fill_flash->chip->wp->list_ranges) {
+			rc |= fill_flash->chip->wp->list_ranges(fill_flash);
 		} else {
 			msg_gerr("Error: write protect is not supported "
 			       "on this flash chip.\n");
 			rc = 1;
 		}
 		goto cli_mfg_silent_exit;
-	}
-
-	/* If the user doesn't specify any -i argument, then we can skip the
-	 * fmap parsing to speed up. */
-	if (get_num_include_args() == 0 && !extract_it) {
-		msg_gdbg("No -i argument is specified, set ignore_fmap.\n");
-		set_ignore_fmap = 1;
 	}
 
 	if (read_it || write_it || erase_it || verify_it || extract_it) {
@@ -941,6 +1023,9 @@ cli_mfg_silent_exit:
 		msg_gerr("Unable to re-enable power management\n");
 		rc |= 1;
 	}
+#ifndef STANDALONE
+	rc |= close_logfile();
+#endif /* !STANDALONE */
 
 	return rc;
 }

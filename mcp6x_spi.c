@@ -19,7 +19,7 @@
 
 /* Driver for the NVIDIA MCP6x/MCP7x MCP6X_SPI controller.
  * Based on clean room reverse engineered docs from
- * http://www.flashrom.org/pipermail/flashrom/2009-December/001180.html
+ * https://flashrom.org/pipermail/flashrom/2009-December/001180.html
  * created by Michael Karcher.
  */
 
@@ -98,6 +98,7 @@ static const struct bitbang_spi_master bitbang_spi_master_mcp6x = {
 	.get_miso = mcp6x_bitbang_get_miso,
 	.request_bus = mcp6x_request_spibus,
 	.release_bus = mcp6x_release_spibus,
+	.half_period = 0,
 };
 
 int mcp6x_spi_init(int want_spi)
@@ -133,25 +134,20 @@ int mcp6x_spi_init(int want_spi)
 
 	/* Accessing a NULL pointer BAR is evil. Don't do it. */
 	if (!mcp6x_spibaraddr && want_spi) {
-		msg_perr("Error: Chipset is strapped for SPI, but MCP SPI BAR "
-			 "is invalid.\n");
+		msg_perr("Error: Chipset is strapped for SPI, but MCP SPI BAR is invalid.\n");
 		return 1;
 	} else if (!mcp6x_spibaraddr && !want_spi) {
 		msg_pdbg("MCP SPI is not used.\n");
 		return 0;
 	} else if (mcp6x_spibaraddr && !want_spi) {
-		msg_pdbg("Strange. MCP SPI BAR is valid, but chipset apparently"
-			 " doesn't have SPI enabled.\n");
+		msg_pdbg("Strange. MCP SPI BAR is valid, but chipset apparently doesn't have SPI enabled.\n");
 		/* FIXME: Should we enable SPI anyway? */
 		return 0;
 	}
 	/* Map the BAR. Bytewise/wordwise access at 0x530 and 0x540. */
-	mcp6x_spibar = physmap("NVIDIA MCP6x SPI", mcp6x_spibaraddr, 0x544);
-
-#if 0
-	/* FIXME: Run the physunmap in a shutdown function. */
-	physunmap(mcp6x_spibar, 0x544);
-#endif
+	mcp6x_spibar = rphysmap("NVIDIA MCP6x SPI", mcp6x_spibaraddr, 0x544);
+	if (mcp6x_spibar == ERROR_PTR)
+		return 1;
 
 	status = mmio_readw(mcp6x_spibar + 0x530);
 	msg_pdbg("SPI control is 0x%04x, req=%i, gnt=%i\n",
@@ -159,8 +155,7 @@ int mcp6x_spi_init(int want_spi)
 		 (status >> MCP6X_SPI_GRANT) & 0x1);
 	mcp_gpiostate = status & 0xff;
 
-	/* Zero halfperiod delay. */
-	if (bitbang_spi_init(&bitbang_spi_master_mcp6x, 0)) {
+	if (register_spi_bitbang_master(&bitbang_spi_master_mcp6x)) {
 		/* This should never happen. */
 		msg_perr("MCP6X bitbang SPI master init failed!\n");
 		return 1;

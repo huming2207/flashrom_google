@@ -33,18 +33,27 @@
 char *lb_part = NULL, *lb_vendor = NULL;
 int partvendor_from_cbtable = 0;
 
-void lb_vendor_dev_from_string(char *boardstring)
+/* Parse the [<vendor>:]<board> string specified by the user as part of
+ * -p internal:mainboard=[<vendor>:]<board> and set lb_vendor and lb_part
+ * to the extracted values.
+ * Note: strtok modifies the original string, so we work on a copy and allocate
+ * memory for lb_vendor and lb_part with strdup.
+ */
+void lb_vendor_dev_from_string(const char *boardstring)
 {
+	/* strtok may modify the original string. */
+	char *tempstr = strdup(boardstring);
 	char *tempstr2 = NULL;
-	strtok(boardstring, ":");
+	strtok(tempstr, ":");
 	tempstr2 = strtok(NULL, ":");
 	if (tempstr2) {
-		lb_vendor = boardstring;
-		lb_part = tempstr2;
+		lb_vendor = strdup(tempstr);
+		lb_part = strdup(tempstr2);
 	} else {
 		lb_vendor = NULL;
-		lb_part = boardstring;
+		lb_part = strdup(tempstr);
 	}
+	free(tempstr);
 }
 
 static unsigned long compute_checksum(void *addr, unsigned long length)
@@ -153,14 +162,12 @@ static void find_mainboard(struct lb_record *ptr, unsigned long addr)
 	rec = (struct lb_mainboard *)ptr;
 	max_size = rec->size - sizeof(*rec);
 	msg_pdbg("Vendor ID: %.*s, part ID: %.*s\n",
-	       max_size - rec->vendor_idx,
-	       rec->strings + rec->vendor_idx,
-	       max_size - rec->part_number_idx,
-	       rec->strings + rec->part_number_idx);
-	snprintf(vendor, 255, "%.*s", max_size - rec->vendor_idx,
-		 rec->strings + rec->vendor_idx);
-	snprintf(part, 255, "%.*s", max_size - rec->part_number_idx,
-		 rec->strings + rec->part_number_idx);
+	         max_size - rec->vendor_idx,
+	         rec->strings + rec->vendor_idx,
+	         max_size - rec->part_number_idx,
+	         rec->strings + rec->part_number_idx);
+	snprintf(vendor, 255, "%.*s", max_size - rec->vendor_idx, rec->strings + rec->vendor_idx);
+	snprintf(part, 255, "%.*s", max_size - rec->part_number_idx, rec->strings + rec->part_number_idx);
 
 	if (lb_part) {
 		msg_pdbg("Overwritten by command line, vendor ID: %s, part ID: %s.\n", lb_vendor, lb_part);
@@ -176,8 +183,7 @@ static struct lb_record *next_record(struct lb_record *rec)
 	return (struct lb_record *)(((char *)rec) + rec->size);
 }
 
-static void search_lb_records(struct lb_record *rec, struct lb_record *last,
-			      unsigned long addr)
+static void search_lb_records(struct lb_record *rec, struct lb_record *last, unsigned long addr)
 {
 	struct lb_record *next;
 	int count;
@@ -202,7 +208,7 @@ int coreboot_init(void)
 	struct lb_header *lb_table;
 	struct lb_record *rec, *last;
 
-#ifdef __DARWIN__
+#if defined(__MACH__) && defined(__APPLE__)
 	/* This is a hack. DirectHW fails to map physical address 0x00000000.
 	 * Why?
 	 */
@@ -228,8 +234,7 @@ int coreboot_init(void)
 			physunmap(table_area, BYTES_TO_MAP);
 			table_area = physmap_try_ro("high tables", start, BYTES_TO_MAP);
 			if (ERROR_PTR == table_area) {
-				msg_perr("Failed getting access to coreboot "
-					 "high tables.\n");
+				msg_perr("Failed getting access to coreboot high tables.\n");
 				return -1;
 			}
 			lb_table = find_lb_table(table_area, 0x00000, 0x1000);
@@ -242,7 +247,7 @@ int coreboot_init(void)
 	}
 
 	addr = ((char *)lb_table) - ((char *)table_area) + start;
-	msg_pdbg("coreboot table found at 0x%lx.\n", 
+	msg_pinfo("coreboot table found at 0x%lx.\n", 
 		(unsigned long)lb_table - (unsigned long)table_area + start);
 	rec = (struct lb_record *)(((char *)lb_table) + lb_table->header_bytes);
 	last = (struct lb_record *)(((char *)rec) + lb_table->table_bytes);

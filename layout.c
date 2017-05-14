@@ -29,7 +29,6 @@
 #include "flash.h"
 #include "fdtmap.h"
 #include "fmap.h"
-#include "libfdt.h"
 #include "layout.h"
 #include "programmer.h"
 #include "search.h"
@@ -114,16 +113,16 @@ int show_id(uint8_t *bios, int size, int force)
 
 	/*
 	 * If lb_vendor is not set, the coreboot table was
-	 * not found. Nor was -m VENDOR:PART specified.
+	 * not found. Nor was -p internal:mainboard=VENDOR:PART specified.
 	 */
 	if (!lb_vendor || !lb_part) {
-		msg_pdbg("Note: If the following flash access fails, "
-		       "try -m <vendor>:<mainboard>.\n");
+		msg_pdbg("Note: If the following flash access fails, try"
+		       "-p internal:mainboard= <vendor>:<mainboard>.\n");
 		return 0;
 	}
 
 	/* These comparisons are case insensitive to make things
-	 * a little less user^Werror prone. 
+	 * a little less user error prone.
 	 */
 	if (!strcasecmp(mainboard_vendor, lb_vendor) &&
 	    !strcasecmp(mainboard_part, lb_part)) {
@@ -134,14 +133,17 @@ int show_id(uint8_t *bios, int size, int force)
 			       "seem to fit to this machine - forcing it.\n");
 		} else {
 			msg_pinfo("ERROR: Your firmware image (%s:%s) does not "
-			       "appear to\n       be correct for the detected "
-			       "mainboard (%s:%s)\n\nOverride with -p internal:"
-			       "boardmismatch=force if you are absolutely sure "
-			       "that\nyou are using a correct "
-			       "image for this mainboard or override\nthe detected "
-			       "values with --mainboard <vendor>:<mainboard>.\n\n",
-			       mainboard_vendor, mainboard_part, lb_vendor,
-			       lb_part);
+				  "appear to\n"
+				  "       be correct for the detected "
+				  "mainboard (%s:%s)\n\n"
+				  "Override with -p internal:boardmismatch="
+				  "force to ignore the board name in the\n"
+				  "firmware image or override the detected "
+				  "mainboard with\n"
+				  "-p internal:mainboard=<vendor>:<mainboard>."
+				  "\n\n",
+				  mainboard_vendor, mainboard_part, lb_vendor,
+				  lb_part);
 			exit(1);
 		}
 	}
@@ -268,18 +270,18 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 
 	fmap_base = (unsigned long)strtoll(buf, (char **) NULL, 0);
 	msg_gdbg("%s: fmap_base: %#lx, ROM size: 0x%x\n",
-		__func__, fmap_base, search->flash->total_size * 1024);
+		__func__, fmap_base, search->flash->chip->total_size * 1024);
 
 	if (fmap_base & (1 << 31)) {
 		from_top = 0xFFFFFFFF - fmap_base + 1;
 		msg_gdbg("%s: fmap is located in shadow ROM, from_top: %#lx\n",
 				__func__, from_top);
-		if (from_top > search->flash->total_size * 1024)
+		if (from_top > search->flash->chip->total_size * 1024)
 			return -1;
-		*offset = (search->flash->total_size * 1024) - from_top;
+		*offset = (search->flash->chip->total_size * 1024) - from_top;
 	} else {
 		msg_gdbg("%s: fmap is located in physical ROM\n", __func__);
-		if (fmap_base > search->flash->total_size * 1024)
+		if (fmap_base > search->flash->chip->total_size * 1024)
 			return -1;
 		*offset = fmap_base;
 	}
@@ -344,7 +346,7 @@ enum found_t {
 /* returns the number of entries added, or <0 to indicate error */
 int add_fmap_entries(struct flashctx *flash)
 {
-	enum found_t found = FOUND_NONE;
+	static enum found_t found = FOUND_NONE;
 	int ret = -1;
 	struct search_info search;
 	union {
@@ -353,6 +355,11 @@ int add_fmap_entries(struct flashctx *flash)
 	} hdr;
 	uint8_t *buf = NULL;
 	off_t offset;
+
+	if (found != FOUND_NONE) {
+		msg_gdbg("Already found fmap entries, not searching again.\n");
+		return 0;
+	}
 
 	search_init(&search, flash, sizeof(hdr));
 	search.handler = get_crossystem_fmap_base;
@@ -454,6 +461,16 @@ int find_romentry(char *name)
 	return -1;
 }
 
+
+int fill_romentry(romlayout_t *entry, int n)
+{
+	if (!entry)
+		return 1;
+
+	memcpy(entry, &rom_entries[n], sizeof(*entry));
+	return 0;
+}
+
 /*
  * num_include_files - count filenames used with -i args
  *
@@ -507,26 +524,28 @@ int process_include_args() {
 	return 0;
 }
 
-int find_next_included_romentry(unsigned int start)
+romlayout_t *get_next_included_romentry(unsigned int start)
 {
 	int i;
 	unsigned int best_start = UINT_MAX;
-	int best_entry = -1;
+	romlayout_t *best_entry = NULL;
+	romlayout_t *cur;
 
 	/* First come, first serve for overlapping regions. */
 	for (i = 0; i < romimages; i++) {
-		if (!rom_entries[i].included)
+		cur = &rom_entries[i];
+		if (!cur->included)
 			continue;
 		/* Already past the current entry? */
-		if (start > rom_entries[i].end)
+		if (start > cur->end)
 			continue;
 		/* Inside the current entry? */
-		if (start >= rom_entries[i].start)
-			return i;
+		if (start >= cur->start)
+			return cur;
 		/* Entry begins after start. */
-		if (best_start > rom_entries[i].start) {
-			best_start = rom_entries[i].start;
-			best_entry = i;
+		if (best_start > cur->start) {
+			best_start = cur->start;
+			best_entry = cur;
 		}
 	}
 	return best_entry;
@@ -571,15 +590,15 @@ out:
 	return overlap_detected;
 }
 
-static int read_content_from_file(int entry, uint8_t *newcontents) {
+static int read_content_from_file(romlayout_t *entry, uint8_t *newcontents) {
 	char *file;
 	FILE *fp;
 	int len;
 
 	/* If file name is specified for this partition, read file
 	 * content to overwrite. */
-	file = rom_entries[entry].file;
-	len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	file = entry->file;
+	len = entry->end - entry->start + 1;
 	if (file[0]) {
 		int numbytes;
 		struct stat s;
@@ -593,7 +612,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 		if (s.st_size > len) {
 			msg_gerr("File %s is %d bytes, region %s is %d bytes.\n"
 				 , file, (int)s.st_size,
-				 rom_entries[entry].name, len);
+				 entry->name, len);
 			return -1;
 		}
 
@@ -601,7 +620,7 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 			perror(file);
 			return -1;
 		}
-		numbytes = fread(newcontents + rom_entries[entry].start,
+		numbytes = fread(newcontents + entry->start,
 		                 1, s.st_size, fp);
 		fclose(fp);
 		if (numbytes == -1) {
@@ -615,8 +634,8 @@ static int read_content_from_file(int entry, uint8_t *newcontents) {
 int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *newcontents)
 {
 	unsigned int start = 0;
-	int entry;
-	unsigned int size = flash->total_size * 1024;
+	romlayout_t *entry;
+	unsigned int size = flash->chip->total_size * 1024;
 
 	/* If no regions were specified for inclusion, assume
 	 * that the user wants to write the complete new image.
@@ -629,59 +648,59 @@ int handle_romentries(struct flashctx *flash, uint8_t *oldcontents, uint8_t *new
 	 */
 	while (start < size) {
 
-		entry = find_next_included_romentry(start);
+		entry = get_next_included_romentry(start);
 		/* No more romentries for remaining region? */
-		if (entry < 0) {
+		if (!entry) {
 			memcpy(newcontents + start, oldcontents + start,
 			       size - start);
 			break;
 		}
 
-		if (rom_entries[entry].start > size) {
+		if (entry->start > size) {
 			msg_gerr("Layout entry \"%s\" begins beyond ROM size.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
-		} else if (rom_entries[entry].end > (size - 1)) {
+		} else if (entry->end > (size - 1)) {
 			msg_gerr("Layout entry \"%s\" ends beyond ROM size.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
 		}
 
-		if (rom_entries[entry].start > rom_entries[entry].end) {
+		if (entry->start > entry->end) {
 			msg_gerr("Layout entry \"%s\" has an invalid range.\n",
-						rom_entries[entry].name);
+						entry->name);
 			return 1;
 		}
 
 		/* For non-included region, copy from old content. */
-		if (rom_entries[entry].start > start)
+		if (entry->start > start)
 			memcpy(newcontents + start, oldcontents + start,
-			       rom_entries[entry].start - start);
+			       entry->start - start);
 		/* For included region, copy from file if specified. */
 		if (read_content_from_file(entry, newcontents) < 0) return -1;
 
 		/* Skip to location after current romentry. */
-		start = rom_entries[entry].end + 1;
+		start = entry->end + 1;
 		/* Catch overflow. */
 		if (!start)
 			break;
 	}
-			
+
 	return 0;
 }
-static int write_content_to_file(int entry, uint8_t *buf) {
+static int write_content_to_file(romlayout_t *entry, uint8_t *buf) {
 	char *file;
 	FILE *fp;
-	int len = rom_entries[entry].end - rom_entries[entry].start + 1;
+	int len = entry->end - entry->start + 1;
 
-	file = rom_entries[entry].file;
+	file = entry->file;
 	if (file[0]) {  /* save to file if name is specified. */
 		int numbytes;
 		if ((fp = fopen(file, "wb")) == NULL) {
 			perror(file);
 			return -1;
 		}
-		numbytes = fwrite(buf + rom_entries[entry].start, 1, len, fp);
+		numbytes = fwrite(buf + entry->start, 1, len, fp);
 		fclose(fp);
 		if (numbytes != len) {
 			perror(file);
@@ -703,7 +722,7 @@ static int set_required_erase_size(struct flashctx *flash)
 	 */
 	required_erase_size = ~0;
 	for (i = 0; i < NUM_ERASEFUNCTIONS; i++) {
-		struct block_eraser eraser = flash->block_erasers[i];
+		struct block_eraser eraser = flash->chip->block_erasers[i];
 		int j;
 
 		for (j = 0; j < NUM_ERASEREGIONS; j++) {
@@ -776,7 +795,7 @@ int handle_partial_read(
 
 		/* If file is specified, write this partition to file. */
 		if (write_to_file) {
-			if (write_content_to_file(i, buf) < 0)
+			if (write_content_to_file(&rom_entries[i], buf) < 0)
 				return -1;
 		}
 
@@ -845,7 +864,7 @@ int handle_partial_verify(
 
 int extract_regions(struct flashctx *flash)
 {
-	unsigned long size = flash->total_size * 1024;
+	unsigned long size = flash->chip->total_size * 1024;
 	unsigned char *buf = calloc(size, sizeof(char));
 	int i, ret = 0;
 

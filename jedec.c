@@ -93,7 +93,7 @@ void data_polling_jedec(const struct flashctx *flash, chipaddr dst, uint8_t data
 
 static unsigned int getaddrmask(struct flashctx *flash)
 {
-	switch (flash->feature_bits & FEATURE_ADDR_MASK) {
+	switch (flash->chip->feature_bits & FEATURE_ADDR_MASK) {
 	case FEATURE_ADDR_FULL:
 		return MASK_FULL;
 		break;
@@ -126,11 +126,11 @@ static int probe_jedec_common(struct flashctx *flash, unsigned int mask)
 	uint32_t flashcontent1, flashcontent2;
 	int probe_timing_enter, probe_timing_exit;
 
-	if (flash->probe_timing > 0) 
-		probe_timing_enter = probe_timing_exit = flash->probe_timing;
-	else if (flash->probe_timing == TIMING_ZERO) { /* No delay. */
+	if (flash->chip->probe_timing > 0) 
+		probe_timing_enter = probe_timing_exit = flash->chip->probe_timing;
+	else if (flash->chip->probe_timing == TIMING_ZERO) { /* No delay. */
 		probe_timing_enter = probe_timing_exit = 0;
-	} else if (flash->probe_timing == TIMING_FIXME) { /* == _IGNORED */
+	} else if (flash->chip->probe_timing == TIMING_FIXME) { /* == _IGNORED */
 		msg_cdbg("Chip lacks correct probe timing information, "
 			     "using default 10mS/40uS. ");
 		probe_timing_enter = 10000;
@@ -148,7 +148,7 @@ static int probe_jedec_common(struct flashctx *flash, unsigned int mask)
 	if (probe_timing_enter)
 		programmer_delay(probe_timing_enter);
 	/* Reset chip to a clean slate */
-	if ((flash->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
+	if ((flash->chip->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
 	{
 		chip_writeb(flash, 0xAA, bios + (0x5555 & mask));
 		if (probe_timing_exit)
@@ -191,7 +191,7 @@ static int probe_jedec_common(struct flashctx *flash, unsigned int mask)
 	}
 
 	/* Issue JEDEC Product ID Exit command */
-	if ((flash->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
+	if ((flash->chip->feature_bits & FEATURE_RESET_MASK) == FEATURE_LONG_RESET)
 	{
 		chip_writeb(flash, 0xAA, bios + (0x5555 & mask));
 		if (probe_timing_exit)
@@ -228,10 +228,10 @@ static int probe_jedec_common(struct flashctx *flash, unsigned int mask)
 		msg_cdbg(", id2 is normal flash content");
 
 	msg_cdbg("\n");
-	if (largeid1 != flash->manufacture_id || largeid2 != flash->model_id)
+	if (largeid1 != flash->chip->manufacture_id || largeid2 != flash->chip->model_id)
 		return 0;
 
-	if (flash->feature_bits & FEATURE_REGISTERMAP)
+	if (flash->chip->feature_bits & FEATURE_REGISTERMAP)
 		map_flash_registers(flash);
 
 	return 1;
@@ -242,7 +242,7 @@ static int erase_sector_jedec_common(struct flashctx *flash, unsigned int page,
 {
 	chipaddr bios = flash->virtual_memory;
 	int delay_us = 0;
-	if(flash->probe_timing != TIMING_ZERO)
+	if(flash->chip->probe_timing != TIMING_ZERO)
 	        delay_us = 10;
 
 	/*  Issue the Sector Erase command   */
@@ -272,7 +272,7 @@ static int erase_block_jedec_common(struct flashctx *flash, unsigned int block,
 {
 	chipaddr bios = flash->virtual_memory;
 	int delay_us = 0;
-	if(flash->probe_timing != TIMING_ZERO)
+	if(flash->chip->probe_timing != TIMING_ZERO)
 	        delay_us = 10;
 
 	/*  Issue the Sector Erase command   */
@@ -301,7 +301,7 @@ static int erase_chip_jedec_common(struct flashctx *flash, unsigned int mask)
 {
 	chipaddr bios = flash->virtual_memory;
 	int delay_us = 0;
-	if(flash->probe_timing != TIMING_ZERO)
+	if(flash->chip->probe_timing != TIMING_ZERO)
 	        delay_us = 10;
 
 	/*  Issue the JEDEC Chip Erase command   */
@@ -432,7 +432,7 @@ int write_jedec(struct flashctx *flash, uint8_t *buf, unsigned int start, int un
 	 * write_jedec have page_size set to max_writechunk_size, so
 	 * we're OK for now.
 	 */
-	unsigned int page_size = flash->page_size;
+	unsigned int page_size = flash->chip->page_size;
 
 	/* Warning: This loop has a very unusual condition and body.
 	 * The loop needs to go through each page with at least one affected
@@ -464,7 +464,7 @@ int erase_chip_block_jedec(struct flashctx *flash, unsigned int addr,
 	unsigned int mask;
 
 	mask = getaddrmask(flash);
-	if ((addr != 0) || (blocksize != flash->total_size * 1024)) {
+	if ((addr != 0) || (blocksize != flash->chip->total_size * 1024)) {
 		msg_cerr("%s called with incorrect arguments\n",
 			__func__);
 		return -1;

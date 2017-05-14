@@ -617,6 +617,9 @@ struct w25q_range w25x40_ranges[] = {
 	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
 	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
 	{ 0, X, 0x4, {0x000000, 512 * 1024} },
+	{ 0, X, 0x5, {0x000000, 512 * 1024} },
+	{ 0, X, 0x6, {0x000000, 512 * 1024} },
+	{ 0, X, 0x7, {0x000000, 512 * 1024} },
 };
 
 struct w25q_range w25x80_ranges[] = {
@@ -632,6 +635,65 @@ struct w25q_range w25x80_ranges[] = {
 	{ 0, X, 0x5, {0x000000, 1024 * 1024} },
 	{ 0, X, 0x6, {0x000000, 1024 * 1024} },
 	{ 0, X, 0x7, {0x000000, 1024 * 1024} },
+};
+
+static struct w25q_range gd25q40_cmp0_ranges[] = {
+	{ X, X, 0, {0, 0} },    /* None */
+	{ 0, 0, 0x1, {0x070000, 64 * 1024} },
+	{ 0, 0, 0x2, {0x060000, 128 * 1024} },
+	{ 0, 0, 0x3, {0x040000, 256 * 1024} },
+	{ 0, 1, 0x1, {0x000000, 64 * 1024} },
+	{ 0, 1, 0x2, {0x000000, 128 * 1024} },
+	{ 0, 1, 0x3, {0x000000, 256 * 1024} },
+	{ 0, X, 0x4, {0x000000, 512 * 1024} }, /* All */
+	{ 0, X, 0x5, {0x000000, 512 * 1024} }, /* All */
+	{ 0, X, 0x6, {0x000000, 512 * 1024} }, /* All */
+	{ 0, X, 0x7, {0x000000, 512 * 1024} }, /* All */
+	{ 1, 0, 0x1, {0x07F000, 4 * 1024} },
+	{ 1, 0, 0x2, {0x07E000, 8 * 1024} },
+	{ 1, 0, 0x3, {0x07C000, 16 * 1024} },
+	{ 1, 0, 0x4, {0x078000, 32 * 1024} },
+	{ 1, 0, 0x5, {0x078000, 32 * 1024} },
+	{ 1, 0, 0x6, {0x078000, 32 * 1024} },
+	{ 1, 1, 0x1, {0x000000, 4 * 1024} },
+	{ 1, 1, 0x2, {0x000000, 8 * 1024} },
+	{ 1, 1, 0x3, {0x000000, 16 * 1024} },
+	{ 1, 1, 0x4, {0x000000, 32 * 1024} },
+	{ 1, 1, 0x5, {0x000000, 32 * 1024} },
+	{ 1, 1, 0x6, {0x000000, 32 * 1024} },
+	{ 1, X, 0x7, {0x000000, 512 * 1024} }, /* All */
+};
+
+static struct w25q_range gd25q40_cmp1_ranges[] = {
+	{ X, X, 0x0, {0x000000, 512 * 1024} }, /* ALL */
+	{ 0, 0, 0x1, {0x000000, 448 * 1024} },
+	{ 0, 0, 0x2, {0x000000, 384 * 1024} },
+	{ 0, 0, 0x3, {0x000000, 256 * 1024} },
+
+	{ 0, 1, 0x1, {0x010000, 448 * 1024} },
+	{ 0, 1, 0x2, {0x020000, 384 * 1024} },
+	{ 0, 1, 0x3, {0x040000, 256 * 1024} },
+
+	{ 0, X, 0x4, {0x000000, 0} }, /* None */
+	{ 0, X, 0x5, {0x000000, 0} }, /* None */
+	{ 0, X, 0x6, {0x000000, 0} }, /* None */
+	{ 0, X, 0x7, {0x000000, 0} }, /* None */
+
+	{ 1, 0, 0x1, {0x000000, 508 * 1024} },
+	{ 1, 0, 0x2, {0x000000, 504 * 1024} },
+	{ 1, 0, 0x3, {0x000000, 496 * 1024} },
+	{ 1, 0, 0x4, {0x000000, 480 * 1024} },
+	{ 1, 0, 0x5, {0x000000, 480 * 1024} },
+	{ 1, 0, 0x6, {0x000000, 480 * 1024} },
+
+	{ 1, 1, 0x1, {0x001000, 508 * 1024} },
+	{ 1, 1, 0x2, {0x002000, 504 * 1024} },
+	{ 1, 1, 0x3, {0x004000, 496 * 1024} },
+	{ 1, 1, 0x4, {0x008000, 480 * 1024} },
+	{ 1, 1, 0x5, {0x008000, 480 * 1024} },
+	{ 1, 1, 0x6, {0x008000, 480 * 1024} },
+
+	{ 1, X, 0x7, {0x000000, 0} }, /* None */
 };
 
 static struct w25q_range gd25q64_ranges[] = {
@@ -679,16 +741,16 @@ static struct w25q_range a25l040_ranges[] = {
 
 static uint8_t do_read_status(const struct flashctx *flash)
 {
-	if (flash->read_status)
-		return flash->read_status(flash);
+	if (flash->chip->read_status)
+		return flash->chip->read_status(flash);
 	else
 		return spi_read_status_register(flash);
 }
 
 static int do_write_status(const struct flashctx *flash, int status)
 {
-	if (flash->write_status)
-		return flash->write_status(flash, status);
+	if (flash->chip->write_status)
+		return flash->chip->write_status(flash, status);
 	else
 		return spi_write_status_register(flash, status);
 }
@@ -722,9 +784,9 @@ static int w25_range_table(const struct flashctx *flash,
 	*w25q_ranges = 0;
 	*num_entries = 0;
 
-	switch (flash->manufacture_id) {
+	switch (flash->chip->manufacture_id) {
 	case WINBOND_NEX_ID:
-		switch(flash->model_id) {
+		switch(flash->chip->model_id) {
 		case WINBOND_NEX_W25X10:
 			*w25q_ranges = w25x10_ranges;
 			*num_entries = ARRAY_SIZE(w25x10_ranges);
@@ -741,26 +803,27 @@ static int w25_range_table(const struct flashctx *flash,
 			*w25q_ranges = w25x80_ranges;
 			*num_entries = ARRAY_SIZE(w25x80_ranges);
 			break;
-		case WINBOND_NEX_W25Q80:
+		case WINBOND_NEX_W25Q80_V:
 			*w25q_ranges = w25q80_ranges;
 			*num_entries = ARRAY_SIZE(w25q80_ranges);
 			break;
-		case WINBOND_NEX_W25Q16:
+		case WINBOND_NEX_W25Q16_V:
 			*w25q_ranges = w25q16_ranges;
 			*num_entries = ARRAY_SIZE(w25q16_ranges);
 			break;
-		case WINBOND_NEX_W25Q32:
-		case WINBOND_NEX_W25Q32DW:
+		case WINBOND_NEX_W25Q32_V:
+		case WINBOND_NEX_W25Q32_W:
 			*w25q_ranges = w25q32_ranges;
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
-		case WINBOND_NEX_W25Q64:
-                case WINBOND_NEX_W25Q64DW:
+		case WINBOND_NEX_W25Q64_V:
+                case WINBOND_NEX_W25Q64_W:
 			*w25q_ranges = w25q64_ranges;
 			*num_entries = ARRAY_SIZE(w25q64_ranges);
 			break;
-		case WINBOND_NEX_W25Q128:
-		case WINBOND_NEX_W25Q128FW:
+		case WINBOND_NEX_W25Q128J:
+		case WINBOND_NEX_W25Q128_V:
+		case WINBOND_NEX_W25Q128_W:
 			if (w25q_read_status_register_2(flash) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
@@ -774,12 +837,12 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s() %d: WINBOND flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
-			         flash->model_id);
+			         flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case EON_ID_NOPREFIX:
-		switch (flash->model_id) {
+		switch (flash->chip->model_id) {
 		case EON_EN25F40:
 			*w25q_ranges = en25f40_ranges;
 			*num_entries = ARRAY_SIZE(en25f40_ranges);
@@ -811,12 +874,12 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s():%d: EON flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
-				 flash->model_id);
+				 flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case MACRONIX_ID:
-		switch (flash->model_id) {
+		switch (flash->chip->model_id) {
 		case MACRONIX_MX25L1005:
 			*w25q_ranges = mx25l1005_ranges;
 			*num_entries = ARRAY_SIZE(mx25l1005_ranges);
@@ -854,12 +917,12 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
-			         flash->model_id);
+			         flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case ST_ID:
-		switch(flash->model_id) {
+		switch(flash->chip->model_id) {
 		case ST_N25Q064__1E:
 		case ST_N25Q064__3E:
 			*w25q_ranges = n25q064_ranges;
@@ -868,15 +931,25 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s() %d: Micron flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
-				 flash->model_id);
+				 flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case GIGADEVICE_ID:
-		switch(flash->model_id) {
+		switch(flash->chip->model_id) {
 		case GIGADEVICE_GD25LQ32:
 			*w25q_ranges = w25q32_ranges;
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
+			break;
+		case GIGADEVICE_GD25Q40:
+			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+				/* CMP == 1 */
+				*w25q_ranges = gd25q40_cmp1_ranges;
+				*num_entries = ARRAY_SIZE(gd25q40_cmp1_ranges);
+			} else {
+				*w25q_ranges = gd25q40_cmp0_ranges;
+				*num_entries = ARRAY_SIZE(gd25q40_cmp0_ranges);
+			}
 			break;
 		case GIGADEVICE_GD25Q64:
 		case GIGADEVICE_GD25LQ64:
@@ -897,12 +970,12 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
-				 flash->model_id);
+				 flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case AMIC_ID_NOPREFIX:
-		switch(flash->model_id) {
+		switch(flash->chip->model_id) {
 		case AMIC_A25L040:
 			*w25q_ranges = a25l040_ranges;
 			*num_entries = ARRAY_SIZE(a25l040_ranges);
@@ -910,13 +983,33 @@ static int w25_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s() %d: AMIC flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
-				 flash->model_id);
+				 flash->chip->model_id);
+			return -1;
+		}
+		break;
+	case ATMEL_ID:
+		switch(flash->chip->model_id) {
+		case ATMEL_AT25SL128A:
+			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+				/* CMP == 1 */
+				*w25q_ranges = w25rq128_cmp1_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
+			} else {
+				/* CMP == 0 */
+				*w25q_ranges = w25rq128_cmp0_ranges;
+				*num_entries = ARRAY_SIZE(w25rq128_cmp0_ranges);
+			}
+			break;
+		default:
+			msg_cerr("%s() %d: Atmel flash chip mismatch"
+				 " (0x%04x), aborting\n", __func__, __LINE__,
+				 flash->chip->model_id);
 			return -1;
 		}
 		break;
 	default:
 		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
-		         __func__, flash->manufacture_id);
+		         __func__, flash->chip->manufacture_id);
 		return -1;
 	}
 
@@ -1444,11 +1537,11 @@ struct generic_range gd25q32_cmp0_ranges[] = {
 };
 
 struct generic_range gd25q32_cmp1_ranges[] = {
-	/* none, bp4 and bp3 => don't care */
-	{ { }, 0x00, {0, 0} },
-	{ { }, 0x08, {0, 0} },
-	{ { }, 0x10, {0, 0} },
-	{ { }, 0x18, {0, 0} },
+	/* All, bp4 and bp3 => don't care */
+	{ { }, 0x00, {0x000000, 4096 * 1024} }, /* All */
+	{ { }, 0x08, {0x000000, 4096 * 1024} },
+	{ { }, 0x10, {0x000000, 4096 * 1024} },
+	{ { }, 0x18, {0x000000, 4096 * 1024} },
 
 	{ { }, 0x01, {0x000000, 4032 * 1024} },
 	{ { }, 0x02, {0x000000, 3968 * 1024} },
@@ -1464,11 +1557,11 @@ struct generic_range gd25q32_cmp1_ranges[] = {
 	{ { }, 0x0d, {0x100000, 3 * 1024 * 1024} },
 	{ { }, 0x0e, {0x200000, 2 * 1024 * 1024} },
 
-	/* all, bp4 and bp3 => don't care */
-	{ { }, 0x07, {0x000000, 4096 * 1024} },
-	{ { }, 0x0f, {0x000000, 4096 * 1024} },
-	{ { }, 0x17, {0x000000, 4096 * 1024} },
-	{ { }, 0x1f, {0x000000, 4096 * 1024} },
+	/* None, bp4 and bp3 => don't care */
+	{ { }, 0x07, {0, 0} }, /* None */
+	{ { }, 0x0f, {0, 0} },
+	{ { }, 0x17, {0, 0} },
+	{ { }, 0x1f, {0, 0} },
 
 	{ { }, 0x11, {0x000000, 4092 * 1024} },
 	{ { }, 0x12, {0x000000, 4088 * 1024} },
@@ -1731,10 +1824,11 @@ static int generic_range_table(const struct flashctx *flash,
 	*wp = NULL;
 	*num_entries = 0;
 
-	switch (flash->manufacture_id) {
+	switch (flash->chip->manufacture_id) {
 	case GIGADEVICE_ID:
-		switch(flash->model_id) {
+		switch(flash->chip->model_id) {
 
+		case GIGADEVICE_GD25LQ32:
 		case GIGADEVICE_GD25Q32: {
 			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q32_wp;
@@ -1749,7 +1843,8 @@ static int generic_range_table(const struct flashctx *flash,
 
 			break;
 		}
-		case GIGADEVICE_GD25Q128: {
+		case GIGADEVICE_GD25Q128:
+		case GIGADEVICE_GD25LQ128C: {
 			uint8_t sr1 = w25q_read_status_register_2(flash);
 			*wp = &gd25q128_wp;
 
@@ -1766,12 +1861,12 @@ static int generic_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s() %d: GigaDevice flash chip mismatch"
 				 " (0x%04x), aborting\n", __func__, __LINE__,
-				 flash->model_id);
+				 flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case MACRONIX_ID:
-		switch (flash->model_id) {
+		switch (flash->chip->model_id) {
 		case MACRONIX_MX25L6405:
 			/* FIXME: MX25L64* chips have mixed capabilities and
 			   share IDs */
@@ -1794,12 +1889,12 @@ static int generic_range_table(const struct flashctx *flash,
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
 			         ", aborting\n", __func__, __LINE__,
-			         flash->model_id);
+			         flash->chip->model_id);
 			return -1;
 		}
 		break;
 	case SPANSION_ID:
-		switch (flash->model_id) {
+		switch (flash->chip->model_id) {
 		case SPANSION_S25FS128S_L:
 		case SPANSION_S25FS128S_S: {
 			*wp = &s25fs128s_wp;
@@ -1816,13 +1911,14 @@ static int generic_range_table(const struct flashctx *flash,
 		}
 		default:
 			msg_cerr("%s():%d Spansion flash chip mismatch (0x%04x)"
-				", aborting\n", __func__, __LINE__, flash->model_id);
+				", aborting\n", __func__, __LINE__,
+				flash->chip->model_id);
 			return -1;
 		}
 		break;
 	default:
 		msg_cerr("%s: flash vendor (0x%x) not found, aborting\n",
-		         __func__, flash->manufacture_id);
+		         __func__, flash->chip->manufacture_id);
 		return -1;
 	}
 

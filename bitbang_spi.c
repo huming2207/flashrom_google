@@ -68,7 +68,7 @@ static int bitbang_spi_send_command(const struct flashctx *flash,
 				    const unsigned char *writearr,
 				    unsigned char *readarr);
 
-static const struct spi_programmer spi_programmer_bitbang = {
+static const struct spi_master spi_master_bitbang = {
 	.type		= SPI_CONTROLLER_BITBANG,
 	.max_data_read	= MAX_DATA_READ_UNLIMITED,
 	.max_data_write	= MAX_DATA_WRITE_UNLIMITED,
@@ -78,7 +78,7 @@ static const struct spi_programmer spi_programmer_bitbang = {
 	.write_256	= default_spi_write_256,
 };
 
-int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod)
+int register_spi_bitbang_master(const struct bitbang_spi_master *master)
 {
 	/* BITBANG_SPI_INVALID is 0, so if someone forgot to initialize ->type,
 	 * we catch it here. Same goes for missing initialization of bitbanging
@@ -97,9 +97,9 @@ int bitbang_spi_init(const struct bitbang_spi_master *master, int halfperiod)
 	}
 
 	bitbang_spi_master = master;
-	bitbang_spi_half_period = halfperiod;
+	bitbang_spi_half_period = master->half_period;
 
-	register_spi_programmer(&spi_programmer_bitbang);
+	register_spi_master(&spi_master_bitbang);
 
 	/* FIXME: Run bitbang_spi_request_bus here or in programmer init? */
 	bitbang_spi_set_cs(1);

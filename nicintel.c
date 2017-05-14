@@ -26,11 +26,11 @@
 uint8_t *nicintel_bar;
 uint8_t *nicintel_control_bar;
 
-const struct pcidev_status nics_intel[] = {
+const struct dev_entry nics_intel[] = {
 	{PCI_VENDOR_ID_INTEL, 0x1209, NT, "Intel", "8255xER/82551IT Fast Ethernet Controller"},
 	{PCI_VENDOR_ID_INTEL, 0x1229, OK, "Intel", "82557/8/9/0/1 Ethernet Pro 100"},
 
-	{},
+	{0},
 };
 
 /* Arbitrary limit, taken from the datasheet I just had lying around.
@@ -48,7 +48,7 @@ static void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val,
 static uint8_t nicintel_chip_readb(const struct flashctx *flash,
 				   const chipaddr addr);
 
-static const struct par_programmer par_programmer_nicintel = {
+static const struct par_master par_master_nicintel = {
 		.chip_readb		= nicintel_chip_readb,
 		.chip_readw		= fallback_chip_readw,
 		.chip_readl		= fallback_chip_readl,
@@ -59,43 +59,34 @@ static const struct par_programmer par_programmer_nicintel = {
 		.chip_writen		= fallback_chip_writen,
 };
 
-static int nicintel_shutdown(void *data)
-{
-	physunmap(nicintel_control_bar, NICINTEL_CONTROL_MEMMAP_SIZE);
-	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 0;
-}
-
 int nicintel_init(void)
 {
+	struct pci_dev *dev = NULL;
 	uintptr_t addr;
 
 	/* Needed only for PCI accesses on some platforms.
 	 * FIXME: Refactor that into get_mem_perms/get_io_perms/get_pci_perms?
 	 */
-	get_io_perms();
+	if (rget_io_perms())
+		return 1;
 
-	/* No need to check for errors, pcidev_init() will not return in case
-	 * of errors.
-	 * FIXME: BAR2 is not available if the device uses the CardBus function.
-	 */
-	addr = pcidev_init(PCI_BASE_ADDRESS_2, nics_intel);
+	/* FIXME: BAR2 is not available if the device uses the CardBus function. */
+	dev = pcidev_init(nics_intel, PCI_BASE_ADDRESS_2);
+	if (!dev)
+		return 1;
 
-	nicintel_bar = physmap("Intel NIC flash", addr, NICINTEL_MEMMAP_SIZE);
+	addr = pcidev_readbar(dev, PCI_BASE_ADDRESS_2);
+	if (!addr)
+		return 1;
+
+
+	nicintel_bar = rphysmap("Intel NIC flash", addr, NICINTEL_MEMMAP_SIZE);
 	if (nicintel_bar == ERROR_PTR)
-		goto error_out_unmap;
+		return 1;
 
-	/* FIXME: Using pcidev_dev _will_ cause pretty explosions in the future. */
-	addr = pcidev_validate(pcidev_dev, PCI_BASE_ADDRESS_0, nics_intel);
-	/* FIXME: This is not an aligned mapping. Use 4k? */
-	nicintel_control_bar = physmap("Intel NIC control/status reg",
-	                               addr, NICINTEL_CONTROL_MEMMAP_SIZE);
+	addr = pcidev_validate(dev, PCI_BASE_ADDRESS_0, nics_intel);
+	nicintel_control_bar = rphysmap("Intel NIC control/status reg", addr, NICINTEL_CONTROL_MEMMAP_SIZE);
 	if (nicintel_control_bar == ERROR_PTR)
-		goto error_out;
-
-	if (register_shutdown(nicintel_shutdown, NULL))
 		return 1;
 
 	/* FIXME: This register is pretty undocumented in all publicly available
@@ -110,24 +101,19 @@ int nicintel_init(void)
 	pci_rmmio_writew(0x0001, nicintel_control_bar + CSR_FCR);
 
 	max_rom_decode.parallel = NICINTEL_MEMMAP_SIZE;
-	register_par_programmer(&par_programmer_nicintel, BUS_PARALLEL);
+	register_par_master(&par_master_nicintel, BUS_PARALLEL);
 
 	return 0;
-
-error_out_unmap:
-	physunmap(nicintel_bar, NICINTEL_MEMMAP_SIZE);
-error_out:
-	pci_cleanup(pacc);
-	release_io_perms();
-	return 1;
 }
 
-void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val, chipaddr addr)
+static void nicintel_chip_writeb(const struct flashctx *flash, uint8_t val,
+				 chipaddr addr)
 {
 	pci_mmio_writeb(val, nicintel_bar + (addr & NICINTEL_MEMMAP_MASK));
 }
 
-uint8_t nicintel_chip_readb(const struct flashctx *flash, const chipaddr addr)
+static uint8_t nicintel_chip_readb(const struct flashctx *flash,
+				   const chipaddr addr)
 {
 	return pci_mmio_readb(nicintel_bar + (addr & NICINTEL_MEMMAP_MASK));
 }

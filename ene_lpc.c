@@ -34,6 +34,7 @@
 
 #if defined(__i386__) || defined(__x86_64__)
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
@@ -499,7 +500,7 @@ exit:
 	return rv;
 }
 
-static const struct spi_programmer spi_programmer_ene = {
+static const struct spi_master spi_master_ene = {
 	.type = SPI_CONTROLLER_ENE,
 	.max_data_read = 256,
 	.max_data_write = 256,
@@ -512,11 +513,20 @@ static const struct spi_programmer spi_programmer_ene = {
 int ene_probe_spi_flash(const char *name)
 {
 	uint8_t hwver, ediid, i;
+	int ret = 0;
+	char *p = NULL;
 
 	if (alias && alias->type != ALIAS_EC)
 		return 1;
 
 	msg_pdbg("%s\n", __func__);
+
+	p = extract_programmer_param("type");
+	if (p && strcmp(p, "ec")) {
+		msg_pdbg("ene_lpc only supports \"ec\" type devices\n");
+		ret = 1;
+		goto ene_probe_spi_flash_exit;
+	}
 
 	for (i = 0; i < ENE_LAST; ++i) {
 		found_chip = &ene_chips[i];
@@ -532,7 +542,8 @@ int ene_probe_spi_flash(const char *name)
 
 	if (i == ENE_LAST) {
 		msg_pdbg("ENE EC not found (probe failed)\n");
-		return 1;
+		ret = 1;
+		goto ene_probe_spi_flash_exit;
 	}
 
 	/* TODO: probe the EC stop protocol
@@ -541,15 +552,19 @@ int ene_probe_spi_flash(const char *name)
 	 */
 
 
-	if (register_shutdown(ene_leave_flash_mode, NULL))
-		return 1;
+	if (register_shutdown(ene_leave_flash_mode, NULL)) {
+		ret = 1;
+		goto ene_probe_spi_flash_exit;
+	}
 
 	ene_enter_flash_mode();
 
 	buses_supported |= BUS_LPC;
-	register_spi_programmer(&spi_programmer_ene);
+	register_spi_master(&spi_master_ene);
 	msg_pdbg("%s: successfully initialized ene\n", __func__);
-	return 0;
+ene_probe_spi_flash_exit:
+	free(p);
+	return ret;
 }
 
 #endif /* __i386__ || __x86_64__ */

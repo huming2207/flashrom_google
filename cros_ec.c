@@ -50,6 +50,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+struct cros_ec_priv *cros_ec_priv;
+static int ignore_wp_range_command = 0;
+
+static int set_wp(int enable);	/* FIXME: move set_wp() */
+
 struct wp_data {
 	int enable;
 	unsigned int start;
@@ -67,6 +73,9 @@ static int need_2nd_pass = 0;
 
 /* 1 if we want the flashrom to try jumping to new firmware after update. */
 static int try_latest_firmware = 0;
+
+/* 1 if EC firmware has RWSIG enabled. */
+static int rwsig_enabled = 0;
 
 /* The range of each firmware copy from the image file to update.
  * But re-define the .flags as the valid flag to indicate the firmware is
@@ -90,11 +99,26 @@ static const char *ec_type[] = {
 	[0] = "ec",
 	[1] = "pd",
 	[2] = "sh",
+	[3] = "fp",
+	[4] = "tp",
 };
 
 /* EC_FLASH_REGION_WP_RO is the highest numbered region so it also indicates
  * the number of regions */
 static struct ec_response_flash_region_info regions[EC_FLASH_REGION_WP_RO + 1];
+
+/*
+ * Delay after reboot before EC can respond to host command.
+ * This value should be large enough for EC to initialize, but no larger than
+ * CONFIG_RWSIG_JUMP_TIMEOUT. This way for EC using RWSIG task, we will be
+ * able to abort RWSIG jump and stay in RO.
+ */
+#define EC_INIT_DELAY 800000
+
+/*
+ * Delay after a cold reboot which allows RWSIG enabled EC to jump to EC_RW.
+ */
+#define EC_RWSIG_JUMP_TO_RW_DELAY 3000000
 
 /* Given the range not able to update, mark the corresponding
  * firmware as old.
@@ -115,12 +139,12 @@ static void cros_ec_invalidate_copy(unsigned int addr, unsigned int len)
 }
 
 
-static int cros_ec_get_current_image(struct cros_ec_priv *priv)
+static int cros_ec_get_current_image(void)
 {
 	struct ec_response_get_version resp;
 	int rc;
 
-	rc = priv->ec_command(EC_CMD_GET_VERSION,
+	rc = cros_ec_priv->ec_command(EC_CMD_GET_VERSION,
 				0, NULL, 0, &resp, sizeof(resp));
 	if (rc < 0) {
 		msg_perr("CROS_EC cannot get the running copy: rc=%d\n", rc);
@@ -135,8 +159,7 @@ static int cros_ec_get_current_image(struct cros_ec_priv *priv)
 }
 
 
-static int cros_ec_get_region_info(struct cros_ec_priv *priv,
-			       enum ec_flash_region region,
+static int cros_ec_get_region_info(enum ec_flash_region region,
 			       struct ec_response_flash_region_info *info)
 {
 	struct ec_params_flash_region_info req;
@@ -144,7 +167,7 @@ static int cros_ec_get_region_info(struct cros_ec_priv *priv,
 	int rc;
 
 	req.region = region;
-	rc = priv->ec_command(EC_CMD_FLASH_REGION_INFO,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_REGION_INFO,
 			      EC_VER_FLASH_REGION_INFO, &req, sizeof(req),
 			      &resp, sizeof(resp));
 	if (rc < 0) {
@@ -158,6 +181,42 @@ static int cros_ec_get_region_info(struct cros_ec_priv *priv,
 }
 
 /**
+ * Check if a feature is supported by EC.
+ *
+ * @param feature	feature code
+ * @return < 0 if error, 0 not supported, > 0 supported
+ */
+static int ec_check_features(int feature)
+{
+	struct ec_response_get_features r;
+	int rc;
+
+	if (feature < 0 || feature >= sizeof(r.flags) * 8)
+		return -1;
+
+	rc = cros_ec_priv->ec_command(EC_CMD_GET_FEATURES,
+				0, NULL, 0, &r, sizeof(r));
+	if (rc < 0)
+		return rc;
+
+	return !!(r.flags[feature / 32] & EC_FEATURE_MASK_0(feature));
+}
+
+/**
+ * Disable EC rwsig jump.
+ *
+ * @return 0 if success, <0 if error
+ */
+static int ec_rwsig_abort()
+{
+	struct ec_params_rwsig_action p;
+
+	p.action = RWSIG_ACTION_ABORT;
+	return cros_ec_priv->ec_command(EC_CMD_RWSIG_ACTION,
+				0, &p, sizeof(p), NULL, 0);
+}
+
+/**
  * Get the versions of the command supported by the EC.
  *
  * @param cmd		Command
@@ -167,7 +226,6 @@ static int cros_ec_get_region_info(struct cros_ec_priv *priv,
  */
 static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
 {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_get_cmd_versions pver;
 	struct ec_response_get_cmd_versions rver;
 	int rc;
@@ -175,7 +233,7 @@ static int ec_get_cmd_versions(int cmd, uint32_t *pmask)
 	*pmask = 0;
 
 	pver.cmd = cmd;
-	rc = priv->ec_command(EC_CMD_GET_CMD_VERSIONS, 0,
+	rc = cros_ec_priv->ec_command(EC_CMD_GET_CMD_VERSIONS, 0,
 			&pver, sizeof(pver), &rver, sizeof(rver));
 
 	if (rc < 0)
@@ -205,7 +263,7 @@ static int ec_cmd_version_supported(int cmd, int ver)
 }
 
 /* returns 0 if successful or <0 to indicate error */
-static int set_ideal_write_size(struct cros_ec_priv *priv)
+static int set_ideal_write_size(void)
 {
 	int cmd_version, ret;
 
@@ -217,28 +275,43 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
 	} else if (cmd_version == 0) {
 		struct ec_response_flash_info info;
 
-		ret = priv->ec_command(EC_CMD_FLASH_INFO,
+		ret = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
 				cmd_version, NULL, 0, &info, sizeof(info));
 		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
 			return ret;
 		}
 
-		priv->ideal_write_size = EC_FLASH_WRITE_VER0_SIZE;
+		cros_ec_priv->ideal_write_size = EC_FLASH_WRITE_VER0_SIZE;
 	} else {
 		struct ec_response_flash_info_1 info;
 
-		ret = priv->ec_command(EC_CMD_FLASH_INFO,
+		ret = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
 				cmd_version, NULL, 0, &info, sizeof(info));
 		if (ret < 0) {
 			msg_perr("%s(): Cannot get flash info.\n", __func__);
 			return ret;
 		}
 
-		priv->ideal_write_size = info.write_ideal_size;
+		cros_ec_priv->ideal_write_size = info.write_ideal_size;
 	}
 
 	return 0;
+}
+
+/* Perform a cold reboot.
+ *
+ * @param flags		flags to pass to EC_CMD_REBOOT_EC.
+ * @return 0 for success, < 0 for command failure.
+ */
+static int cros_ec_cold_reboot(int flags) {
+	struct ec_params_reboot_ec p;
+
+	memset(&p, 0, sizeof(p));
+	p.cmd = EC_REBOOT_COLD;
+	p.flags = flags;
+	return cros_ec_priv->ec_command(EC_CMD_REBOOT_EC, 0, &p, sizeof(p),
+					NULL, 0);
 }
 
 /* Asks EC to jump to a firmware copy. If target is EC_IMAGE_UNKNOWN,
@@ -249,7 +322,6 @@ static int set_ideal_write_size(struct cros_ec_priv *priv)
  */
 static int cros_ec_jump_copy(enum ec_current_image target) {
 	struct ec_params_reboot_ec p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int rc;
 	int current_image;
 
@@ -258,7 +330,7 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 	 * set the OBF=1 and the next command cannot be executed.
 	 * Thus, we call EC to jump only if the target is different.
 	 */
-	current_image = cros_ec_get_current_image(priv);
+	current_image = cros_ec_get_current_image();
 	if (current_image < 0)
 		return 1;
 	if (current_image == target)
@@ -292,46 +364,133 @@ static int cros_ec_jump_copy(enum ec_current_image target) {
 		break;
 	}
 
-	msg_pdbg("CROS_EC is jumping to [%s]\n", sections[p.cmd]);
+	/*
+	 * Do a cold reset instead of JUMP_RO so board enabling
+	 * EC_FLASH_PROTECT_ALL_NOW at runtime can clear the WP flag.
+	 * This is true for EC enabling RWSIG, where
+	 * EC_FLASH_PROTECT_ALL_NOW is applied before jumping into RW.
+	 */
+	if (target == EC_IMAGE_RO && rwsig_enabled) {
+		p.cmd = EC_REBOOT_COLD;
+		msg_pdbg("RWSIG enabled: doing a cold reboot instead of "
+			 "JUMP_RO.\n");
+	}
+
+	msg_pdbg("CROS_EC is jumping to [%s]\n", sections[target]);
 	if (p.cmd == EC_IMAGE_UNKNOWN) return 1;
 
 	if (current_image == p.cmd) {
-		msg_pdbg("CROS_EC is already in [%s]\n", sections[p.cmd]);
-		priv->current_image = target;
+		msg_pdbg("CROS_EC is already in [%s]\n", sections[target]);
+		cros_ec_priv->current_image = target;
 		return 0;
 	}
 
-	rc = priv->ec_command(EC_CMD_REBOOT_EC,
+	rc = cros_ec_priv->ec_command(EC_CMD_REBOOT_EC,
 				0, &p, sizeof(p), NULL, 0);
 	if (rc < 0) {
 		msg_perr("CROS_EC cannot jump to [%s]:%d\n",
-			 sections[p.cmd], rc);
-	} else {
-		msg_pdbg("CROS_EC has jumped to [%s]\n", sections[p.cmd]);
-		rc = EC_RES_SUCCESS;
-		priv->current_image = target;
+			 sections[target], rc);
+		return rc;
 	}
 
-	/* Sleep 1 sec to wait the EC re-init. */
-	usleep(1000000);
+	/* Sleep until EC can respond to host command, but just before
+	 * CONFIG_RWSIG_JUMP_TIMEOUT if EC is using RWSIG task. */
+	usleep(EC_INIT_DELAY);
+
+	/* Abort RWSIG jump for EC that use it. Normal EC will ignore it. */
+	if (target == EC_IMAGE_RO && rwsig_enabled) {
+		msg_pdbg("RWSIG enabled: aborting RWSIG jump.\n");
+		ec_rwsig_abort();
+	}
+
+	msg_pdbg("CROS_EC has jumped to [%s]\n", sections[target]);
+	rc = EC_RES_SUCCESS;
+	cros_ec_priv->current_image = target;
 
 	/* update max data write size in case we're jumping to an EC
 	 * firmware with different protocol */
-	set_ideal_write_size(priv);
+	set_ideal_write_size();
 
 	return rc;
 }
 
+static int cros_ec_restore_wp(void *data)
+{
+	msg_pdbg("Restoring EC soft WP.\n");
+	return set_wp(1);
+}
 
-/* Given an image, this function parses FMAP and recognize the firmware
- * ranges.
+static int cros_ec_wp_is_enabled(void)
+{
+	struct ec_params_flash_protect p;
+	struct ec_response_flash_protect r;
+	int rc;
+
+	memset(&p, 0, sizeof(p));
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
+			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
+	if (rc < 0) {
+		msg_perr("FAILED: Cannot get the write protection status: %d\n",
+			 rc);
+		return -1;
+	} else if (rc < sizeof(r)) {
+		msg_perr("FAILED: Too little data returned (expected:%zd, "
+			 "actual:%d)\n", sizeof(r), rc);
+		return -1;
+	}
+
+	if (r.flags & (EC_FLASH_PROTECT_RO_NOW | EC_FLASH_PROTECT_ALL_NOW))
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Prepare EC for update:
+ * - Disable soft WP if needed.
+ * - Parse flashmap.
+ * - Jump to RO firmware.
  */
 int cros_ec_prepare(uint8_t *image, int size) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct fmap *fmap;
-	int i, j;
+	int i, j, wp_status;
 
-	if (!(priv && priv->detected)) return 0;
+	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
+
+	if (ec_check_features(EC_FEATURE_RWSIG) > 0) {
+		rwsig_enabled = 1;
+		msg_pdbg("EC has RWSIG enabled.\n");
+	}
+
+	/*
+	 * If HW WP is disabled we may still need to disable write protection
+	 * that is active on the EC. Otherwise the EC can reject erase/write
+	 * commands.
+	 *
+	 * Failure is OK since HW WP might be enabled or the EC needs to be
+	 * rebooted for the change to take effect. We can still update RW
+	 * portions.
+	 *
+	 * If disabled here, EC WP will be restored at the end so that
+	 * "--wp-enable" does not need to be run later. This greatly
+	 * simplifies logic for developers and scripts.
+	 */
+	wp_status = cros_ec_wp_is_enabled();
+	if (wp_status < 0) {
+		return 1;
+	} else if (wp_status == 1) {
+		msg_pdbg("Attempting to disable EC soft WP.\n");
+		if (!set_wp(0)) {
+			msg_pdbg("EC soft WP disabled successfully.\n");
+			if (register_shutdown(cros_ec_restore_wp, NULL))
+				return 1;
+		} else {
+			msg_pdbg("Failed. Hardware WP might in effect or EC "
+				"needs to be rebooted first.\n");
+		}
+	} else {
+		msg_pdbg("EC soft WP is already disabled.\n");
+	}
 
 	// Parse the fmap in the image file and cache the firmware ranges.
 	fmap = fmap_find_in_memory(image, size);
@@ -363,9 +522,7 @@ int cros_ec_prepare(uint8_t *image, int size) {
  * This function also jumps to new-updated firmware copy before return >0.
  */
 int cros_ec_need_2nd_pass(void) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
-
-	if (!(priv && priv->detected)) return 0;
+	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
 
 	if (need_2nd_pass) {
 		if (cros_ec_jump_copy(EC_IMAGE_UNKNOWN)) {
@@ -386,9 +543,19 @@ int cros_ec_need_2nd_pass(void) {
  * this code logic if you change the cros_ec_prepare() behavior.
  */
 int cros_ec_finish(void) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+	if (!(cros_ec_priv && cros_ec_priv->detected)) return 0;
 
-	if (!(priv && priv->detected)) return 0;
+	/* For EC with RWSIG enabled. We need a cold reboot to enable
+	 * EC_FLASH_PROTECT_ALL_NOW and make sure RWSIG check is performed.
+	 */
+	if (rwsig_enabled) {
+		int rc;
+
+		msg_pdbg("RWSIG enabled: doing a cold reboot to enable WP.\n");
+		rc = cros_ec_cold_reboot(0);
+		usleep(EC_RWSIG_JUMP_TO_RW_DELAY);
+		return rc;
+	}
 
 	if (try_latest_firmware) {
 		if (fwcopy[EC_IMAGE_RW].flags &&
@@ -404,7 +571,6 @@ int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
              unsigned int blockaddr, unsigned int readcnt) {
 	int rc = 0;
 	struct ec_params_flash_read p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int maxlen = opaque_programmer->max_data_read;
 	uint8_t buf[maxlen];
 	int offset = 0, count;
@@ -413,7 +579,7 @@ int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
 		count = min(maxlen, readcnt - offset);
 		p.offset = blockaddr + offset;
 		p.size = count;
-		rc = priv->ec_command(EC_CMD_FLASH_READ,
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_READ,
 					0, &p, sizeof(p), buf, count);
 		if (rc < 0) {
 			msg_perr("CROS_EC: Flash read error at offset 0x%x\n",
@@ -435,16 +601,15 @@ int cros_ec_read(struct flashctx *flash, uint8_t *readarr,
  * returns 0 to indicate area does not overlap current EC image
  * returns 1 to indicate area overlaps current EC image or error
  */
-static int in_current_image(struct cros_ec_priv *priv,
-		unsigned int addr, unsigned int len)
+static int in_current_image(unsigned int addr, unsigned int len)
 {
 	enum ec_current_image image;
 	uint32_t region_offset;
 	uint32_t region_size;
 
-	image = priv->current_image;
-	region_offset = priv->region[image].offset;
-	region_size = priv->region[image].size;
+	image = cros_ec_priv->current_image;
+	region_offset = cros_ec_priv->region[image].offset;
+	region_size = cros_ec_priv->region[image].size;
 
 	if ((addr + len - 1 < region_offset) ||
 		(addr > region_offset + region_size - 1)) {
@@ -458,10 +623,9 @@ int cros_ec_block_erase(struct flashctx *flash,
                            unsigned int blockaddr,
                            unsigned int len) {
 	struct ec_params_flash_erase erase;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	int rc;
 
-	if (in_current_image(priv, blockaddr, len)) {
+	if (in_current_image(blockaddr, len)) {
 		cros_ec_invalidate_copy(blockaddr, len);
 		need_2nd_pass = 1;
 		return ACCESS_DENIED;
@@ -469,7 +633,7 @@ int cros_ec_block_erase(struct flashctx *flash,
 
 	erase.offset = blockaddr;
 	erase.size = len;
-	rc = priv->ec_command(EC_CMD_FLASH_ERASE,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE,
 				0, &erase, sizeof(erase), NULL, 0);
 	if (rc == -EC_RES_ACCESS_DENIED) {
 		// this is active image.
@@ -492,12 +656,11 @@ int cros_ec_block_erase(struct flashctx *flash,
 }
 
 
-int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
+int cros_ec_write(struct flashctx *flash, const uint8_t *buf, unsigned int addr,
                     unsigned int nbytes) {
 	int i, rc = 0;
 	unsigned int written = 0, real_write_size;
 	struct ec_params_flash_write p;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	uint8_t *packet;
 
 	/*
@@ -505,7 +668,7 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 	 * outdata buffer issue in kernel.
 	 */
 	real_write_size = min(opaque_programmer->max_data_write,
-		priv->ideal_write_size);
+		cros_ec_priv->ideal_write_size);
 	packet = malloc(sizeof(p) + real_write_size);
 	if (!packet)
 		return -1;
@@ -515,7 +678,7 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 		p.offset = addr + i;
 		p.size = written;
 
-		if (in_current_image(priv, p.offset, p.size)) {
+		if (in_current_image(p.offset, p.size)) {
 			cros_ec_invalidate_copy(addr, nbytes);
 			need_2nd_pass = 1;
 			return ACCESS_DENIED;
@@ -523,7 +686,7 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 
 		memcpy(packet, &p, sizeof(p));
 		memcpy(packet + sizeof(p), &buf[i], written);
-		rc = priv->ec_command(EC_CMD_FLASH_WRITE,
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_WRITE,
 				0, packet, sizeof(p) + p.size, NULL, 0);
 
 		if (rc == -EC_RES_ACCESS_DENIED) {
@@ -546,11 +709,10 @@ int cros_ec_write(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 
 
 static int cros_ec_list_ranges(const struct flashctx *flash) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
-	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+	rc = cros_ec_get_region_info(EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
@@ -586,7 +748,6 @@ static int cros_ec_list_ranges(const struct flashctx *flash) {
  *  every EC supports RO_NOW, thus we then try to protect the entire chip.
  */
 static int set_wp(int enable) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	const int ro_at_boot_flag = EC_FLASH_PROTECT_RO_AT_BOOT;
@@ -598,7 +759,7 @@ static int set_wp(int enable) {
 	memset(&p, 0, sizeof(p));
 	p.mask = (ro_at_boot_flag | ro_now_flag);
 	p.flags = enable ? (ro_at_boot_flag | ro_now_flag) : 0;
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot set the RO_AT_BOOT and RO_NOW: %d\n",
@@ -608,7 +769,7 @@ static int set_wp(int enable) {
 
 	/* Read back */
 	memset(&p, 0, sizeof(p));
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get RO_AT_BOOT and RO_NOW: %d\n",
@@ -644,14 +805,12 @@ static int set_wp(int enable) {
 		/* Good, RO_NOW is set. */
 		msg_pdbg("INFO: RO_NOW is set. WP is active now.\n");
 	} else if (r.writable_flags & EC_FLASH_PROTECT_ALL_NOW) {
-		struct ec_params_reboot_ec reboot;
-
 		msg_pdbg("WARN: RO_NOW is not set. Trying ALL_NOW.\n");
 
 		memset(&p, 0, sizeof(p));
 		p.mask = EC_FLASH_PROTECT_ALL_NOW;
 		p.flags = EC_FLASH_PROTECT_ALL_NOW;
-		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
 				      EC_VER_FLASH_PROTECT,
 				      &p, sizeof(p), &r, sizeof(r));
 		if (rc < 0) {
@@ -661,7 +820,7 @@ static int set_wp(int enable) {
 
 		/* Read back */
 		memset(&p, 0, sizeof(p));
-		rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
 				      EC_VER_FLASH_PROTECT,
 				      &p, sizeof(p), &r, sizeof(r));
 		if (rc < 0) {
@@ -684,11 +843,7 @@ static int set_wp(int enable) {
 		 * the RW update failed. So, we arrange an EC code reset to
 		 * unlock RW ASAP.
 		 */
-		memset(&reboot, 0, sizeof(reboot));
-		reboot.cmd = EC_REBOOT_COLD;
-		reboot.flags = EC_REBOOT_FLAG_ON_AP_SHUTDOWN;
-		rc = priv->ec_command(EC_CMD_REBOOT_EC,
-				0, &reboot, sizeof(reboot), NULL, 0);
+		rc = cros_ec_cold_reboot(EC_REBOOT_FLAG_ON_AP_SHUTDOWN);
 		if (rc < 0) {
 			msg_perr("WARN: Cannot arrange a cold reset at next "
 				 "shutdown to unlock entire protect.\n");
@@ -717,12 +872,11 @@ exit:
 
 static int cros_ec_set_range(const struct flashctx *flash,
                          unsigned int start, unsigned int len) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct ec_response_flash_region_info info;
 	int rc;
 
 	/* Check if the given range is supported */
-	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+	rc = cros_ec_get_region_info(EC_FLASH_REGION_WP_RO, &info);
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get the WP_RO region info: %d\n", rc);
 		return 1;
@@ -740,6 +894,8 @@ static int cros_ec_set_range(const struct flashctx *flash,
 		return 1;
 	}
 
+	if (ignore_wp_range_command)
+		return 0;
 	return set_wp(!!len);
 }
 
@@ -764,12 +920,14 @@ static int cros_ec_enable_writeprotect(const struct flashctx *flash,
 
 
 static int cros_ec_disable_writeprotect(const struct flashctx *flash) {
+	/* --wp-range implicitly enables write protection on CrOS EC, so force
+	   it not to if --wp-disable is what the user really wants. */
+	ignore_wp_range_command = 1;
 	return set_wp(0);
 }
 
 
-static int cros_ec_wp_status(const struct flashctx *flash) {
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
+static int cros_ec_wp_status(const struct flashctx *flash) {;
 	struct ec_params_flash_protect p;
 	struct ec_response_flash_protect r;
 	int start, len;  /* wp range */
@@ -777,7 +935,7 @@ static int cros_ec_wp_status(const struct flashctx *flash) {
 	int rc;
 
 	memset(&p, 0, sizeof(p));
-	rc = priv->ec_command(EC_CMD_FLASH_PROTECT,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_PROTECT,
 			EC_VER_FLASH_PROTECT, &p, sizeof(p), &r, sizeof(r));
 	if (rc < 0) {
 		msg_perr("FAILED: Cannot get the write protection status: %d\n",
@@ -795,7 +953,7 @@ static int cros_ec_wp_status(const struct flashctx *flash) {
 
 		msg_pdbg("%s(): EC_FLASH_PROTECT_RO_AT_BOOT is set.\n",
 			 __func__);
-		rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_WP_RO, &info);
+		rc = cros_ec_get_region_info(EC_FLASH_REGION_WP_RO, &info);
 		if (rc < 0) {
 			msg_perr("FAILED: Cannot get the WP_RO region info: "
 				 "%d\n", rc);
@@ -951,8 +1109,8 @@ int cros_ec_parse_param(struct cros_ec_priv *priv)
 int cros_ec_probe_size(struct flashctx *flash) {
 	int rc;
 	struct ec_response_flash_info info;
+	struct ec_response_flash_spi_info spi_info;
 	struct ec_response_get_chip_info chip_info;
-	struct cros_ec_priv *priv = (struct cros_ec_priv *)opaque_programmer->data;
 	struct block_eraser *eraser;
 	static struct wp wp = {
 		.list_ranges    = cros_ec_list_ranges,
@@ -962,35 +1120,34 @@ int cros_ec_probe_size(struct flashctx *flash) {
 		.wp_status      = cros_ec_wp_status,
 	};
 
-	rc = priv->ec_command(EC_CMD_FLASH_INFO,
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_INFO,
 				0, NULL, 0, &info, sizeof(info));
 	if (rc < 0) {
 		msg_perr("%s(): FLASH_INFO returns %d.\n", __func__, rc);
 		return 0;
 	}
-	rc = cros_ec_get_current_image(priv);
+	rc = cros_ec_get_current_image();
 	if (rc < 0) {
 		msg_perr("%s(): Failed to probe (no current image): %d\n",
 			 __func__, rc);
 		return 0;
 	}
-	priv->current_image = rc;
-	priv->region = &regions[0];
+	cros_ec_priv->current_image = rc;
+	cros_ec_priv->region = &regions[0];
 
-	flash->total_size = info.flash_size / 1024;
-	flash->page_size = opaque_programmer->max_data_read;
-	flash->tested = TEST_OK_PREW;
-	eraser = &flash->block_erasers[0];
+	flash->chip->total_size = info.flash_size / 1024;
+	flash->chip->page_size = opaque_programmer->max_data_read;
+	eraser = &flash->chip->block_erasers[0];
 
 	/* Allow overriding the erase block size in case EC is incorrect */
-	if (priv->erase_block_size > 0)
-		eraser->eraseblocks[0].size = priv->erase_block_size;
+	if (cros_ec_priv->erase_block_size > 0)
+		eraser->eraseblocks[0].size = cros_ec_priv->erase_block_size;
 	else
 		eraser->eraseblocks[0].size = info.erase_block_size;
 
 	eraser->eraseblocks[0].count = info.flash_size /
 	                               eraser->eraseblocks[0].size;
-	flash->wp = &wp;
+	flash->chip->wp = &wp;
 
 	/*
 	 * Some STM32 variants erase bits to 0. For now, assume that this
@@ -999,33 +1156,62 @@ int cros_ec_probe_size(struct flashctx *flash) {
 	 * FIXME: This info will eventually be exposed via some EC command.
 	 * See chrome-os-partner:20973.
 	 */
-	rc = priv->ec_command(EC_CMD_GET_CHIP_INFO,
+	rc = cros_ec_priv->ec_command(EC_CMD_GET_CHIP_INFO,
 			0, NULL, 0, &chip_info, sizeof(chip_info));
 	if (rc < 0) {
 		msg_perr("%s(): CHIP_INFO returned %d.\n", __func__, rc);
 		return 0;
 	}
-	if (!strncmp(chip_info.name, "stm32l", 6))
-		flash->feature_bits |= FEATURE_ERASE_TO_ZERO;
+	if (!strncmp(chip_info.name, "stm32l1", 7))
+		flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
 
-	rc = set_ideal_write_size(priv);
+	rc = set_ideal_write_size();
 	if (rc < 0) {
 		msg_perr("%s(): Unable to set write size\n", __func__);
 		return 0;
 	}
 
+	rc = cros_ec_priv->ec_command(EC_CMD_FLASH_SPI_INFO,
+				0, NULL, 0, &spi_info, sizeof(spi_info));
+	if (rc < 0) {
+		static char chip_vendor[32];
+		static char chip_name[32];
+
+		memcpy(chip_vendor, chip_info.vendor, sizeof(chip_vendor));
+		memcpy(chip_name, chip_info.name, sizeof(chip_name));
+		flash->chip->vendor = chip_vendor;
+		flash->chip->name = chip_name;
+		flash->chip->tested = TEST_OK_PREWU;
+	} else {
+		const struct flashchip *f;
+		uint32_t mfg = spi_info.jedec[0];
+		uint32_t model = (spi_info.jedec[1] << 8) | spi_info.jedec[2];
+
+		for (f = flashchips; f && f->name; f++) {
+			if (f->bustype != BUS_SPI)
+				continue;
+			if ((f->manufacture_id == mfg) &&
+				f->model_id == model) {
+				flash->chip->vendor = f->vendor;
+				flash->chip->name = f->name;
+				flash->chip->tested = f->tested;
+				break;
+			}
+		}
+	}
+
 	/* FIXME: EC_IMAGE_* is ordered differently from EC_FLASH_REGION_*,
 	 * so we need to be careful about using these enums as array indices */
-	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_RO,
-				 &priv->region[EC_IMAGE_RO]);
+	rc = cros_ec_get_region_info(EC_FLASH_REGION_RO,
+				 &cros_ec_priv->region[EC_IMAGE_RO]);
 	if (rc) {
 		msg_perr("%s(): Failed to probe (cannot find RO region): %d\n",
 			 __func__, rc);
 		return 0;
 	}
 
-	rc = cros_ec_get_region_info(priv, EC_FLASH_REGION_RW,
-				 &priv->region[EC_IMAGE_RW]);
+	rc = cros_ec_get_region_info(EC_FLASH_REGION_RW,
+				 &cros_ec_priv->region[EC_IMAGE_RW]);
 	if (rc) {
 		msg_perr("%s(): Failed to probe (cannot find RW region): %d\n",
 			 __func__, rc);

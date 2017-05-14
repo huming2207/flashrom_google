@@ -30,7 +30,7 @@
 #include "programmer.h"
 #include "spi.h"
 
-const struct spi_programmer spi_programmer_none = {
+const struct spi_master spi_master_none = {
 	.type = SPI_CONTROLLER_NONE,
 	.max_data_read = MAX_DATA_UNSPECIFIED,
 	.max_data_write = MAX_DATA_UNSPECIFIED,
@@ -40,32 +40,32 @@ const struct spi_programmer spi_programmer_none = {
 	.write_256 = NULL,
 };
 
-const struct spi_programmer *spi_programmer = &spi_programmer_none;
+const struct spi_master *spi_master = &spi_master_none;
 
 int spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 		const unsigned char *writearr, unsigned char *readarr)
 {
-	if (!spi_programmer->command) {
+	if (!spi_master->command) {
 		msg_perr("%s called, but SPI is unsupported on this "
 			 "hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
-	return spi_programmer->command(flash, writecnt, readcnt,
+	return spi_master->command(flash, writecnt, readcnt,
 						      writearr, readarr);
 }
 
 int spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds)
 {
-	if (!spi_programmer->multicommand) {
+	if (!spi_master->multicommand) {
 		msg_perr("%s called, but SPI is unsupported on this "
 			 "hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
-	return spi_programmer->multicommand(flash, cmds);
+	return spi_master->multicommand(flash, cmds);
 }
 
 int default_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
@@ -99,7 +99,7 @@ int default_spi_send_multicommand(const struct flashctx *flash, struct spi_comma
 
 int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
-	unsigned int max_data = spi_programmer->max_data_read;
+	unsigned int max_data = spi_master->max_data_read;
 	int rc;
 	if (max_data == MAX_DATA_UNSPECIFIED) {
 		msg_perr("%s called, but SPI read chunk size not defined "
@@ -107,7 +107,7 @@ int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
-	if (flash->feature_bits & FEATURE_UNBOUND_READ)
+	if (flash->chip->feature_bits & FEATURE_UNBOUND_READ)
 		rc = spi_read_unbound(flash, buf, start, len, max_data);
 	else
 		rc = spi_read_chunked(flash, buf, start, len, max_data);
@@ -117,9 +117,9 @@ int default_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 	return rc;
 }
 
-int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int default_spi_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
-	unsigned int max_data = spi_programmer->max_data_write;
+	unsigned int max_data = spi_master->max_data_write;
 	int rc;
 	if (max_data == MAX_DATA_UNSPECIFIED) {
 		msg_perr("%s called, but SPI write chunk size not defined "
@@ -137,7 +137,7 @@ int default_spi_write_256(struct flashctx *flash, uint8_t *buf, unsigned int sta
 int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
 	unsigned int addrbase = 0;
-	if (!spi_programmer->read) {
+	if (!spi_master->read) {
 		msg_perr("%s called, but SPI read is unsupported on this "
 			 "hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
@@ -149,21 +149,21 @@ int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsi
 	 * means 0xffffff, the highest unsigned 24bit number.
 	 */
 	addrbase = spi_get_valid_read_addr(flash);
-	if (addrbase + flash->total_size * 1024 > (1 << 24)) {
+	if (addrbase + flash->chip->total_size * 1024 > (1 << 24)) {
 		msg_perr("Flash chip size exceeds the allowed access window. ");
 		msg_perr("Read will probably fail.\n");
 		/* Try to get the best alignment subject to constraints. */
-		addrbase = (1 << 24) - flash->total_size * 1024;
+		addrbase = (1 << 24) - flash->chip->total_size * 1024;
 	}
 	/* Check if alignment is native (at least the largest power of two which
 	 * is a factor of the mapped size of the chip).
 	 */
-	if (ffs(flash->total_size * 1024) > (ffs(addrbase) ? : 33)) {
+	if (ffs(flash->chip->total_size * 1024) > (ffs(addrbase) ? : 33)) {
 		msg_perr("Flash chip is not aligned natively in the allowed "
 			 "access window.\n");
 		msg_perr("Read will probably return garbage.\n");
 	}
-	return spi_programmer->read(flash, buf, addrbase + start, len);
+	return spi_master->read(flash, buf, addrbase + start, len);
 }
 
 /*
@@ -173,16 +173,16 @@ int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsi
  * .write_256 = spi_chip_write_1
  */
 /* real chunksize is up to 256, logical chunksize is 256 */
-int spi_chip_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+int spi_chip_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len)
 {
-	if (!spi_programmer->write_256) {
+	if (!spi_master->write_256) {
 		msg_perr("%s called, but SPI page write is unsupported on this "
 			 "hardware. Please report a bug at "
 			 "flashrom@flashrom.org\n", __func__);
 		return 1;
 	}
 
-	return spi_programmer->write_256(flash, buf, start, len);
+	return spi_master->write_256(flash, buf, start, len);
 }
 
 /*
@@ -192,7 +192,7 @@ int spi_chip_write_256(struct flashctx *flash, uint8_t *buf, unsigned int start,
  */
 uint32_t spi_get_valid_read_addr(struct flashctx *flash)
 {
-	switch (spi_programmer->type) {
+	switch (spi_master->type) {
 #if CONFIG_INTERNAL == 1
 #if defined(__i386__) || defined(__x86_64__)
 	case SPI_CONTROLLER_ICH7:
@@ -205,8 +205,8 @@ uint32_t spi_get_valid_read_addr(struct flashctx *flash)
 	}
 }
 
-void register_spi_programmer(const struct spi_programmer *pgm)
+void register_spi_master(const struct spi_master *pgm)
 {
-	spi_programmer = pgm;
+	spi_master = pgm;
 	buses_supported |= BUS_SPI;
 }

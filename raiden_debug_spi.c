@@ -63,8 +63,10 @@
 #define GOOGLE_RAIDEN_SPI_PROTOCOL 0x01
 
 enum raiden_debug_spi_request {
-	RAIDEN_DEBUG_SPI_REQ_ENABLE  = 0x0000,
-	RAIDEN_DEBUG_SPI_REQ_DISABLE = 0x0001,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE    = 0x0000,
+	RAIDEN_DEBUG_SPI_REQ_DISABLE   = 0x0001,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE_AP = 0x0002,
+	RAIDEN_DEBUG_SPI_REQ_ENABLE_EC = 0x0003,
 };
 
 #define PACKET_HEADER_SIZE	2
@@ -162,7 +164,7 @@ static int send_command(const struct flashctx *flash,
 			 JEDEC_BYTE_PROGRAM_OUTSIZE +		\
 			 1)
 
-static const struct spi_programmer spi_programmer_raiden_debug = {
+static const struct spi_master spi_master_raiden_debug = {
 	.type		= SPI_CONTROLLER_RAIDEN_DEBUG,
 	.max_data_read	= MAX_DATA_SIZE,
 	.max_data_write	= MAX_DATA_SIZE,
@@ -181,7 +183,7 @@ static int match_endpoint(struct libusb_endpoint_descriptor const *descriptor,
 		 LIBUSB_TRANSFER_TYPE_BULK));
 }
 
-static int find_endpoints(struct usb_device *device)
+static int find_endpoints(void)
 {
 	int i;
 	int in_count  = 0;
@@ -240,6 +242,24 @@ static int shutdown(void * data)
 int raiden_debug_spi_init(void)
 {
 	struct usb_match match;
+	int request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE;
+	char *target_str = extract_programmer_param("target");
+	char *serial = extract_programmer_param("serial");
+	struct usb_device *current;
+	int found = 0;
+
+	if (target_str) {
+		if (!strcasecmp(target_str, "ap"))
+			request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE_AP;
+		else if (!strcasecmp(target_str, "ec"))
+			request_enable = RAIDEN_DEBUG_SPI_REQ_ENABLE_EC;
+		else {
+			msg_perr("Invalid target: %s\n", target_str);
+			free(target_str);
+			return 1;
+		}
+	}
+	free(target_str);
 
 	usb_match_init(&match);
 
@@ -250,37 +270,80 @@ int raiden_debug_spi_init(void)
 
 	CHECK(LIBUSB(libusb_init(NULL)), "Raiden: libusb_init failed\n");
 
-	CHECK(usb_device_find(&match, &device),
+	CHECK(usb_device_find(&match, &current),
 	      "Raiden: Failed to find devices\n");
 
-	if (device->next != NULL) {
-		struct usb_device *current;
+	while (current) {
+		device = current;
 
-		msg_perr("Raiden: Found too many compatible devices\n");
-		msg_perr("        Use parameters to specify desired device\n");
+		if (find_endpoints()) {
+		      msg_pdbg("Raiden: Failed to find valid endpoints on device");
+		      usb_device_show(" ", current);
+		      goto loop_end;
+		}
 
-		for (current = device;
-		     current != NULL;
-		     current = usb_device_free(current))
-			usb_device_show("        ", current);
+		if (usb_device_claim(device)) {
+		      msg_pdbg("Raiden: Failed to claim USB device");
+		      usb_device_show(" ", current);
+		      goto loop_end;
+		}
 
-		device = NULL;
+		if (!serial) {
+			found = 1;
+			goto loop_end;
+		} else {
+			unsigned char dev_serial[32];
+			struct libusb_device_descriptor descriptor;
+			int rc;
 
+			memset(dev_serial, 0, sizeof(dev_serial));
+
+			if (libusb_get_device_descriptor(device->device, &descriptor)) {
+				msg_pdbg("USB: Failed to get device descriptor.\n");
+				goto loop_end;
+			}
+
+			rc = libusb_get_string_descriptor_ascii(device->handle,
+							       descriptor.iSerialNumber,
+							       dev_serial,
+							       sizeof(dev_serial));
+			if (rc < 0) {
+				LIBUSB(rc);
+			} else {
+				if (strcmp(serial, (char *)dev_serial)) {
+					msg_pdbg("Raiden: Serial number %s did not match device", serial);
+					usb_device_show(" ", current);
+				} else {
+					msg_pinfo("Raiden: Serial number %s matched device", serial);
+					usb_device_show(" ", current);
+					found = 1;
+				}
+			}
+		}
+
+loop_end:
+		if (found)
+			break;
+		else
+			current = usb_device_free(current);
+	}
+
+	if (!device || !found) {
+		msg_perr("Raiden: No usable device found.\n");
 		return 1;
 	}
 
-	CHECK(find_endpoints(device),
-	      "Raiden: Failed to find valid endpoints\n");
-
-	CHECK(usb_device_claim(device),
-	      "Raiden: Failed to claim USB device\n");
+	/* free devices we don't care about */
+	current = current->next;
+	while (current)
+		current = usb_device_free(current);
 
 	CHECK(LIBUSB(libusb_control_transfer(
 			     device->handle,
 			     LIBUSB_ENDPOINT_OUT |
 			     LIBUSB_REQUEST_TYPE_VENDOR |
 			     LIBUSB_RECIPIENT_INTERFACE,
-			     RAIDEN_DEBUG_SPI_REQ_ENABLE,
+			     request_enable,
 			     0,
 			     device->interface_descriptor->bInterfaceNumber,
 			     NULL,
@@ -288,7 +351,7 @@ int raiden_debug_spi_init(void)
 			     TRANSFER_TIMEOUT_MS)),
 		"Raiden: Failed to enable SPI bridge\n");
 
-	register_spi_programmer(&spi_programmer_raiden_debug);
+	register_spi_master(&spi_master_raiden_debug);
 	register_shutdown(shutdown, NULL);
 
 	return 0;
