@@ -1095,6 +1095,7 @@ struct __ec_align4 ec_response_get_features {
 
 /* Get flash info */
 #define EC_CMD_FLASH_INFO 0x0010
+#define EC_VER_FLASH_INFO 2
 
 /* Version 0 returns these fields */
 struct __ec_align4 ec_response_flash_info {
@@ -1121,6 +1122,9 @@ struct __ec_align4 ec_response_flash_info {
 /* EC flash erases bits to 0 instead of 1 */
 #define EC_FLASH_INFO_ERASE_TO_0 (1 << 0)
 
+/* num_banks is valid */
+#define EC_FLASH_INFO_NUM_BANKS_DEFINED (1 << 1)
+
 /*
  * Version 1 returns the same initial fields as version 0, with additional
  * fields following.
@@ -1128,14 +1132,28 @@ struct __ec_align4 ec_response_flash_info {
  * gcc anonymous structs don't seem to get along with the __packed directive;
  * if they did we'd define the version 0 structure as a sub-structure of this
  * one.
+ *
+ * Version 2 supports flash banks of different sizes.
+ * To determine the amount of extra data neeeded, issue FLASH_INFO with version
+ * 1. If more than one banks exists, flags BANKS_DEFINED will be set and
+ * num_banks field will be valid.
  */
+struct ec_flash_bank {
+	uint32_t sector_nb;
+	uint32_t sector_size;
+	uint32_t sector_erase_size;
+	uint32_t sector_protect_size;
+};
+
 struct __ec_align4 ec_response_flash_info_1 {
 	/* Version 0 fields; see above for description */
 	uint32_t flash_size;
 	uint32_t write_block_size;
 	uint32_t erase_block_size;
-	uint32_t protect_block_size;
-
+	union {
+		uint32_t protect_block_size;
+		uint32_t num_banks;
+	};
 	/* Version 1 adds these fields: */
 	/*
 	 * Ideal write size in bytes.  Writes will be fastest if size is
@@ -1147,6 +1165,11 @@ struct __ec_align4 ec_response_flash_info_1 {
 
 	/* Flags; see EC_FLASH_INFO_* */
 	uint32_t flags;
+
+	/* When version 2 is used, enough data should be requested
+	 * To retrieve banks information.
+	 */
+	struct ec_flash_bank banks[0]; /* at least one bank expected */
 };
 
 /*
@@ -1177,9 +1200,38 @@ struct __ec_align4 ec_params_flash_write {
 /* Erase flash */
 #define EC_CMD_FLASH_ERASE 0x0013
 
+/* v0 */
 struct __ec_align4 ec_params_flash_erase {
 	uint32_t offset;   /* Byte offset to erase */
 	uint32_t size;     /* Size to erase in bytes */
+};
+
+
+#define EC_VER_FLASH_WRITE 1
+/* v1 add async erase:
+ * subcommands can returns:
+ * EC_RES_SUCCESS : erased (see ERASE_SECTOR_ASYNC case below).
+ * EC_RES_INVALID_PARAM : offset/size are not aligned on a erase boundary.
+ * EC_RES_ERROR : other errors.
+ * EC_RES_BUSY : an existing erase operation is in progress.
+ * EC_RES_ACCESS_DENIED: Trying to erase running image.
+ *
+ * When ERASE_SECTOR_ASYNC returns EC_RES_SUCCESS, the operation is just
+ * queued. The user must call GET_RESULT subcommand to get the proper results.
+ */
+enum ec_flash_erase_cmd {
+	FLASH_ERASE_SECTOR,     /* Erase and wait for result */
+	FLASH_ERASE_SECTOR_ASYNC,  /* Erase and return immediately. */
+	FLASH_GET_RESULT,       /* Ask for last ersae result */
+};
+
+/* For erase, do not read before if flash is already erased */
+#define EC_FLASH_FORCE_ERASE  (1 << 0)
+struct __ec_align4 ec_params_flash_erase_v1 {
+	uint8_t  cmd;
+	uint8_t  rsvd;
+	uint16_t flag;
+	struct ec_params_flash_erase params;
 };
 
 /*
