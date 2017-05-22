@@ -1239,8 +1239,14 @@ int cros_ec_probe_size(struct flashctx *flash) {
 				 info_2_p->banks[i].erase_size_exp);
 		}
 		cros_ec_priv->ideal_write_size = info_2_p->write_ideal_size;
+#if 0
+		/*
+		 * TODO(b/38506987)Comment out, as some firmware were not
+		 * setting this flag properly.
+		 */
 		if (info_2_p->flags & EC_FLASH_INFO_ERASE_TO_0)
 			flash->chip->feature_bits |= FEATURE_ERASE_TO_ZERO;
+#endif
 		free(info_2_p);
 	}
 	/*
