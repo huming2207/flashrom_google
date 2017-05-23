@@ -584,7 +584,7 @@ int cros_ec_block_erase(struct flashctx *flash,
                            unsigned int len) {
 	struct ec_params_flash_erase_v1 erase;
 	uint32_t mask;
-	int rc, cmd_version;
+	int rc, cmd_version, timeout=0;
 
 	if (in_current_image(blockaddr, len)) {
 		cros_ec_invalidate_copy(blockaddr, len);
@@ -645,9 +645,15 @@ int cros_ec_block_erase(struct flashctx *flash,
 
 	/* Wait for the erase command to complete */
 	rc = -EC_RES_BUSY;
-	while (rc == -EC_RES_BUSY) {
-		/* wait 100ms. 128K can take up to 2s */
-		usleep(100000);
+
+/* wait up to 10s to erase a flash sector */
+#define CROS_EC_ERASE_ASYNC_TIMEOUT 10000000
+/* wait .5 second between queries. */
+#define CROS_EC_ERASE_ASYNC_WAIT 500000
+
+	while (rc < 0 && timeout < CROS_EC_ERASE_ASYNC_TIMEOUT) {
+		usleep(CROS_EC_ERASE_ASYNC_WAIT);
+		timeout += CROS_EC_ERASE_ASYNC_WAIT;
 		erase.cmd = FLASH_ERASE_GET_RESULT;
 		rc = cros_ec_priv->ec_command(EC_CMD_FLASH_ERASE, cmd_version,
 				&erase, sizeof(erase), NULL, 0);
@@ -662,12 +668,12 @@ end_flash_erase:
 #ifndef SOFTWARE_SYNC_ENABLED
 	try_latest_firmware = 1;
 #endif
-	if (rc > EC_RES_SUCCESS) {
+	if (rc > 0) {
 		/*
 		 * Can happen if the command with retried with
 		 * EC_CMD_GET_COMMS_STATUS
 		 */
-		rc = EC_RES_SUCCESS;
+		rc = -EC_RES_SUCCESS;
 	}
 	return rc;
 }
