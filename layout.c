@@ -286,7 +286,7 @@ static int get_crossystem_fmap_base(struct search_info *search, off_t *offset)
 		*offset = fmap_base;
 	}
 
-	msg_gdbg("%s: ROM offset: %#lx\n", __func__, *offset);
+	msg_gdbg("%s: ROM offset: %#jx\n", __func__, (intmax_t)*offset);
 	return 0;
 }
 
@@ -368,8 +368,8 @@ int add_fmap_entries(struct flashctx *flash)
 			memcpy(&hdr, search.image + offset, sizeof(hdr));
 		else if (read_flash(flash, (uint8_t *)&hdr, offset,
 				sizeof(hdr))) {
-			msg_gdbg("[L%d] failed to read flash at offset %#lx\n",
-				__LINE__, offset);
+			msg_gdbg("[L%d] failed to read flash at offset %#jx\n",
+				__LINE__, (intmax_t)offset);
 			return -1;
 		}
 		ret = fmap_find(flash, &hdr.fmap, offset, &buf);
