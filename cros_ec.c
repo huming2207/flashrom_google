@@ -1048,6 +1048,12 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
 			sizeof(struct ec_host_request);
 		op->max_data_read = info.max_response_packet_size -
 			sizeof(struct ec_host_response);
+		/*
+		 * Due to a bug in NPCX SPI code (chromium:725580),
+		 * The EC may responds 163 when it meant 160; it should not
+		 * have included header and footer.
+		 */
+		op->max_data_read &= ~3;
 		msg_pdbg("%s: max_write:%d max_read:%d\n", __func__,
 			 op->max_data_write, op->max_data_read);
 	}
