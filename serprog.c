@@ -280,15 +280,13 @@ static int sp_stream_buffer_op(uint8_t cmd, uint32_t parmlen, uint8_t * parms)
 static int serprog_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
 				    const unsigned char *writearr,
 				    unsigned char *readarr);
-static int serprog_spi_read(struct flashctx *flash, uint8_t *buf,
-			    unsigned int start, unsigned int len);
 static struct spi_master spi_master_serprog = {
 	.type		= SPI_CONTROLLER_SERPROG,
 	.max_data_read	= MAX_DATA_READ_UNLIMITED,
 	.max_data_write	= MAX_DATA_WRITE_UNLIMITED,
 	.command	= serprog_spi_send_command,
 	.multicommand	= default_spi_send_multicommand,
-	.read		= serprog_spi_read,
+	.read		= default_spi_read,
 	.write_256	= default_spi_write_256,
 };
 
@@ -802,21 +800,18 @@ static int serprog_spi_send_command(const struct flashctx *flash, unsigned int w
 	return ret;
 }
 
-/* FIXME: This function is optimized so that it does not split each transaction
- * into chip page_size long blocks unnecessarily like spi_read_chunked. This has
- * the advantage that it is much faster for most chips, but breaks those with
- * non-contiguous address space (like AT45DB161D). When spi_read_chunked is
- * fixed this method can be removed. */
-static int serprog_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
+void *serprog_map(const char *descr, uintptr_t phys_addr, size_t len)
 {
-	unsigned int i, cur_len;
-	const unsigned int max_read = spi_master_serprog.max_data_read;
-	for (i = 0; i < len; i += cur_len) {
-		int ret;
-		cur_len = min(max_read, (len - i));
-		ret = spi_nbyte_read(flash, start + i, buf + i, cur_len);
-		if (ret)
-			return ret;
+	/* Serprog transmits 24 bits only and assumes the underlying implementation handles any remaining bits
+	 * correctly (usually setting them to one either in software (for FWH/LPC) or relying on the fact that
+	 * the hardware observes a subset of the address bits only). Combined with the standard mapping of
+	 * flashrom this creates a 16 MB-wide window just below the 4 GB boundary where serprog can operate (as
+	 * needed for non-SPI chips). Below we make sure that the requested range is within this window. */
+	if ((phys_addr & 0xFF000000) == 0xFF000000) {
+		return (void*)phys_addr;
+	} else {
+		msg_pwarn(MSGHEADER "requested mapping %s is incompatible: 0x%zx bytes at 0x%0*" PRIxPTR ".\n",
+			  descr, len, PRIxPTR_WIDTH, phys_addr);
+		return NULL;
 	}
-	return 0;
 }
