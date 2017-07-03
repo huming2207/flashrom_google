@@ -119,14 +119,7 @@ extern enum chipbustype target_bus;
 #define FEATURE_ERASE_TO_ZERO	(1 << 9)
 #define FEATURE_UNBOUND_READ	(1 << 10)
 #define FEATURE_NO_ERASE	(1 << 11)
-/* Feature bits used for 4-bytes addressing mode */
 #define FEATURE_4BA_SUPPORT	(1 << 12)
-#define FEATURE_4BA_ONLY 	(1 << 13)
-#define FEATURE_4BA_EXTENDED_ADDR_REG	(1 << 14)
-#define FEATURE_4BA_DIRECT_READ		(1 << 15)
-#define FEATURE_4BA_DIRECT_WRITE	(1 << 16)
-#define FEATURE_4BA_ALL_ERASERS_DIRECT  (1 << 17)
-#define FEATURE_4BA_ALL_DIRECT  (FEATURE_4BA_DIRECT_READ | FEATURE_4BA_DIRECT_WRITE | FEATURE_4BA_ALL_ERASERS_DIRECT)
 
 struct voltage_range {
 	uint16_t min, max;
@@ -178,7 +171,7 @@ struct flashchip {
 
 	/* set of function pointers to use in 4-bytes addressing mode */
 	struct four_bytes_addr_funcs_set {
-		int (*enter_4ba) (struct flashctx *flash);
+		int (*set_4ba) (struct flashctx *flash);
 		int (*read_nbyte) (struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
 		int (*program_byte) (struct flashctx *flash, unsigned int addr, const uint8_t databyte);
 		int (*program_nbyte) (struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
