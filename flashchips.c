@@ -6042,53 +6042,78 @@ const struct flashchip flashchips[] = {
 
 	{
 		.vendor		= "Numonyx",
-		/* ..3E = 3V, uniform 64KB/4KB blocks/sectors */
-		.name		= "N25Q256..3E",
+		.name		= "N25Q256..3E/MT25QL256", /* ..3E/L = 3V, uniform 64KB/4KB blocks/sectors */
 		.bustype	= BUS_SPI,
-		.manufacture_id	= ST_ID,
+		.manufacture_id = ST_ID,
 		.model_id	= ST_N25Q256__3E,
-//		.total_size	= 32768,
-		/* FIXME(dhendrix): support 32-bit addressing */
-		.total_size	= 32768/2,
+		.total_size	= 32768,
 		.page_size	= 256,
 		/* supports SFDP */
 		/* OTP: 64B total; read 0x4B, write 0x42 */
-		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ | FEATURE_OTP,
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ | FEATURE_OTP | FEATURE_4BA_SUPPORT,
+		.four_bytes_addr_funcs =
+		{
+			.read_nbyte = spi_nbyte_read_4ba_direct,
+			.program_byte = spi_byte_program_4ba_direct,
+			.program_nbyte = spi_nbyte_program_4ba_direct
+		},
 		.tested		= TEST_OK_PREWU,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
-		.block_erasers	=
-		{
-#if 0
-			/* FIXME(dhendrix): support 32-bit addressing */
+		.block_erasers	= {
 			{
-				.eraseblocks = { {4 * 1024, 8192 } },
-				.block_erase = spi_block_erase_20,
+				.eraseblocks = { {4 * 1024, 8192} },
+				.block_erase = spi_block_erase_21_4ba_direct,
 			}, {
 				.eraseblocks = { {64 * 1024, 512} },
-				.block_erase = spi_block_erase_d8,
+				.block_erase = spi_block_erase_dc_4ba_direct,
 			}, {
-				.eraseblocks = { {32 * 1024 * 1024, 1} },
-				.block_erase = spi_block_erase_c7,
-			}
-#endif
-			{
-				.eraseblocks = { {4 * 1024, 8192/2 } },
-				.block_erase = spi_block_erase_20,
-			}, {
-				.eraseblocks = { {64 * 1024, 512/2 } },
-				.block_erase = spi_block_erase_d8,
-			}, {
-				.eraseblocks = { {32/2 * 1024 * 1024, 1} },
+				.eraseblocks = { {32768 * 1024, 1} },
 				.block_erase = spi_block_erase_c7,
 			}
 		},
-		.unlock		= spi_disable_blockprotect,
-		.write		= spi_chip_write_256,
-		.read		= spi_chip_read,
+		.unlock		= spi_disable_blockprotect, /* TODO: per 64kB sector lock registers */
+		.write		= spi_chip_write_256, /* Multi I/O supported */
+		.read		= spi_chip_read, /* Fast read (0x0B) and multi I/O supported */
 		.voltage	= {2700, 3600},
-		/* FIXME(dhendrix): write-protect support */
-//		.wp		= &wp_w25,
+	},
+
+	{
+		.vendor		= "Micron",
+		.name		= "N25Q512..3E/MT25QL512", /* ..3E/L = 3V, uniform 64KB/4KB blocks/sectors */
+		.bustype	= BUS_SPI,
+		.manufacture_id = ST_ID,
+		.model_id	= ST_N25Q512__3E,
+		.total_size	= 65536,
+		.page_size	= 256,
+		/* supports SFDP */
+		/* OTP: 64B total; read 0x4B, write 0x42 */
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_OTP | FEATURE_4BA_SUPPORT,
+		.four_bytes_addr_funcs =
+		{
+			.read_nbyte = spi_nbyte_read_4ba_direct,
+			.program_byte = spi_byte_program_4ba_direct,
+			.program_nbyte = spi_nbyte_program_4ba_direct
+		},
+		.tested		= TEST_OK_PREW,
+		.probe		= probe_spi_rdid,
+		.probe_timing	= TIMING_ZERO,
+		.block_erasers	= {
+			{
+				.eraseblocks = { {4 * 1024, 16384} },
+				.block_erase = spi_block_erase_21_4ba_direct,
+			}, {
+				.eraseblocks = { {64 * 1024, 1024} },
+				.block_erase = spi_block_erase_dc_4ba_direct,
+			}, {
+				.eraseblocks = { {65536 * 1024, 1} },
+				.block_erase = spi_block_erase_c7,
+			}
+		},
+		.unlock		= spi_disable_blockprotect, /* TODO: per 64kB sector lock registers */
+		.write		= spi_chip_write_256, /* Multi I/O supported */
+		.read		= spi_chip_read, /* Fast read (0x0B) and multi I/O supported */
+		.voltage	= {2700, 3600},
 	},
 
 	{
