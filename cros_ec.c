@@ -1043,7 +1043,12 @@ void cros_ec_set_max_size(struct cros_ec_priv *priv,
 			      &info, sizeof(info));
 	msg_pdbg("%s: rc:%d\n", __func__, rc);
 
-	if (rc == sizeof(info)) {
+	/*
+	 * Use V3 large size only if v2 protocol is not supported.
+	 * When v2 is supported, we may be using a kernel without v3 support,
+	 * leading to sending larger commands the kernel can support.
+	 */
+	if (rc == sizeof(info) && ((info.protocol_versions & (1<<2)) == 0)) {
 		op->max_data_write = info.max_request_packet_size -
 			sizeof(struct ec_host_request);
 		op->max_data_read = info.max_response_packet_size -
