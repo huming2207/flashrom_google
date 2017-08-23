@@ -524,6 +524,7 @@ enum spi_controller {
 	SPI_CONTROLLER_IT87XX,
 	SPI_CONTROLLER_MEC1308,
 	SPI_CONTROLLER_SB600,
+	SPI_CONTROLLER_YANGTZE,
 	SPI_CONTROLLER_VIA,
 	SPI_CONTROLLER_WBSIO,
 	SPI_CONTROLLER_WPCE775X,
@@ -611,6 +612,8 @@ int via_init_spi(struct pci_dev *dev);
 
 /* ene_lpc.c */
 int ene_probe_spi_flash(const char *name);
+/* amd_imc.c */
+int amd_imc_shutdown(struct pci_dev *dev);
 
 /* it85spi.c */
 int it85xx_spi_init(struct superio s);
