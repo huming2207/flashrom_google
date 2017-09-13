@@ -1814,7 +1814,7 @@ int pch100_hwseq_read(struct flashctx *flash, uint8_t *buf, unsigned int addr,
 uint8_t pch100_hwseq_read_status(const struct flashctx *flash)
 {
 	uint32_t hsfc;
-	uint16_t timeout = 100 * 60;
+	uint32_t timeout = 5000 * 1000;
 	int len = 1;
 	uint8_t buf;
 
@@ -1892,7 +1892,7 @@ int pch100_hwseq_write(struct flashctx *flash, const uint8_t *buf, unsigned int 
 int pch100_hwseq_write_status(const struct flashctx *flash, int status)
 {
 	uint32_t hsfc;
-	uint16_t timeout = 100 * 60;
+	uint32_t timeout = 5000 * 1000;
 	int len = 1;
 	uint8_t buf = status;
 
