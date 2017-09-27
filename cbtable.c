@@ -110,6 +110,42 @@ static int count_lb_records(struct lb_header *head)
 	return count;
 }
 
+static int lb_header_valid(struct lb_header *head, unsigned long addr)
+{
+	if (memcmp(head->signature, "LBIO", 4) != 0)
+		return 0;
+	msg_pdbg("Found candidate at: %08lx-%08lx\n",
+		     addr, addr + sizeof(*head) + head->table_bytes);
+	if (head->header_bytes != sizeof(*head)) {
+		msg_perr("Header bytes of %d are incorrect.\n",
+			head->header_bytes);
+		return 0;
+	}
+	if (compute_checksum((uint8_t *) head, sizeof(*head)) != 0) {
+		msg_perr("Bad header checksum.\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+static int lb_table_valid(struct lb_header *head, struct lb_record *recs)
+{
+	if (compute_checksum(recs, head->table_bytes)
+	    != head->table_checksum) {
+		msg_perr("Bad table checksum: %04x.\n",
+			head->table_checksum);
+		return 0;
+	}
+	if (count_lb_records(head) != head->table_entries) {
+		msg_perr("Bad record count: %d.\n",
+			head->table_entries);
+		return 0;
+	}
+
+	return 1;
+}
+
 static struct lb_header *find_lb_table(void *base, unsigned long start,
 				       unsigned long end)
 {
@@ -121,35 +157,74 @@ static struct lb_header *find_lb_table(void *base, unsigned long start,
 		    (struct lb_header *)(((char *)base) + addr);
 		struct lb_record *recs =
 		    (struct lb_record *)(((char *)base) + addr + sizeof(*head));
-		if (memcmp(head->signature, "LBIO", 4) != 0)
+		if (!lb_header_valid(head, addr))
 			continue;
-		msg_pdbg("Found candidate at: %08lx-%08lx\n",
-			     addr, addr + head->table_bytes);
-		if (head->header_bytes != sizeof(*head)) {
-			msg_perr("Header bytes of %d are incorrect.\n",
-				head->header_bytes);
+		if (!lb_table_valid(head, recs))
 			continue;
-		}
-		if (count_lb_records(head) != head->table_entries) {
-			msg_perr("Bad record count: %d.\n",
-				head->table_entries);
-			continue;
-		}
-		if (compute_checksum((uint8_t *) head, sizeof(*head)) != 0) {
-			msg_perr("Bad header checksum.\n");
-			continue;
-		}
-		if (compute_checksum(recs, head->table_bytes)
-		    != head->table_checksum) {
-			msg_perr("Bad table checksum: %04x.\n",
-				head->table_checksum);
-			continue;
-		}
 		msg_pdbg("Found coreboot table at 0x%08lx.\n", addr);
 		return head;
 
 	};
 
+	return NULL;
+}
+
+static struct lb_header *find_lb_table_remap(unsigned long start_addr,
+					     uint8_t **table_area)
+{
+	size_t offset;
+	unsigned long addr, end;
+	size_t mapping_size;
+	void *base;
+
+	mapping_size = getpagesize();
+	offset = start_addr % getpagesize();
+	start_addr -= offset;
+
+	base = physmap_try_ro("high tables", start_addr, mapping_size);
+	if (ERROR_PTR == base) {
+		msg_perr("Failed getting access to coreboot high tables.\n");
+		return NULL;
+	}
+
+	for (addr = offset, end = getpagesize(); addr < end; addr += 16) {
+		struct lb_record *recs;
+		struct lb_header *head;
+
+		/* No more headers to check. */
+		if (end - addr < sizeof(*head))
+			return NULL;
+
+		head = (struct lb_header *)(((char *)base) + addr);
+
+		if (!lb_header_valid(head, addr))
+			continue;
+
+		if (mapping_size - addr < head->table_bytes + sizeof(*head)) {
+			physunmap(base, mapping_size);
+			mapping_size = head->table_bytes + sizeof(*head);
+			mapping_size += addr;
+			mapping_size += getpagesize() -
+				(mapping_size % getpagesize());
+			base = physmap_try_ro("high tables", start_addr,
+						mapping_size);
+			if (ERROR_PTR == base) {
+				msg_perr("Failed getting access to coreboot high tables.\n");
+				return NULL;
+			}
+		}
+
+		head = (struct lb_header *)(((char *)base) + addr);
+		recs =
+		    (struct lb_record *)(((char *)base) + addr + sizeof(*head));
+		if (!lb_table_valid(head, recs))
+			continue;
+		msg_pdbg("Found coreboot table at 0x%08lx.\n", addr);
+		*table_area = base;
+		return head;
+	}
+
+	physunmap(base, mapping_size);
 	return NULL;
 }
 
@@ -230,14 +305,8 @@ int coreboot_init(void)
 			(((char *)lb_table) + lb_table->header_bytes);
 		if (forward->tag == LB_TAG_FORWARD) {
 			start = forward->forward;
-			start &= ~(getpagesize() - 1);
 			physunmap(table_area, BYTES_TO_MAP);
-			table_area = physmap_try_ro("high tables", start, BYTES_TO_MAP);
-			if (ERROR_PTR == table_area) {
-				msg_perr("Failed getting access to coreboot high tables.\n");
-				return -1;
-			}
-			lb_table = find_lb_table(table_area, 0x00000, 0x1000);
+			lb_table = find_lb_table_remap(start, &table_area);
 		}
 	}
 
