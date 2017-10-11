@@ -201,11 +201,12 @@ static struct lb_header *find_lb_table_remap(unsigned long start_addr,
 			continue;
 
 		if (mapping_size - addr < head->table_bytes + sizeof(*head)) {
-			physunmap(base, mapping_size);
+			size_t prev_mapping_size = mapping_size;
 			mapping_size = head->table_bytes + sizeof(*head);
 			mapping_size += addr;
 			mapping_size += getpagesize() -
 				(mapping_size % getpagesize());
+			physunmap(base, prev_mapping_size);
 			base = physmap_try_ro("high tables", start_addr,
 						mapping_size);
 			if (ERROR_PTR == base) {
