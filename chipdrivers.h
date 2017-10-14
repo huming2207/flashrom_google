@@ -37,11 +37,14 @@ int probe_spi_res2(struct flashctx *flash);
 int spi_write_enable(struct flashctx *flash);
 int spi_write_disable(struct flashctx *flash);
 int spi_block_erase_20(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
+int spi_block_erase_21(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_52(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
+int spi_block_erase_5c(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_60(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_c7(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_d7(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_d8(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
+int spi_block_erase_dc(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_chip_write_1(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 int spi_chip_write_256(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, int unsigned len);
@@ -57,6 +60,10 @@ int spi_read_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 int spi_read_unbound(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
 int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
 int spi_aai_write(struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
+int spi_enter_4ba_b7(struct flashctx *flash);
+int spi_enter_4ba_b7_we(struct flashctx *flash);
+int spi_exit_4ba_e9(struct flashctx *flash);
+int spi_exit_4ba_e9_we(struct flashctx *flash);
 
 /* opaque.c */
 int probe_opaque(struct flashctx *flash);
@@ -172,29 +179,5 @@ int unlock_stm50flw0x0x(struct flashctx *flash);
 
 /* dummyflasher.c */
 int probe_variable_size(struct flashctx *flash);
-
-/* spi4ba.c */
-int spi_enter_4ba_b7(struct flashctx *flash);
-int spi_enter_4ba_b7_we(struct flashctx *flash);
-int spi_exit_4ba_e9(struct flashctx *flash);
-int spi_exit_4ba_e9_we(struct flashctx *flash);
-int spi_byte_program_4ba(struct flashctx *flash, unsigned int addr, uint8_t databyte);
-int spi_nbyte_program_4ba(struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
-int spi_nbyte_read_4ba(struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
-int spi_block_erase_20_4ba(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_52_4ba(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_d8_4ba(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_byte_program_4ba_ereg(struct flashctx *flash, unsigned int addr, uint8_t databyte);
-int spi_nbyte_program_4ba_ereg(struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
-int spi_nbyte_read_4ba_ereg(struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
-int spi_block_erase_20_4ba_ereg(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_52_4ba_ereg(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_d8_4ba_ereg(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_byte_program_4ba_direct(struct flashctx *flash, unsigned int addr, uint8_t databyte);
-int spi_nbyte_program_4ba_direct(struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
-int spi_nbyte_read_4ba_direct(struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
-int spi_block_erase_21_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_5c_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
-int spi_block_erase_dc_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 
 #endif /* !__CHIPDRIVERS_H__ */
