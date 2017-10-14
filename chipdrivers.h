@@ -52,8 +52,6 @@ void spi_prettyprint_status_register_bp3210(uint8_t status, int bp);
 void spi_prettyprint_status_register_welwip(uint8_t status);
 int spi_prettyprint_status_register(struct flashctx *flash);
 int spi_disable_blockprotect(struct flashctx *flash);
-int spi_byte_program(struct flashctx *flash, unsigned int addr, uint8_t databyte);
-int spi_nbyte_program(struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
 int spi_nbyte_read(struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
 int spi_read_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);
 int spi_read_unbound(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len, unsigned int chunksize);

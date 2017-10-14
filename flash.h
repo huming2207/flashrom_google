@@ -64,6 +64,7 @@ enum {
 extern unsigned int required_erase_size;
 
 typedef unsigned long chipaddr;
+#define PRIxPTR_WIDTH ((int)(sizeof(uintptr_t)*2))
 
 int register_shutdown(int (*function) (void *data), void *data);
 #define CHIP_RESTORE_CALLBACK	int (*func) (struct flashctx *flash, uint8_t status)
@@ -370,9 +371,11 @@ struct spi_command {
 	const unsigned char *writearr;
 	unsigned char *readarr;
 };
+
 #define NULL_SPI_CMD { 0, 0, NULL, NULL, }
-int spi_send_command(struct flashctx *flash, unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
-int spi_send_multicommand(struct flashctx *flash, struct spi_command *cmds);
+int spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
+		const unsigned char *writearr, unsigned char *readarr);
+int spi_send_multicommand(const struct flashctx *flash, struct spi_command *cmds);
 uint32_t spi_get_valid_read_addr(struct flashctx *flash);
 
 #define NUM_VOLTAGE_RANGES	16
