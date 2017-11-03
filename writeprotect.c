@@ -376,6 +376,26 @@ static struct w25q_range mx25u6435e_ranges[] = {
 	{ 0, 1, 0x7, {0x000000, 128 * 64 * 1024} },	/* blocks 0-127 */
 };
 
+static struct w25q_range mx25u12835f_ranges[] = {
+	{ X, 0, 0, {0, 0} },	/* none */
+	{ 0, 0, 0x1, {0xff0000,   1 * 64 * 1024} },	/* block 255 */
+	{ 0, 0, 0x2, {0xfe0000,   2 * 64 * 1024} },	/* blocks 254-255 */
+	{ 0, 0, 0x3, {0xfc0000,   4 * 64 * 1024} },	/* blocks 252-255 */
+	{ 0, 0, 0x4, {0xf80000,   8 * 64 * 1024} },	/* blocks 248-255 */
+	{ 0, 0, 0x5, {0xf00000,  16 * 64 * 1024} },	/* blocks 240-255 */
+	{ 0, 0, 0x6, {0xe00000,  32 * 64 * 1024} },	/* blocks 224-255 */
+	{ 0, 0, 0x7, {0xc00000,  64 * 64 * 1024} },	/* blocks 192-255 */
+
+	{ 0, 1, 0x0, {0x800000,  128 * 64 * 1024} },	/* blocks 128-255 */
+	{ 0, 1, 0x1, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x2, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x3, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x4, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x5, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x6, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+	{ 0, 1, 0x7, {0x000000,  256 * 64 * 1024} },	/* blocks all */
+};
+
 static struct w25q_range n25q064_ranges[] = {
 	/*
 	 * Note: For N25Q064, sec (usually in bit position 6) is called BP3
@@ -913,6 +933,10 @@ static int w25_range_table(const struct flashctx *flash,
 		case MACRONIX_MX25U6435E:
 			*w25q_ranges = mx25u6435e_ranges;
 			*num_entries = ARRAY_SIZE(mx25u6435e_ranges);
+			break;
+		case MACRONIX_MX25U12835F:
+			*w25q_ranges = mx25u12835f_ranges;
+			*num_entries = ARRAY_SIZE(mx25u12835f_ranges);
 			break;
 		default:
 			msg_cerr("%s():%d: MXIC flash chip mismatch (0x%04x)"
