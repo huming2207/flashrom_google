@@ -217,7 +217,7 @@ int internal_init(void)
 	int force_laptop = 0;
 	int not_a_laptop = 0;
 	char *arg;
-#if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
+#if IS_X86 || IS_ARM
 	int probe_target_bus_later = 0;
 #endif
 
@@ -295,7 +295,7 @@ int internal_init(void)
 
 		free(arg);
 	} else {
-#if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
+#if IS_X86 || IS_ARM
 		/* The pacc must be initialized before access pci devices. */
 		probe_target_bus_later = 1;
 #endif
@@ -306,7 +306,7 @@ int internal_init(void)
 	if (register_shutdown(internal_shutdown, NULL))
 		return 1;
 
-#if defined(__i386__) || defined(__x86_64__)
+#if IS_X86
 	/* Default to Parallel/LPC/FWH flash devices. If a known host controller
 	 * is found, the host controller init routine sets the
 	 * internal_buses_supported bitfield.
@@ -326,9 +326,9 @@ int internal_init(void)
 	internal_buses_supported = BUS_NONE;
 #endif
 
-#if defined(__arm__)
+#if IS_ARM
 	/*
-	 * FIXME: CrOS EC probing should not require this "#if defined(__arm__)"
+	 * FIXME: CrOS EC probing should not require this "IS_ARM"
 	 * and should not depend on the target bus. This is only to satisfy
 	 * users and scripts who currently depend on the old "-p internal:bus="
 	 * syntax or some default behavior.
@@ -337,7 +337,7 @@ int internal_init(void)
 	 * alias == ALIAS_EC in order to call cros_ec_probe_*.
 	 *
 	 * Also, ensure probing does not get confused when removing the
-	 * "#if defined(__arm__)" (see crbug.com/249568).
+	 * "#if IS_ARM" (see crbug.com/249568).
 	 */
 	if (!alias && probe_target_bus_later)
 		target_bus = BUS_SPI;
@@ -357,7 +357,7 @@ int internal_init(void)
 		return 0;
 #endif
 
-#if defined(__arm__) || defined(__mips__) && CONFIG_LINUX_SPI == 1
+#if IS_ARM || IS_MIPS && CONFIG_LINUX_SPI == 1
 	/* On the ARM platform, we prefer /dev/spidev if it is supported.
 	 * That means, if user specifies
 	 *
@@ -380,7 +380,7 @@ int internal_init(void)
 		return 1;
 	}
 
-#if defined(__i386__) || defined(__x86_64__)
+#if IS_X86
 	/* We look at the cbtable first to see if we need a
 	 * mainboard specific flash enable sequence.
 	 */
@@ -404,7 +404,7 @@ int internal_init(void)
 	/* Probe for the Super I/O chip and fill global struct superio. */
 	probe_superio();
 
-#elif defined(__arm__)
+#elif IS_ARM
 	/* We look at the cbtable first to see if we need a
 	 * mainboard specific flash enable sequence.
 	 */
@@ -453,7 +453,7 @@ int internal_init(void)
 	}
 
 #if defined (__FLASHROM_LITTLE_ENDIAN__)
-#if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
+#if IS_X86 || IS_MIPS || IS_ARM
 	/* try to enable it. Failure IS an option, since not all motherboards
 	 * really need this to be done, etc., etc.
 	 */
@@ -465,7 +465,7 @@ int internal_init(void)
 		return ret;
 
 	register_par_master(&par_master_internal, internal_buses_supported);
-#if defined(__i386__) || defined(__x86_64__)
+#if IS_X86
 
 	/* probe for programmers that bridge LPC <--> SPI */
 	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
