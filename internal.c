@@ -165,7 +165,7 @@ static int internal_shutdown(void *data)
 }
 enum chipbustype target_bus;
 
-#if NEED_PCI == 1
+#if IS_X86
 #define BUFSIZE 256
 static char buffer[BUFSIZE];
 
