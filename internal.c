@@ -144,7 +144,7 @@ static uint32_t internal_chip_readl(const struct flashctx *flash,
 static void internal_chip_readn(const struct flashctx *flash, uint8_t *buf,
 				const chipaddr addr, size_t len);
 
-#if __FLASHROM_LITTLE_ENDIAN__
+#if defined (__FLASHROM_LITTLE_ENDIAN__)
 static const struct par_master par_master_internal = {
 		.chip_readb		= internal_chip_readb,
 		.chip_readw		= internal_chip_readw,
@@ -211,7 +211,7 @@ pci_debug(char *msg, ...)
 
 int internal_init(void)
 {
-#if __FLASHROM_LITTLE_ENDIAN__
+#if defined (__FLASHROM_LITTLE_ENDIAN__)
 	int ret = 0;
 #endif
 	int force_laptop = 0;
@@ -452,7 +452,7 @@ int internal_init(void)
 		}
 	}
 
-#if __FLASHROM_LITTLE_ENDIAN__
+#if defined (__FLASHROM_LITTLE_ENDIAN__)
 #if defined(__i386__) || defined(__x86_64__) || defined (__mips) || defined (__arm__)
 	/* try to enable it. Failure IS an option, since not all motherboards
 	 * really need this to be done, etc., etc.
