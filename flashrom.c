@@ -1572,8 +1572,10 @@ static int walk_eraseregions(struct flashctx *flash, int erasefunction,
 			/* Print this for every block except the first one. */
 			if (i || j)
 				msg_cdbg(", ");
-			msg_cdbg("0x%06x-0x%06x", start,
-				     start + len - 1);
+			msg_ginfo("%.2f %%, 0x%06x to 0x%06x\n", 
+				(start / (double)(flash->chip->total_size * 1024)) * 100,
+				start,
+				start + len - 1);
 			rc = do_something(flash, start, len, param1, param2,
 			                  eraser.block_erase);
 			if (rc) {
