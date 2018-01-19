@@ -404,7 +404,7 @@ CHIP_OBJS = jedec.o stm50flw0x0x.o w39.o w29ee011.o \
 	sst49lfxxxc.o sst_fwhub.o flashchips.o spi.o spi25.o sharplhf00l04.o \
 	a25.o at25.o s25f.o spi4ba.o opaque.o writeprotect.o
 
-LIB_OBJS = android.o layout.o file.o fmap.o power.o search.o
+LIB_OBJS = android.o layout.o file.o fmap.o search.o
 
 ifeq ($(CONFIG_FDTMAP), yes)
 FEATURE_CFLAGS += -D'CONFIG_FDTMAP=1'
@@ -416,9 +416,9 @@ LIBS += -lfdt -lz
 endif
 endif
 
-LOCK_OBJS = big_lock.o file_lock.o cros_ec_lock.o
+LOCK_OBJS = big_lock.o file_lock.o
 LIB_OBJS += $(LOCK_OBJS)
-FEATURE_CFLAGS += -D'USE_BIG_LOCK=1' -D'USE_CROS_EC_LOCK=1'
+FEATURE_CFLAGS += -D'USE_BIG_LOCK=1'
 
 CLI_OBJS = flashrom.o cli_mfg.o cli_output.o print.o
 
@@ -573,19 +573,14 @@ endif
 
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'
-PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o cros_ec.o
+PROGRAMMER_OBJS += processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o
 ifeq ($(ARCH),x86)
-PROGRAMMER_OBJS += cros_ec_lpc.o it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
+PROGRAMMER_OBJS += it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o
 PROGRAMMER_OBJS += ichspi.o ich_descriptors.o amd_imc.o
 else
-ifeq ($(ARCH),arm)
-PROGRAMMER_OBJS += cros_ec_i2c.o
-endif
 NEED_LIBPCI += CONFIG_INTERNAL
 endif
 endif
-
-PROGRAMMER_OBJS += cros_ec_dev.o
 
 ifeq ($(CONFIG_SERPROG), yes)
 FEATURE_CFLAGS += -D'CONFIG_SERPROG=1'

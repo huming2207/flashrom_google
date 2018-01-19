@@ -2079,17 +2079,6 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 			}
 		}
 
-#if 0
-		/*
-		 * FIXME: show_id() causes failure if vendor:mainboard do not
-		 * match. This may happen if codenames are in flux.
-		 * See chrome-os-partner:10414.
-		 */
-#if CONFIG_INTERNAL == 1
-		if (programmer == PROGRAMMER_INTERNAL)
-			show_id(newcontents, size, force);
-#endif
-#endif
 	}
 
 	/* Obtain a reference image so that we can check whether regions need
@@ -2150,11 +2139,6 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 	}
 
 	if (write_it) {
-		// parse the new fmap and disable soft WP if necessary
-		if ((ret = cros_ec_prepare(newcontents, size))) {
-			msg_cerr("CROS_EC prepare failed, ret=%d.\n", ret);
-			goto out;
-		}
 
 		if (erase_and_write_flash(flash, oldcontents, newcontents)) {
 			msg_cerr("Uh oh. Erase/write failed. Checking if "
@@ -2168,40 +2152,6 @@ int doit(struct flashctx *flash, int force, const char *filename, int read_it,
 					goto out;
 				}
 			}
-			emergency_help_message();
-			ret = 1;
-			goto out;
-		}
-
-		ret = cros_ec_need_2nd_pass();
-		if (ret < 0) {
-			// Jump failed
-			msg_cerr("cros_ec_need_2nd_pass() failed. Stop.\n");
-			emergency_help_message();
-			ret = 1;
-			goto out;
-		} else if (ret > 0) {
-			// Need 2nd pass. Get the just written content.
-			msg_pdbg("CROS_EC needs 2nd pass.\n");
-			if (read_flash(flash, oldcontents, 0, size)) {
-				msg_cerr("Uh oh. Cannot get latest content.\n");
-				emergency_help_message();
-				ret = 1;
-				goto out;
-			}
-			// write 2nd pass
-			if (erase_and_write_flash(flash, oldcontents,
-			                          newcontents)) {
-				msg_cerr("Uh oh. CROS_EC 2nd pass failed.\n");
-				emergency_help_message();
-				ret = 1;
-				goto out;
-			}
-			ret = 0;
-		}
-
-		if (cros_ec_finish() < 0) {
-			msg_cerr("cros_ec_finish() failed. Stop.\n");
 			emergency_help_message();
 			ret = 1;
 			goto out;

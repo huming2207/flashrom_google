@@ -327,29 +327,8 @@ int internal_init(void)
 #endif
 
 #if IS_ARM
-	/*
-	 * FIXME: CrOS EC probing should not require this "IS_ARM"
-	 * and should not depend on the target bus. This is only to satisfy
-	 * users and scripts who currently depend on the old "-p internal:bus="
-	 * syntax or some default behavior.
-	 *
-	 * Once everything is finally updated, we should only rely on
-	 * alias == ALIAS_EC in order to call cros_ec_probe_*.
-	 *
-	 * Also, ensure probing does not get confused when removing the
-	 * "#if IS_ARM" (see crbug.com/249568).
-	 */
 	if (!alias && probe_target_bus_later)
 		target_bus = BUS_SPI;
-
-	if (target_bus != BUS_SPI) {
-		/*
-		 * Give preference to the cros_ec dev interface if it exists
-		 * and passes the "hello" test, otherwise fall back on raw I2C.
-		 */
-		if (!cros_ec_probe_dev() || !cros_ec_probe_i2c(NULL))
-			return 0;
-	}
 #endif
 
 #if CONFIG_LINUX_MTD == 1
@@ -465,27 +444,6 @@ int internal_init(void)
 		return ret;
 
 	register_par_master(&par_master_internal, internal_buses_supported);
-#if IS_X86
-
-	/* probe for programmers that bridge LPC <--> SPI */
-	if (target_bus == BUS_LPC || target_bus == BUS_FWH ||
-	    (alias && alias->type == ALIAS_EC)) {
-		/* Try to probe via kernel device first */
-		if (!cros_ec_probe_dev()) {
-			buses_supported &= ~(BUS_LPC|BUS_SPI);
-			return 0;
-		}
-		if (cros_ec_probe_lpc(NULL) &&
-			wpce775x_probe_spi_flash(NULL) &&
-			mec1308_probe_spi_flash(NULL) &&
-			ene_probe_spi_flash(NULL) &&
-			init_superio_ite())
-			return 1;	/* EC not found */
-		else
-			return 0;
-	}
-
-#endif
 
 	board_flash_enable(lb_vendor, lb_part);
 
