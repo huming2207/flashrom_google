@@ -222,4 +222,4 @@ fabric.properties
 
 ### D-Team testings
 test.log
-test.bin
+*.bin
