@@ -488,11 +488,11 @@ int spi_chip_erase_60(struct flashctx *flash)
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 1-85 s, so wait in 1 s steps.
+	 * This usually takes 1-85 s, so wait in 0.1 s steps.
 	 */
 	/* FIXME: We assume spi_read_status_register will never fail. */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(1000 * 1000);
+		programmer_delay(100 * 1000);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -524,11 +524,11 @@ int spi_chip_erase_c7(struct flashctx *flash)
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 1-85 s, so wait in 1 s steps.
+	 * This usually takes 1-85 s, so wait in 0.1 s steps.
 	 */
 	/* FIXME: We assume spi_read_status_register will never fail. */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(1000 * 1000);
+		programmer_delay(100 * 1000);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -566,10 +566,10 @@ int spi_block_erase_52(struct flashctx *flash, unsigned int addr, unsigned int b
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 100-4000 ms, so wait in 100 ms steps.
+	 * This usually takes 100-4000 ms, so wait in 10 ms steps.
 	 */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(100 * 1000);
+		programmer_delay(10 * 1000);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -612,10 +612,10 @@ int spi_block_erase_d8(struct flashctx *flash, unsigned int addr, unsigned int b
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 100-4000 ms, so wait in 100 ms steps.
+	 * This usually takes 100-4000 ms, so wait in 10 ms steps.
 	 */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(100 * 1000);
+		programmer_delay(10 * 1000);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -656,10 +656,10 @@ int spi_block_erase_d7(struct flashctx *flash, unsigned int addr, unsigned int b
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 100-4000 ms, so wait in 100 ms steps.
+	 * This usually takes 100-4000 ms, so wait in 10 ms steps.
 	 */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(100 * 1000);
+		programmer_delay(10 * 1000);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -699,10 +699,10 @@ int spi_block_erase_20(struct flashctx *flash, unsigned int addr, unsigned int b
 		return result;
 	}
 	/* Wait until the Write-In-Progress bit is cleared.
-	 * This usually takes 15-800 ms, so wait in 10 ms steps.
+	 * This usually takes 15-800 ms, so wait in 2.5 ms steps.
 	 */
 	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-		programmer_delay(10 * 1000);
+		programmer_delay(25 * 100);
 	/* FIXME: Check the status register for errors. */
 	return 0;
 }
@@ -1039,6 +1039,11 @@ int spi_read_chunked(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 		}
 		if (chunk_status)
 			break;
+
+		msg_ginfo("Reading: %.2f %%, 0x%08x to 0x%08x\n",
+			(starthere / (double)(flash->chip->total_size * 1024)) * 100,
+			starthere,
+			starthere + lenhere - 1);
 	}
 
 	return rc;
@@ -1054,6 +1059,13 @@ int spi_read_unbound(struct flashctx *flash, uint8_t *buf, unsigned int start, u
 	unsigned int i;
 
 	for (i = start; i < (start + len); i += chunksize) {
+
+		/* Print current progress status */
+		msg_ginfo("Reading: %.2f %%, 0x%08x to 0x%08x\n",
+			(i / (double)(flash->chip->total_size * 1024)) * 100,
+			i,
+			i + chunksize - 1);
+
 		int chunk_status = 0;
 		unsigned int toread = min(chunksize, start + len - i);
 
@@ -1106,6 +1118,7 @@ int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int s
 		starthere = max(start, i * page_size);
 		/* Length of bytes in the range in this page. */
 		lenhere = min(start + len, (i + 1) * page_size) - starthere;
+
 		for (j = 0; j < lenhere; j += chunksize) {
 			towrite = min(chunksize, lenhere - j);
 			rc = (flash->chip->feature_bits & FEATURE_4BA_SUPPORT) == 0
@@ -1115,8 +1128,14 @@ int spi_write_chunked(struct flashctx *flash, const uint8_t *buf, unsigned int s
 			if (rc)
 				break;
 			while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP)
-				programmer_delay(10);
+				programmer_delay(1);
 		}
+
+		msg_ginfo("Writing: %.2f %%, 0x%08x to 0x%08x\n",
+					(starthere / (double)(flash->chip->total_size * 1024)) * 100,
+					starthere,
+					starthere + lenhere - 1);
+
 		if (rc)
 			break;
 	}

@@ -166,6 +166,12 @@ int spi_chip_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsi
 			 "access window.\n");
 		msg_perr("Read will probably return garbage.\n");
 	}
+
+	msg_ginfo("%.2f %%, 0x%08x to 0x%08x\n",
+				(start / (double)(flash->chip->total_size * 1024)) * 100,
+				start,
+				start + len - 1);
+
 	return spi_master->read(flash, buf, addrbase + start, len);
 }
 
