@@ -1572,10 +1572,12 @@ static int walk_eraseregions(struct flashctx *flash, int erasefunction,
 			/* Print this for every block except the first one. */
 			if (i || j)
 				msg_cdbg(", ");
-			msg_ginfo("%.2f %%, 0x%08x to 0x%08x\n",
+
+			msg_ginfo("Erasing: %.2f %%, 0x%08x to 0x%08x\n",
 				(start / (double)(flash->chip->total_size * 1024)) * 100,
 				start,
 				start + len - 1);
+			
 			rc = do_something(flash, start, len, param1, param2,
 			                  eraser.block_erase);
 			if (rc) {
@@ -1628,6 +1630,8 @@ int erase_and_write_flash(struct flashctx *flash, uint8_t *oldcontents,
 	if (!curcontents) {
 		msg_gerr("Out of memory!\n");
 		exit(1);
+	} else {
+		msg_cinfo("\n");
 	}
 	/* Copy oldcontents to curcontents to avoid clobbering oldcontents. */
 	memcpy(curcontents, oldcontents, size);
