@@ -1572,7 +1572,7 @@ static int walk_eraseregions(struct flashctx *flash, int erasefunction,
 			/* Print this for every block except the first one. */
 			if (i || j)
 				msg_cdbg(", ");
-			msg_ginfo("%.2f %%, 0x%06x to 0x%06x\n", 
+			msg_ginfo("%.2f %%, 0x%08x to 0x%08x\n",
 				(start / (double)(flash->chip->total_size * 1024)) * 100,
 				start,
 				start + len - 1);
@@ -1632,7 +1632,10 @@ int erase_and_write_flash(struct flashctx *flash, uint8_t *oldcontents,
 	/* Copy oldcontents to curcontents to avoid clobbering oldcontents. */
 	memcpy(curcontents, oldcontents, size);
 
-	for (k = 0; k < NUM_ERASEFUNCTIONS; k++) {
+	/* Here we try using the erasers using 0xC7 or 0x60 (chip erase command)
+	 * first, as it is much faster than others (55 secs vs. ~3mins?) 
+	 */
+	for (k = NUM_ERASEFUNCTIONS; k >= 0; k--) {
 		if (k != 0)
 			msg_cdbg("Looking for another erase function.\n");
 		if (!usable_erasefunctions) {
