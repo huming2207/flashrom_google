@@ -8,16 +8,16 @@ set(CMAKE_C_FLAGS "-Werror ")
 # Basic source objects
 set(FLASHROM_CHIP_OBJS "jedec.c stm50flw0x0x.c w39.c w29ee011.c
 	                    sst28sf040.c m29f400bt.c 82802ab.c pm49fl00x.c
-	                    sst49lfxxxc.c sst_fwhub.c flashchips.c flashchips.h spi.o spi25.o sharplhf00l04.o
-	                    a25.o at25.o s25f.o spi4ba.o opaque.o writeprotect.o")
+	                    sst49lfxxxc.c sst_fwhub.c flashchips.c flashchips.h spi.c spi.h spi25.c sharplhf00l04.c
+	                    a25.c at25.c s25f.c spi4ba.c spi4ba.h opaque.c writeprotect.c writeprotect.h")
 
-set(FLASHROM_LIB_OBJS "android.o layout.o file.o fmap.o search.o")
+set(FLASHROM_LIB_OBJS "android.c android.h layout.c layout.h file.c file.h fmap.c fmap.h search.c search.h")
 
-set(FLASHROM_LOCK_OBJS "big_lock.o file_lock.o")
+set(FLASHROM_LOCK_OBJS "big_lock.c big_lock.h file_lock.c")
 
-set(FLASHROM_CLI_OBJS "flashrom.o cli_mfg.o cli_output.o print.o")
+set(FLASHROM_CLI_OBJS "flashrom.c cli_mfg.c cli_output.c print.c")
 
-set(FLASHROM_PROGRAMMERS_OBJS "udelay.o programmer.o")
+set(FLASHROM_PROGRAMMERS_OBJS "udelay.c programmer.c programmer.h")
 
 # Flashrom Version
 set(FLASHROM_VERSION "1.0.0")
@@ -174,12 +174,12 @@ if(CONFIG_INTERNAL)
     add_definitions(-D'CONFIG_INTERNAL=1')
     set(FLASHROM_PROGRAMMERS_OBJS
             ${FLASHROM_PROGRAMMERS_OBJS}
-            "processor_enable.o chipset_enable.o board_enable.o cbtable.o dmi.o internal.o")
+            "processor_enable.c chipset_enable.c board_enable.c cbtable.c dmi.c internal.c")
 
     if(FLASHROM_FOR_X86)
         set(FLASHROM_PROGRAMMERS_OBJS
                 ${FLASHROM_PROGRAMMERS_OBJS}
-                "it87spi.o it85spi.o mec1308.o sb600spi.o wbsio_spi.o mcp6x_spi.o wpce775x.o ene_lpc.o")
+                "it87spi.c it85spi.c mec1308.c sb600spi.c wbsio_spi.c mcp6x_spi.c wpce775x.c ene_lpc.c")
         set(FLASHROM_PROGRAMMERS_OBJS
                 ${FLASHROM_PROGRAMMERS_OBJS}
                 "ichspi.o ich_descriptors.o amd_imc.o")
@@ -189,7 +189,34 @@ endif()
 # Serial programmers
 if(CONFIG_SERPROG)
     add_definitions(-D'CONFIG_SERPROG=1')
+    set(FLASHROM_PROGRAMMERS_OBJS
+            ${FLASHROM_PROGRAMMERS_OBJS}
+            "ichspi.c ich_descriptors.c ich_descriptors.h amd_imc.c")
+endif()
 
+# Rayer SPI
+if(CONFIG_RAYER_SPI)
+    add_definitions(-D'CONFIG_RAYER_SPI=1')
+    set(FLASHROM_PROGRAMMERS_OBJS
+            ${FLASHROM_PROGRAMMERS_OBJS}
+            "rayer_spi.c")
+endif()
+
+# Pony SPI
+if(CONFIG_PONY_SPI)
+    add_definitions(-D'CONFIG_SERPROG=1')
+    set(FLASHROM_PROGRAMMERS_OBJS
+            ${FLASHROM_PROGRAMMERS_OBJS}
+            "pony_spi.c")
+endif()
+
+# Pony SPI
+if(CONFIG_PONY_SPI)
+    add_definitions(-D'CONFIG_SERPROG=1')
+    set(FLASHROM_PROGRAMMERS_OBJS
+            ${FLASHROM_PROGRAMMERS_OBJS}
+            "pony_spi.c")
+endif()
 
 add_executable(flashrom
         82802ab.c
