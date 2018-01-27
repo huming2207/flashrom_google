@@ -324,8 +324,12 @@ static int linux_spi_send_command(const struct flashctx *flash, unsigned int wri
 
 static int linux_spi_read(struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len)
 {
-	/* Read buffer is fully utilized for data. */
-	return spi_read_chunked(flash, buf, start, len, max_kernel_buf_size);
+	/* Read buffer is fully utilized for data, use unbound read function when target chip is supported */
+	if (flash->chip->feature_bits & FEATURE_UNBOUND_READ)
+		return spi_read_unbound(flash, buf, start, len, max_kernel_buf_size);
+	else
+		return spi_read_chunked(flash, buf, start, len, max_kernel_buf_size);
+	
 }
 
 static int linux_spi_write_256(struct flashctx *flash, const uint8_t *buf,
