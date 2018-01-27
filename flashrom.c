@@ -1639,7 +1639,7 @@ int erase_and_write_flash(struct flashctx *flash, uint8_t *oldcontents,
 	/* Here we try using the erasers using 0xC7 or 0x60 (chip erase command)
 	 * first, as it is much faster than others (55 secs vs. ~3mins?) 
 	 */
-	for (k = NUM_ERASEFUNCTIONS; k >= 0; k--) {
+	for (k = (NUM_ERASEFUNCTIONS - 1); k >= 0; k--) {
 		if (k != 0)
 			msg_cdbg("Looking for another erase function.\n");
 		if (!usable_erasefunctions) {
