@@ -210,13 +210,20 @@ int linux_spi_init(void)
 
 	if (speed > 0) {
 		if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) == -1) {
-			msg_perr("%s: failed to set speed %dHz: %s\n",
+			msg_perr("%s: failed to set WRITE speed %dHz: %s\n",
+				 __func__, speed, strerror(errno));
+			close(fd);
+			return 1;
+		}  
+
+		if (ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed) == -1) {
+			msg_perr("%s: failed to set READ speed %dHz: %s\n",
 				 __func__, speed, strerror(errno));
 			close(fd);
 			return 1;
 		}
 
-		msg_pdbg("Using %d kHz clock\n", speed);
+		msg_ginfo("Using %d kHz clock\n", speed);
 	}
 
 	if (register_shutdown(linux_spi_shutdown, NULL))
