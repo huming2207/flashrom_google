@@ -26,6 +26,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "hwaccess.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -121,6 +122,9 @@ extern enum chipbustype target_bus;
 #define FEATURE_UNBOUND_READ	(1 << 10)
 #define FEATURE_NO_ERASE	(1 << 11)
 #define FEATURE_4BA_SUPPORT	(1 << 12)
+#define FEATURE_4BA_EXT_ADDR	(1 << 13)
+#define FEATURE_4BA_READ	(1 << 14) /**< Native 4BA read instruction (0x13) is supported. */
+#define FEATURE_4BA_WRITE	(1 << 15) /**< Native 4BA byte program (0x12) is supported. */
 
 struct voltage_range {
 	uint16_t min, max;
@@ -170,14 +174,6 @@ struct flashchip {
 	unsigned int page_size;
 	int feature_bits;
 
-	/* set of function pointers to use in 4-bytes addressing mode */
-	struct four_bytes_addr_funcs_set {
-		int (*set_4ba) (struct flashctx *flash);
-		int (*read_nbyte) (struct flashctx *flash, unsigned int addr, uint8_t *bytes, unsigned int len);
-		int (*program_byte) (struct flashctx *flash, unsigned int addr, const uint8_t databyte);
-		int (*program_nbyte) (struct flashctx *flash, unsigned int addr, const uint8_t *bytes, unsigned int len);
-	} four_bytes_addr_funcs;
-
 	/* Indicate how well flashrom supports different operations of this flash chip. */
 	struct tested {
 		enum test_state probe;
@@ -215,6 +211,7 @@ struct flashchip {
 	int (*unlock) (struct flashctx *flash);
 	int (*write) (struct flashctx *flash, const uint8_t *buf, unsigned int start, unsigned int len);
 	int (*read) (struct flashctx *flash, uint8_t *buf, unsigned int start, unsigned int len);
+	int (*set_4ba) (struct flashctx *flash);
 	uint8_t (*read_status) (const struct flashctx *flash);
 	int (*write_status) (const struct flashctx *flash, int status);
 	struct voltage_range voltage;
@@ -228,6 +225,13 @@ struct flashctx {
 	chipaddr virtual_memory;
 	/* Some flash devices have an additional register space. */
 	chipaddr virtual_registers;
+
+	/* We cache the state of the extended address register (highest byte
+		of a 4BA for 3BA instructions) and the state of the 4BA mode here.
+		If possible, we enter 4BA mode early. If that fails, we make use
+		of the extended address register. */
+	int address_high_byte;
+	bool in_4ba_mode;
 };
 
 

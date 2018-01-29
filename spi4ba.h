@@ -113,6 +113,7 @@ int spi_nbyte_read_4ba_direct(struct flashctx *flash, unsigned int addr, uint8_t
 int spi_block_erase_21_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_5c_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 int spi_block_erase_dc_4ba_direct(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
+int spi_write_extended_address_register(struct flashctx *flash, uint8_t regdata);
 
 
 #endif /* __SPI_4BA_H__ */

@@ -6171,13 +6171,7 @@ const struct flashchip flashchips[] = {
 		.page_size	= 256,
 		/* supports SFDP */
 		/* OTP: 64B total; read 0x4B, write 0x42 */
-		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ | FEATURE_OTP | FEATURE_4BA_SUPPORT,
-		.four_bytes_addr_funcs =
-		{
-			.read_nbyte = spi_nbyte_read_4ba_direct,
-			.program_byte = spi_byte_program_4ba_direct,
-			.program_nbyte = spi_nbyte_program_4ba_direct
-		},
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_UNBOUND_READ | FEATURE_OTP | FEATURE_4BA_SUPPORT | FEATURE_4BA_READ | FEATURE_4BA_WRITE,
 		.tested		= TEST_OK_PREWU,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
@@ -6209,13 +6203,7 @@ const struct flashchip flashchips[] = {
 		.page_size	= 256,
 		/* supports SFDP */
 		/* OTP: 64B total; read 0x4B, write 0x42 */
-		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_OTP | FEATURE_4BA_SUPPORT,
-		.four_bytes_addr_funcs =
-		{
-			.read_nbyte = spi_nbyte_read_4ba_direct,
-			.program_byte = spi_byte_program_4ba_direct,
-			.program_nbyte = spi_nbyte_program_4ba_direct
-		},
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_OTP | FEATURE_4BA_SUPPORT | FEATURE_4BA_READ | FEATURE_4BA_WRITE,
 		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
@@ -9624,14 +9612,7 @@ const struct flashchip flashchips[] = {
 		/* supports SFDP */
 		/* OTP: 1024B total, 256B reserved; read 0x48; write 0x42, erase 0x44, read ID 0x4B */
 		/* FOUR_BYTE_ADDR: supports 4-bytes addressing mode */
-		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_OTP | FEATURE_4BA_SUPPORT,
-		.four_bytes_addr_funcs =
-		{
-			.set_4ba = spi_enter_4ba_b7_we, /* enter 4-bytes addressing mode by CMD B7 + WREN */
-			.read_nbyte = spi_nbyte_read_4ba_direct, /* read directly from any mode, no need to enter 4ba */
-			.program_byte = spi_byte_program_4ba, /* write from 4-bytes addressing mode */
-			.program_nbyte = spi_nbyte_program_4ba /* write from 4-bytes addressing mode */
-		},
+		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_OTP | FEATURE_4BA_SUPPORT | FEATURE_4BA_READ,
 		.tested		= TEST_OK_PREW,
 		.probe		= probe_spi_rdid,
 		.probe_timing	= TIMING_ZERO,
@@ -9639,13 +9620,13 @@ const struct flashchip flashchips[] = {
 		{
 			{
 				.eraseblocks = { {4 * 1024, 8192} },
-				.block_erase = spi_block_erase_20_4ba, /* erases 4k from 4-bytes addressing mode */
+				.block_erase = spi_block_erase_20, /* erases 4k from 4-bytes addressing mode */
 			}, {
 				.eraseblocks = { {32 * 1024, 1024} },
-				.block_erase = spi_block_erase_52_4ba, /* erases 32k from 4-bytes addressing mode */
+				.block_erase = spi_block_erase_52, /* erases 32k from 4-bytes addressing mode */
 			}, {
 				.eraseblocks = { {64 * 1024, 512} },
-				.block_erase = spi_block_erase_d8_4ba, /* erases 64k from 4-bytes addressing mode */
+				.block_erase = spi_block_erase_d8, /* erases 64k from 4-bytes addressing mode */
 			}, {
 				.eraseblocks = { {32 * 1024 * 1024, 1} },
 				.block_erase = spi_block_erase_60,
@@ -9657,6 +9638,7 @@ const struct flashchip flashchips[] = {
 		.unlock		= spi_disable_blockprotect,
 		.write		= spi_chip_write_256,
 		.read		= spi_chip_read,
+		.set_4ba	= spi_enter_4ba_b7_we,
 		.voltage	= {2700, 3600},
 	},
 
