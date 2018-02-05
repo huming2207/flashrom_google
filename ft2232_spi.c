@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <signal.h>
 #include "flash.h"
 #include "programmer.h"
 #include "spi.h"
@@ -150,6 +151,19 @@ static int get_buf(struct ftdi_context *ftdic, const unsigned char *buf,
 		size -= r;
 	}
 	return 0;
+}
+
+static void ft2232_safe_exit(int signal) 
+{
+	if (ftdi_usb_close(&ftdic_context) < 0) {
+		msg_perr("Unable to close FTDI device, reason: %s\n",
+		         ftdi_get_error_string(&ftdic_context));
+		exit(1);		 
+	} else {
+		msg_perr("\nSIGINT caught, closing programmer...\n");
+		ftdi_deinit(&ftdic_context);
+		exit(0);
+	}
 }
 
 static int ft2232_spi_send_command(const struct flashctx *flash, unsigned int writecnt, unsigned int readcnt,
@@ -375,8 +389,9 @@ int ft2232_spi_init(void)
 		goto ftdi_err;
 	}
 
-	// msg_pdbg("\nft2232 chosen\n");
 
+	signal(SIGINT, ft2232_safe_exit);
+	signal(SIGTERM, ft2232_safe_exit);
 	register_spi_master(&spi_master_ft2232);
 
 	return 0;
