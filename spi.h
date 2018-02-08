@@ -100,6 +100,11 @@
 #define JEDEC_RDSR_BIT_WIP	(0x01 << 0)
 #define JEDEC_RDSR_BIT_ERASE_ERR (0x01 << 5)
 
+/* Read Winbond Status Register */
+#define WINBOND_RDSR_1  JEDEC_RDSR
+#define WINBOND_RDSR_2  0x35
+#define WINBOND_RDSR_3  0x15
+
 /* Write Status Enable */
 #define JEDEC_EWSR		0x50
 #define JEDEC_EWSR_OUTSIZE	0x01
@@ -109,6 +114,11 @@
 #define JEDEC_WRSR		0x01
 #define JEDEC_WRSR_OUTSIZE	0x02
 #define JEDEC_WRSR_INSIZE	0x00
+
+/* Write Winbond Status Register */
+#define WINBOND_WRSR_1  JEDEC_WRSR
+#define WINBOND_WRSR_2  0x31
+#define WINBOND_WRSR_3  0x11
 
 /* Enter 4-byte Address Mode */
 #define JEDEC_ENTER_4_BYTE_ADDR_MODE	0xB7

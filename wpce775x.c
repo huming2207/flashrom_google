@@ -50,7 +50,7 @@
 #include "flashchips.h"
 #include "programmer.h"
 #include "spi.h"
-#include "writeprotect.h"
+#include "status_register.h"
 
 /**
  *  Definition of WPCE775X WCB (Write Command Buffer), as known as Shared Access

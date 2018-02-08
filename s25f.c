@@ -41,7 +41,7 @@
 
 #include "chipdrivers.h"
 #include "spi.h"
-#include "writeprotect.h"
+#include "status_register.h"
 
 /*
  * RDAR and WRAR are supported on chips which have more than one set of status

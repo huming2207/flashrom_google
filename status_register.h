@@ -62,7 +62,24 @@ struct w25q_status {
 struct w25q_status_2 {
 	unsigned char srp1 : 1;
 	unsigned char qe : 1;
-	unsigned char rsvd : 6;
+	unsigned char rsvd : 1;
+	unsigned char lb1 : 1;
+	unsigned char lb2 : 1;
+	unsigned char lb3 : 1;
+	unsigned char cmp : 1;
+	unsigned char sus : 1;
+} __attribute__ ((packed));
+
+// Ref: https://www.winbond.com/resource-files/w25q256fv_revg1_120214_qpi_website_rev_g.pdf
+// Figure 4c, Page 18
+struct w25q_status_3 {
+	unsigned char ads : 1;
+	unsigned char adp : 1;
+	unsigned char wps : 1;
+	unsigned char rsvd : 2;
+	unsigned char drv0 : 1;
+	unsigned char drv1 : 1;
+	unsigned char hold : 1;
 } __attribute__ ((packed));
 
 int w25_range_to_status(const struct flashctx *flash,
@@ -72,6 +89,8 @@ int w25_status_to_range(const struct flashctx *flash,
                         const struct w25q_status *status,
                         unsigned int *start, unsigned int *len);
 enum wp_mode get_wp_mode(const char *mode_str);
+int w25q_get_adp_status(const struct flashctx *flash);
+int w25q_set_adp_status(const struct flashctx *flash, int enable);
 
 /*
  * Generic write-protect stuff

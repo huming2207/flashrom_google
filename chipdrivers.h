@@ -26,7 +26,7 @@
 #define __CHIPDRIVERS_H__ 1
 
 #include "flash.h"		/* for chipaddr and flashctx */
-#include "writeprotect.h"	/* for generic_modifier_bits */
+#include "status_register.h"	/* for generic_modifier_bits */
 
 /* spi.c, should probably be in spi_chip.c */
 int probe_spi_rdid(struct flashctx *flash);

@@ -2,6 +2,7 @@
  * This file is part of the flashrom project.
  *
  * Copyright (C) 2010 Google Inc.
+ * Copyright (C) 2018 Ming Hu @ D-Team Technology (Shenzhen) Co, Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +26,7 @@
 #include "flashchips.h"
 #include "chipdrivers.h"
 #include "spi.h"
-#include "writeprotect.h"
+#include "status_register.h"
 
 /*
  * The following procedures rely on look-up tables to match the user-specified
@@ -776,9 +777,9 @@ static int do_write_status(const struct flashctx *flash, int status)
 }
 
 /* FIXME: Move to spi25.c if it's a JEDEC standard opcode */
-static uint8_t w25q_read_status_register_2(const struct flashctx *flash)
+static uint8_t w25q_read_status_register(const struct flashctx *flash, int sr_addr)
 {
-	static const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { 0x35 };
+	const unsigned char cmd[JEDEC_RDSR_OUTSIZE] = { sr_addr };
 	unsigned char readarr[2];
 	int ret;
 
@@ -789,7 +790,7 @@ static uint8_t w25q_read_status_register_2(const struct flashctx *flash)
 		 * FIXME: make this a benign failure for now in case we are
 		 * unable to execute the opcode
 		 */
-		msg_cdbg("RDSR2 failed!\n");
+		msg_cdbg("%s(): RDSR2 failed!\n", __func__);
 		readarr[0] = 0x00;
 	}
 
@@ -844,7 +845,7 @@ static int w25_range_table(const struct flashctx *flash,
 		case WINBOND_NEX_W25Q128J:
 		case WINBOND_NEX_W25Q128_V:
 		case WINBOND_NEX_W25Q128_W:
-			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+			if (w25q_read_status_register(flash, WINBOND_RDSR_2) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
 				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
@@ -966,7 +967,7 @@ static int w25_range_table(const struct flashctx *flash,
 			*num_entries = ARRAY_SIZE(w25q32_ranges);
 			break;
 		case GIGADEVICE_GD25Q40:
-			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+			if (w25q_read_status_register(flash, WINBOND_RDSR_2) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = gd25q40_cmp1_ranges;
 				*num_entries = ARRAY_SIZE(gd25q40_cmp1_ranges);
@@ -982,7 +983,7 @@ static int w25_range_table(const struct flashctx *flash,
 			break;
 		case GIGADEVICE_GD25Q128:
 		case GIGADEVICE_GD25LQ128C:
-			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+			if (w25q_read_status_register(flash, WINBOND_RDSR_2) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
 				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
@@ -1015,7 +1016,7 @@ static int w25_range_table(const struct flashctx *flash,
 	case ATMEL_ID:
 		switch(flash->chip->model_id) {
 		case ATMEL_AT25SL128A:
-			if (w25q_read_status_register_2(flash) & (1 << 6)) {
+			if (w25q_read_status_register(flash, WINBOND_RDSR_2) & (1 << 6)) {
 				/* CMP == 1 */
 				*w25q_ranges = w25rq128_cmp1_ranges;
 				*num_entries = ARRAY_SIZE(w25rq128_cmp1_ranges);
@@ -1262,7 +1263,7 @@ static int w25q_wp_status(const struct flashctx *flash)
 	memcpy(&sr1, &tmp[0], 1);
 
 	memset(&sr2, 0, sizeof(sr2));
-	tmp[1] = w25q_read_status_register_2(flash);
+	tmp[1] = w25q_read_status_register(flash, WINBOND_RDSR_2);
 	memcpy(&sr2, &tmp[1], 1);
 
 	msg_cinfo("WP: status: 0x%02x%02x\n", tmp[1], tmp[0]);
@@ -1324,6 +1325,44 @@ static int w25q_write_status_register_WREN(const struct flashctx *flash, uint8_t
 }
 
 /*
+ * Same as w25q_write_status_register_WREN() function, but write ONE STATUS REGISTER ONLY
+ */
+static int w25q_write_single_sr(const struct flashctx *flash, uint8_t addr, uint8_t buf)
+{
+	int result;
+
+	struct spi_command cmds[] = {
+	{
+	/* FIXME: WRSR requires either EWSR or WREN depending on chip type. */
+		.writecnt       = JEDEC_WREN_OUTSIZE,
+		.writearr       = (const unsigned char[]){ JEDEC_WREN },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = JEDEC_WRSR_OUTSIZE,
+		.writearr       = (const unsigned char[]){ addr, buf },
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}, {
+		.writecnt       = 0,
+		.writearr       = NULL,
+		.readcnt        = 0,
+		.readarr        = NULL,
+	}};
+
+	result = spi_send_multicommand(flash, cmds);
+	if (result) {
+	        msg_cerr("%s failed during command execution\n",
+	                __func__);
+	}
+
+	/* WRSR performs a self-timed erase before the changes take effect. */
+	programmer_delay(100 * 1000);
+
+	return result;
+}
+
+/*
  * Set/clear the SRP1 bit in status register 2.
  * FIXME: make this more generic if other chips use the same SR2 layout
  */
@@ -1335,18 +1374,18 @@ static int w25q_set_srp1(const struct flashctx *flash, int enable)
 
 	tmp = do_read_status(flash);
 	memcpy(&sr1, &tmp, 1);
-	tmp = w25q_read_status_register_2(flash);
+	tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
 	memcpy(&sr2, &tmp, 1);
 
-	msg_cdbg("%s: old status 2: 0x%02x\n", __func__, tmp);
+	msg_cdbg("%s: old status register 2: 0x%02x\n", __func__, tmp);
 
 	sr2.srp1 = enable ? 1 : 0;
 
 	memcpy(&expected, &sr2, 1);
 	w25q_write_status_register_WREN(flash, *((uint8_t *)&sr1), *((uint8_t *)&sr2));
 
-	tmp = w25q_read_status_register_2(flash);
-	msg_cdbg("%s: new status 2: 0x%02x\n", __func__, tmp);
+	tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
+	msg_cdbg("%s: new status register 2: 0x%02x\n", __func__, tmp);
 	if ((tmp & MASK_WP2_AREA) != (expected & MASK_WP2_AREA))
 		return 1;
 
@@ -1379,7 +1418,7 @@ static int w25q_disable_writeprotect(const struct flashctx *flash,
 		ret = w25_set_srp0(flash, 0);
 		break;
 	case WP_MODE_POWER_CYCLE:
-		tmp = w25q_read_status_register_2(flash);
+		tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1) {
 			msg_cerr("%s(): must disconnect power to disable "
@@ -1438,7 +1477,7 @@ static int w25q_enable_writeprotect(const struct flashctx *flash,
 			break;
 		}
 
-		tmp = w25q_read_status_register_2(flash);
+		tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1)
 			ret = 0;
@@ -1458,7 +1497,7 @@ static int w25q_enable_writeprotect(const struct flashctx *flash,
 			}
 		}
 
-		tmp = w25q_read_status_register_2(flash);
+		tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
 		memcpy(&sr2, &tmp, 1);
 		if (sr2.srp1 == 0) {
 			ret = w25q_set_srp1(flash, 1);
@@ -1477,6 +1516,91 @@ static int w25q_enable_writeprotect(const struct flashctx *flash,
 
 	if (ret)
 		msg_cerr("%s(): error=%d.\n", __func__, ret);
+	return ret;
+}
+
+/* Dump the status register for Winbond flash */
+static uint8_t w25q_dump_sr(const struct flashctx *flash, uint8_t addr) 
+{
+	uint8_t buf;
+
+	/* Ref: W25Q256 data sheet, Page 32, Fig 8a. Address is 05h (SR1), 35h (SR2) and 15h (SR3) btw. */
+	buf = w25q_read_status_register(flash, addr);
+	msg_cdbg("%s(): W25Q Status Register with command 0x%02x: 0x%02x\n", __func__, addr, buf);
+	return buf;
+}
+
+/* Retrieve ADP status in W25Q SR3 */
+int w25q_get_adp_status(const struct flashctx *flash)
+{
+	struct w25q_status_3 sr3;
+	uint8_t buf;
+
+	if(flash->chip->manufacture_id != WINBOND_NEX_ID) {
+		msg_cerr("%s(): Not a Winbond chip, aborting...\n", __func__);
+		return 1;
+	}
+
+	if(!(flash->chip->feature_bits & FEATURE_4BA_SUPPORT)) {
+		msg_cerr("%s(): Winbond flash chip found but no 4-byte addressing support!\n", __func__);
+		return 1;
+	}
+
+	buf = w25q_dump_sr(flash, WINBOND_RDSR_3);
+	memcpy(&sr3, &buf, 1);
+
+	if(sr3.adp == 1) {
+		msg_cinfo("W25Q256 SR3 ADP has been enabled, flash will operate in 4-byte addressing mode by default!\n");
+	} else {
+		msg_cinfo("W25Q256 SR3 ADP has been disabled, flash will operate in 3-byte addressing mode by default!\n");
+	}
+
+	return 0;
+}
+
+/* Enable ADP feature for W25Q SR3 */
+int w25q_set_adp_status(const struct flashctx *flash, int enable)
+{
+	int ret;
+	uint8_t buf;
+	struct w25q_status_3 sr3;
+
+	if(flash->chip->manufacture_id != WINBOND_NEX_ID) {
+		msg_cerr("%s(): Not a Winbond chip, aborting...\n", __func__);
+		return 1;
+	}
+
+	if(!(flash->chip->feature_bits & FEATURE_4BA_SUPPORT)) {
+		msg_cerr("%s(): Winbond flash chip found but no 4-byte addressing support!\n", __func__);
+		return 1;
+	}
+
+	if (w25q_disable_writeprotect_default(flash)) {
+		msg_cerr("%s(): cannot disable Status Register Protection!\n", __func__);
+		return 1;
+	}
+
+	buf = w25q_dump_sr(flash, WINBOND_RDSR_3);
+	memcpy(&sr3, &buf, 1);
+
+	if(enable) {
+		sr3.adp = 1;
+		msg_cinfo("Enabling ADP...");
+	} else {
+		sr3.adp = 0;
+		msg_cinfo("Disabling ADP...");
+	}
+
+	memcpy(&buf, &sr3, 1);
+	ret = w25q_write_single_sr(flash, WINBOND_WRSR_3, buf);
+
+	if(ret) {
+		msg_cerr("FAILED!\n");
+		msg_cerr("%s(): failed to write SR3!\n", __func__);
+	} else {
+		msg_cinfo("SUCCESS!\n");
+	}
+
 	return ret;
 }
 
@@ -1855,7 +1979,7 @@ static int generic_range_table(const struct flashctx *flash,
 
 		case GIGADEVICE_GD25LQ32:
 		case GIGADEVICE_GD25Q32: {
-			uint8_t sr1 = w25q_read_status_register_2(flash);
+			uint8_t sr1 = w25q_read_status_register(flash, WINBOND_RDSR_2);
 			*wp = &gd25q32_wp;
 
 			if (!(sr1 & (1 << 6))) {	/* CMP == 0 */
@@ -1870,7 +1994,7 @@ static int generic_range_table(const struct flashctx *flash,
 		}
 		case GIGADEVICE_GD25Q128:
 		case GIGADEVICE_GD25LQ128C: {
-			uint8_t sr1 = w25q_read_status_register_2(flash);
+			uint8_t sr1 = w25q_read_status_register(flash, WINBOND_RDSR_2);
 			*wp = &gd25q128_wp;
 
 			if (!(sr1 & (1 << 6))) {	/* CMP == 0 */

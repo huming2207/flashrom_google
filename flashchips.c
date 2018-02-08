@@ -28,7 +28,7 @@
 #include "flash.h"
 #include "flashchips.h"
 #include "chipdrivers.h"
-#include "writeprotect.h"
+#include "status_register.h"
 
 /**
  * List of supported flash chips.

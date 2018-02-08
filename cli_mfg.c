@@ -34,7 +34,7 @@
 #include "flashchips.h"
 #include "layout.h"
 #include "programmer.h"
-#include "writeprotect.h"
+#include "status_register.h"
 
 #define LOCK_TIMEOUT_SECS	180
 
@@ -178,6 +178,9 @@ void cli_mfg_usage(const char *name)
 	       "   --wp-range <start> <length>       set write protect range\n"
 	       "   --wp-region <region>              set write protect range by region name\n"
 	       "   --wp-status                       show write protect status\n"
+		   "   --adp-status                      get Winbond ADP status\n"
+		   "   --adp-enable                      enable Winbond ADP\n"
+		   "   --adp-disable                     disable Winbond ADP\n"
 	       );
 
 	msg_ginfo("\nYou can specify one of -h, -R, -L, "
@@ -221,6 +224,9 @@ enum LONGOPT_RETURN_VALUES {
 	LONGOPT_IGNORE_FMAP,
 	LONGOPT_FAST_VERIFY,
 	LONGOPT_IGNORE_LOCK,
+	LONGOPT_ADP_GET,
+	LONGOPT_ADP_SET_ENABLE,
+	LONGOPT_ADP_SET_DISABLE
 };
 
 int main(int argc, char *argv[])
@@ -242,6 +248,7 @@ int main(int argc, char *argv[])
 		extract_it = 0, flash_name = 0;
 	int set_wp_range = 0, set_wp_region = 0, set_wp_enable = 0,
 	    set_wp_disable = 0, wp_status = 0, wp_list = 0;
+	int get_adp = 0, set_adp_enable = 0, set_adp_disable = 0;
 	int set_ignore_fmap = 0;
 #if CONFIG_PRINT_WIKI == 1
 	int list_supported_wiki = 0;
@@ -284,6 +291,9 @@ int main(int argc, char *argv[])
 		{"ignore-fmap", 	0, 0, LONGOPT_IGNORE_FMAP},
 		{"fast-verify",		0, 0, LONGOPT_FAST_VERIFY},
 		{"ignore-lock",		0, 0, LONGOPT_IGNORE_LOCK},
+		{"adp-status",		0, 0, LONGOPT_ADP_GET},
+		{"adp-enable",		0, 0, LONGOPT_ADP_SET_ENABLE},
+		{"adp-disable",		0, 0, LONGOPT_ADP_SET_DISABLE},
 		{0, 0, 0, 0}
 	};
 
@@ -578,6 +588,15 @@ int main(int argc, char *argv[])
 		case LONGOPT_IGNORE_LOCK:
 			set_ignore_lock = 1;
 			break;
+		case LONGOPT_ADP_GET:
+			get_adp = 1;
+			break;
+		case LONGOPT_ADP_SET_ENABLE:
+			set_adp_enable = 1;
+			break;
+		case LONGOPT_ADP_SET_DISABLE:
+			set_adp_disable = 1;
+			break;
 		default:
 			cli_mfg_abort_usage(argv[0]);
 			break;
@@ -741,7 +760,8 @@ int main(int argc, char *argv[])
 
 	if (!(read_it | write_it | verify_it | erase_it | flash_name |
 	      get_size | set_wp_range | set_wp_region | set_wp_enable |
-	      set_wp_disable | wp_status | wp_list | extract_it)) {
+	      set_wp_disable | wp_status | wp_list | extract_it |
+		  get_adp | set_adp_enable | set_adp_disable)) {
 		msg_gerr("No operations were specified.\n");
 		// FIXME: flash writes stay enabled!
 		rc = 0;
@@ -980,6 +1000,28 @@ int main(int argc, char *argv[])
 			       "on this flash chip.\n");
 			rc = 1;
 		}
+		goto cli_mfg_silent_exit;
+	}
+
+	if (get_adp) {
+		msg_ginfo("Getting ADP status for Winbond 4BA chip...\n");
+		rc = w25q_get_adp_status(fill_flash) ? 1 : 0;
+		goto cli_mfg_silent_exit;
+	}
+
+	if (set_adp_enable) {
+		msg_ginfo("Enabling ADP feature for Winbond 4BA chip...\n");
+		rc = w25q_set_adp_status(fill_flash, 1) ? 1 : 0;
+		
+		w25q_get_adp_status(fill_flash);
+		goto cli_mfg_silent_exit;
+	}
+
+	if (set_adp_disable) {
+		msg_ginfo("Disabling ADP feature for Winbond 4BA chip...\n");
+		rc = w25q_set_adp_status(fill_flash, 0) ? 1 : 0;
+
+		w25q_get_adp_status(fill_flash);
 		goto cli_mfg_silent_exit;
 	}
 
