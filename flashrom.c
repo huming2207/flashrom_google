@@ -1223,7 +1223,7 @@ int read_buf_from_file(unsigned char *buf, unsigned long size,
 		fclose(image);
 		return 1;
 	}
-	if ((image_stat.st_size != size) &&
+	if ((image_stat.st_size > size) &&
 	    (strncmp(filename, "-", sizeof("-")))) {
 		msg_gerr("Error: Image size doesn't match: stat %jd bytes, "
 			 "wanted %ld!\n", (intmax_t)image_stat.st_size, size);
@@ -1235,7 +1235,7 @@ int read_buf_from_file(unsigned char *buf, unsigned long size,
 		perror(filename);
 		return 1;
 	}
-	if (numbytes != size) {
+	if (numbytes > size) {
 		msg_gerr("Error: Failed to read complete file. Got %ld bytes, "
 			 "wanted %ld!\n", numbytes, size);
 		return 1;
