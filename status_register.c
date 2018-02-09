@@ -1319,7 +1319,9 @@ static int w25q_write_first_two_sr(const struct flashctx *flash, uint8_t s1, uin
 	}
 
 	/* WRSR performs a self-timed erase before the changes take effect. */
-	programmer_delay(100 * 1000);
+	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP) {
+		programmer_delay(100);
+	}
 
 	return result;
 }
@@ -1357,7 +1359,9 @@ static int w25q_write_single_sr(const struct flashctx *flash, uint8_t addr, uint
 	}
 
 	/* WRSR performs a self-timed erase before the changes take effect. */
-	programmer_delay(100 * 1000);
+	while (spi_read_status_register(flash) & JEDEC_RDSR_BIT_WIP) {
+		programmer_delay(100);
+	}
 
 	return result;
 }
