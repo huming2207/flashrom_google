@@ -1290,7 +1290,7 @@ static int w25q_wp_status(const struct flashctx *flash)
  * into status register 2.
  */
 #define W25Q_WRSR_OUTSIZE	0x03
-static int w25q_write_status_register_WREN(const struct flashctx *flash, uint8_t s1, uint8_t s2)
+static int w25q_write_first_two_sr(const struct flashctx *flash, uint8_t s1, uint8_t s2)
 {
 	int result;
 	struct spi_command cmds[] = {
@@ -1325,7 +1325,7 @@ static int w25q_write_status_register_WREN(const struct flashctx *flash, uint8_t
 }
 
 /*
- * Same as w25q_write_status_register_WREN() function, but write ONE STATUS REGISTER ONLY
+ * Same as w25q_write_first_two_sr() function, but write ONE STATUS REGISTER ONLY
  */
 static int w25q_write_single_sr(const struct flashctx *flash, uint8_t addr, uint8_t buf)
 {
@@ -1382,7 +1382,7 @@ static int w25q_set_srp1(const struct flashctx *flash, int enable)
 	sr2.srp1 = enable ? 1 : 0;
 
 	memcpy(&expected, &sr2, 1);
-	w25q_write_status_register_WREN(flash, *((uint8_t *)&sr1), *((uint8_t *)&sr2));
+	w25q_write_first_two_sr(flash, *((uint8_t *)&sr1), *((uint8_t *)&sr2));
 
 	tmp = w25q_read_status_register(flash, WINBOND_RDSR_2);
 	msg_cdbg("%s: new status register 2: 0x%02x\n", __func__, tmp);
